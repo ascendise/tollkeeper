@@ -11,14 +11,23 @@ impl TollkeeperImpl {
 }
 
 impl Tollkeeper for TollkeeperImpl {
-    fn access(self: &Self, req: Request, on_access: impl FnMut(())) -> Option<Challenge> {
+    fn access<TRequest: Request>(
+        self: &Self,
+        req: &TRequest,
+        on_access: impl Fn(&TRequest),
+    ) -> Option<Challenge> {
+        on_access(req);
         Option::None
     }
 }
 
 /// Gaurds actions against spam by requiring a PoW [Challenge] to be solved before proceeding.
 pub trait Tollkeeper {
-    fn access(self: &Self, req: Request, on_access: impl FnMut(())) -> Option<Challenge>;
+    fn access<TRequest: Request>(
+        self: &Self,
+        req: &TRequest,
+        on_access: impl Fn(&TRequest),
+    ) -> Option<Challenge>;
 }
 
 /// Target machines guarded by [TollkeeperImpl].
@@ -66,31 +75,15 @@ pub enum Operation {
 /// [requests](Request).
 pub trait Trap {
     /// True if [Request] meets the condition
-    fn is_trapped(&self, req: Request) -> bool;
+    fn is_trapped(&self, req: dyn Request) -> bool;
 }
 
 /// Information about the incoming [requests](Request), used by [traps](Trap) to trigger
-pub struct Request {
-    client_ip: String,
-    user_agent: String,
-    target_host: String,
-    target_path: String,
-}
-
-impl Request {
-    pub fn new(
-        client_ip: impl Into<String>,
-        user_agent: impl Into<String>,
-        target_host: impl Into<String>,
-        target_path: impl Into<String>,
-    ) -> Self {
-        Self {
-            client_ip: client_ip.into(),
-            user_agent: user_agent.into(),
-            target_host: target_host.into(),
-            target_path: target_path.into(),
-        }
-    }
+pub trait Request {
+    fn client_ip(self: &Self) -> &str;
+    fn user_agent(self: &Self) -> &str;
+    fn target_host(self: &Self) -> &str;
+    fn target_path(self: &Self) -> &str;
 }
 
 /// A Proof-of-Work challenge to be solved before being granted access
