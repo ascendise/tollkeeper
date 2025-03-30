@@ -7,28 +7,21 @@ pub fn accessing_guarded_endpoint_without_tripping_filters_should_return_no_chal
     let hosts = vec![Host::new("localhost", Operation::Challenge, vec![])];
     let sut = TollkeeperImpl::new(hosts);
     // Act
-    let benign_request = SpyRequest::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
-    let result = sut.access::<SpyRequest>(&benign_request, |_| {});
+    let mut benign_request = SpyRequest::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
+    let result = sut.access::<SpyRequest>(&mut benign_request, |req| {
+        req.access();
+    });
+    let benign_request = benign_request;
     // Assert
     assert_eq!(
         Option::None,
         result,
         "Returned a challenge even tho access should be granted!"
     );
-}
-
-#[test]
-pub fn accessing_guarded_endpoint_without_tripping_filters_should_allow_access() {
-    // Arrange
-    let hosts = vec![Host::new("localhost", Operation::Challenge, vec![])];
-    let sut = TollkeeperImpl::new(hosts);
-    // Act
-    let benign_request = SpyRequest::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
-    _ = sut.access::<SpyRequest>(&benign_request, |_| {
-        assert!(true);
-    });
-    // Assert
-    assert!(false, "Request was not processed!")
+    assert!(
+        benign_request.is_accessed(),
+        "Host was not accessed despite allowed!"
+    );
 }
 
 #[test]
@@ -43,6 +36,7 @@ pub struct SpyRequest {
     user_agent: String,
     target_host: String,
     target_path: String,
+    accessed: bool,
 }
 
 impl SpyRequest {
@@ -57,7 +51,17 @@ impl SpyRequest {
             user_agent: user_agent.into(),
             target_host: target_host.into(),
             target_path: target_path.into(),
+            accessed: false,
         }
+    }
+}
+
+impl SpyRequest {
+    fn access(self: &mut Self) {
+        self.accessed = true;
+    }
+    fn is_accessed(self: &Self) -> bool {
+        self.accessed
     }
 }
 

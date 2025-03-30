@@ -13,8 +13,8 @@ impl TollkeeperImpl {
 impl Tollkeeper for TollkeeperImpl {
     fn access<TRequest: Request>(
         self: &Self,
-        req: &TRequest,
-        on_access: impl Fn(&TRequest),
+        req: &mut TRequest,
+        on_access: impl Fn(&mut TRequest),
     ) -> Option<Challenge> {
         on_access(req);
         Option::None
@@ -25,8 +25,8 @@ impl Tollkeeper for TollkeeperImpl {
 pub trait Tollkeeper {
     fn access<TRequest: Request>(
         self: &Self,
-        req: &TRequest,
-        on_access: impl Fn(&TRequest),
+        req: &mut TRequest,
+        on_access: impl Fn(&mut TRequest),
     ) -> Option<Challenge>;
 }
 
