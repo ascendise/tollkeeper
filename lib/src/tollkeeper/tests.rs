@@ -1,16 +1,16 @@
 use super::*;
 
 #[test]
-pub fn accessing_guarded_endpoint_without_tripping_traps_should_return_no_challenge() {
+pub fn accessing_blacklisted_destination_without_matching_description_should_allow_access() {
     // Arrange
-    let hosts = vec![Host::new("localhost", Operation::Challenge, vec![])];
+    let hosts = vec![Destination::new("localhost", GateStatus::Blacklist, vec![])];
     let sut = TollkeeperImpl::new(hosts);
     // Act
-    let mut benign_request = SpyRequest::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
-    let result = sut.access::<SpyRequest>(&mut benign_request, |req| {
+    let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
+    let result = sut.guarded_access::<SpySuspect>(&mut benign_suspect, |req| {
         req.access();
     });
-    let benign_request = benign_request;
+    let benign_suspect = benign_suspect;
     // Assert
     assert_eq!(
         Option::None,
@@ -18,47 +18,46 @@ pub fn accessing_guarded_endpoint_without_tripping_traps_should_return_no_challe
         "Returned a challenge even tho access should be granted!"
     );
     assert!(
-        benign_request.is_accessed(),
-        "Host was not accessed despite allowed!"
+        benign_suspect.is_accessed(),
+        "Destination was not accessed despite allowed!"
     );
 }
 
 #[test]
-pub fn accessing_guarded_endpoint_without_tripping_traps_should_return_a_challenge_if_traps_are_set_to_allow(
-) {
+pub fn accessing_whitelisted_destination_without_matching_description_should_return_challenge() {
     // Arrange
-    let hosts = vec![Host::new("localhost", Operation::Allow, vec![])];
+    let hosts = vec![Destination::new("localhost", GateStatus::Whitelist, vec![])];
     let sut = TollkeeperImpl::new(hosts);
     // Act
-    let mut malicious_request = SpyRequest::new("1.2.3.4", "BadCrawler", "localhost", "/");
-    let result = sut.access::<SpyRequest>(&mut malicious_request, |req| {
+    let mut malicious_suspect = SpySuspect::new("1.2.3.4", "BadCrawler", "localhost", "/");
+    let result = sut.guarded_access::<SpySuspect>(&mut malicious_suspect, |req| {
         req.access();
     });
-    let malicious_request = malicious_request;
+    let malicious_suspect = malicious_suspect;
     // Assert
     assert_eq!(
         Option::Some(Challenge::new("challenge")),
         result,
-        "Returned no challenge despite default set to allow and no traps triggered!"
+        "Returned no challenge despite default set to allow and no gates triggered!"
     );
     assert!(
-        !malicious_request.is_accessed(),
-        "Host was accessed despite allowed!"
+        !malicious_suspect.is_accessed(),
+        "Destination was accessed despite allowed!"
     );
 }
 
 #[test]
-pub fn accessing_guarded_endpoint_and_tripping_traps_should_return_challenge() {
+pub fn accessing_blacklisted_destination_with_matching_description_should_return_challenge() {
     // Arrange
-    let traps: Vec<Box<dyn Trap>> = vec![Box::new(StubTrap::new(true))];
-    let hosts = vec![Host::new("localhost", Operation::Challenge, traps)];
+    let gates: Vec<Box<dyn Gate>> = vec![Box::new(StubGate::new(true))];
+    let hosts = vec![Destination::new("localhost", GateStatus::Blacklist, gates)];
     let sut = TollkeeperImpl::new(hosts);
     // Act
-    let mut malicious_request = SpyRequest::new("1.2.3.4", "BadCrawler", "localhost", "/");
-    let result = sut.access::<SpyRequest>(&mut malicious_request, |req| {
+    let mut malicious_suspect = SpySuspect::new("1.2.3.4", "BadCrawler", "localhost", "/");
+    let result = sut.guarded_access::<SpySuspect>(&mut malicious_suspect, |req| {
         req.access();
     });
-    let malicious_request = malicious_request;
+    let malicious_suspect = malicious_suspect;
     // Assert
     assert_eq!(
         Option::Some(Challenge::new("challenge")),
@@ -66,37 +65,36 @@ pub fn accessing_guarded_endpoint_and_tripping_traps_should_return_challenge() {
         "Did not return a challenge despite triggering trap!"
     );
     assert!(
-        !malicious_request.is_accessed(),
-        "Host was accessed despite triggering trap!"
+        !malicious_suspect.is_accessed(),
+        "Destination was accessed despite triggering trap!"
     );
 }
 
 #[test]
-pub fn accessing_guarded_endpoint_and_tripping_traps_should_return_no_challenge_if_traps_are_set_to_allow(
-) {
+pub fn accessing_whitelisted_destination_with_matching_description_should_allow_access() {
     // Arrange
-    let traps: Vec<Box<dyn Trap>> = vec![Box::new(StubTrap::new(true))];
-    let hosts = vec![Host::new("localhost", Operation::Allow, traps)];
+    let gates: Vec<Box<dyn Gate>> = vec![Box::new(StubGate::new(true))];
+    let hosts = vec![Destination::new("localhost", GateStatus::Whitelist, gates)];
     let sut = TollkeeperImpl::new(hosts);
     // Act
-    let mut benign_request = SpyRequest::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
-    let result = sut.access::<SpyRequest>(&mut benign_request, |req| {
+    let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
+    let result = sut.guarded_access::<SpySuspect>(&mut benign_suspect, |req| {
         req.access();
     });
-    let benign_request = benign_request;
+    let benign_suspect = benign_suspect;
     // Assert
     assert_eq!(
         Option::None,
         result,
-        "Returned a challenge despite default set to allow traps triggered!"
+        "Returned a challenge despite default set to allow gates triggered!"
     );
     assert!(
-        benign_request.is_accessed(),
-        "Host was not accessed despite allowed!"
+        benign_suspect.is_accessed(),
+        "Destination was not accessed despite allowed!"
     );
 }
 
-pub struct SpyRequest {
+pub struct SpySuspect {
     client_ip: String,
     user_agent: String,
     target_host: String,
@@ -104,7 +102,7 @@ pub struct SpyRequest {
     accessed: bool,
 }
 
-impl SpyRequest {
+impl SpySuspect {
     fn new(
         client_ip: impl Into<String>,
         user_agent: impl Into<String>,
@@ -121,7 +119,7 @@ impl SpyRequest {
     }
 }
 
-impl SpyRequest {
+impl SpySuspect {
     fn access(self: &mut Self) {
         self.accessed = true;
     }
@@ -130,7 +128,7 @@ impl SpyRequest {
     }
 }
 
-impl Request for SpyRequest {
+impl Suspect for SpySuspect {
     fn client_ip(self: &Self) -> &str {
         &self.client_ip
     }
@@ -145,18 +143,20 @@ impl Request for SpyRequest {
     }
 }
 
-pub struct StubTrap {
-    is_trapped: bool,
+pub struct StubGate {
+    matches_description: bool,
 }
 
-impl StubTrap {
+impl StubGate {
     fn new(is_trapped: bool) -> Self {
-        Self { is_trapped }
+        Self {
+            matches_description: is_trapped,
+        }
     }
 }
 
-impl Trap for StubTrap {
-    fn is_trapped(&self, _: &dyn Request) -> bool {
-        self.is_trapped
+impl Gate for StubGate {
+    fn matches_description(&self, _: &dyn Suspect) -> bool {
+        self.matches_description
     }
 }
