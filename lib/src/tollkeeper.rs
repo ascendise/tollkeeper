@@ -16,6 +16,17 @@ impl Tollkeeper for TollkeeperImpl {
         req: &mut TRequest,
         on_access: impl Fn(&mut TRequest),
     ) -> Option<Challenge> {
+        let host = match self
+            .hosts
+            .iter()
+            .find(|h| req.target_host().contains(&h.base_url))
+        {
+            Option::Some(h) => h,
+            Option::None => return Option::None,
+        };
+        if host.traps().iter().any(|t| t.is_trapped(req)) {
+            return Option::Some(Challenge::new("challenge"));
+        }
         on_access(req);
         Option::None
     }
@@ -66,6 +77,7 @@ impl Host {
 }
 
 /// Defines if a trap acts as a defense [Operation::Challenge] or as a gateway [Operation::Allow]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Operation {
     Allow,
     Challenge,
@@ -75,7 +87,7 @@ pub enum Operation {
 /// [requests](Request).
 pub trait Trap {
     /// True if [Request] meets the condition
-    fn is_trapped(&self, req: dyn Request) -> bool;
+    fn is_trapped(&self, req: &dyn Request) -> bool;
 }
 
 /// Information about the incoming [requests](Request), used by [traps](Trap) to trigger

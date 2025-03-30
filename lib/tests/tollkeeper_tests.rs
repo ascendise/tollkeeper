@@ -1,5 +1,5 @@
 use ::tollkeeper::tollkeeper::Host;
-use tollkeeper::tollkeeper::{Operation, Request, Tollkeeper, TollkeeperImpl};
+use tollkeeper::tollkeeper::{Challenge, Operation, Request, Tollkeeper, TollkeeperImpl, Trap};
 
 #[test]
 pub fn accessing_guarded_endpoint_without_tripping_filters_should_return_no_challenge() {
@@ -25,10 +25,27 @@ pub fn accessing_guarded_endpoint_without_tripping_filters_should_return_no_chal
 }
 
 #[test]
-pub fn accessing_guarded_endpoint_and_tripping_filters_should_return_challenge() {
+pub fn accessing_guarded_endpoint_and_tripping_traps_should_return_challenge() {
     // Arrange
+    let traps: Vec<Box<dyn Trap>> = vec![Box::new(StubTrap::new(true))];
+    let hosts = vec![Host::new("localhost", Operation::Challenge, traps)];
+    let sut = TollkeeperImpl::new(hosts);
     // Act
+    let mut malicious_request = SpyRequest::new("1.2.3.4", "BadCrawler", "localhost", "/");
+    let result = sut.access::<SpyRequest>(&mut malicious_request, |req| {
+        req.access();
+    });
+    let benign_request = malicious_request;
     // Assert
+    assert_eq!(
+        Option::Some(Challenge::new("challenge")),
+        result,
+        "Did not return a challenge despite triggering trap!"
+    );
+    assert!(
+        !benign_request.is_accessed(),
+        "Host was accessed despite triggering trap!"
+    );
 }
 
 pub struct SpyRequest {
@@ -40,7 +57,7 @@ pub struct SpyRequest {
 }
 
 impl SpyRequest {
-    pub fn new(
+    fn new(
         client_ip: impl Into<String>,
         user_agent: impl Into<String>,
         target_host: impl Into<String>,
@@ -77,5 +94,21 @@ impl Request for SpyRequest {
     }
     fn target_path(self: &Self) -> &str {
         &self.target_path
+    }
+}
+
+pub struct StubTrap {
+    is_trapped: bool,
+}
+
+impl StubTrap {
+    fn new(is_trapped: bool) -> Self {
+        Self { is_trapped }
+    }
+}
+
+impl Trap for StubTrap {
+    fn is_trapped(&self, _: &dyn Request) -> bool {
+        self.is_trapped
     }
 }
