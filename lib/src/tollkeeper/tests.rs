@@ -120,25 +120,25 @@ impl SpySuspect {
 }
 
 impl SpySuspect {
-    fn access(self: &mut Self) {
+    fn access(&mut self) {
         self.accessed = true;
     }
-    fn is_accessed(self: &Self) -> bool {
+    fn is_accessed(&self) -> bool {
         self.accessed
     }
 }
 
 impl Suspect for SpySuspect {
-    fn client_ip(self: &Self) -> &str {
+    fn client_ip(&self) -> &str {
         &self.client_ip
     }
-    fn user_agent(self: &Self) -> &str {
+    fn user_agent(&self) -> &str {
         &self.user_agent
     }
-    fn target_host(self: &Self) -> &str {
+    fn target_host(&self) -> &str {
         &self.target_host
     }
-    fn target_path(self: &Self) -> &str {
+    fn target_path(&self) -> &str {
         &self.target_path
     }
 }

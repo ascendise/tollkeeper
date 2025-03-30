@@ -17,7 +17,7 @@ impl TollkeeperImpl {
 
 impl Tollkeeper for TollkeeperImpl {
     fn guarded_access<TSuspect: Suspect>(
-        self: &Self,
+        &self,
         suspect: &mut TSuspect,
         on_access: impl Fn(&mut TSuspect),
     ) -> Option<Challenge> {
@@ -51,7 +51,7 @@ pub trait Tollkeeper {
     /// Returns [Option::None] and calls ```on_access``` if suspect is permitted or [Challenge]
     /// to be solved before being able to try again.
     fn guarded_access<TSuspect: Suspect>(
-        self: &Self,
+        &self,
         suspect: &mut TSuspect,
         on_access: impl Fn(&mut TSuspect),
     ) -> Option<Challenge>;
@@ -78,18 +78,18 @@ impl Destination {
     }
 
     /// Location of the host to be protected. E.g. https://172.0.0.1:3000
-    pub fn base_url(self: &Self) -> &str {
+    pub fn base_url(&self) -> &str {
         &self.base_url
     }
 
     /// Define if (gates)[Gate] are supposed to [allow](GateStatus::Whitelist) or [challenge](GateStatus::Blacklist) if [Suspect] matches the gate
     /// condition
-    pub fn gate_status(self: &Self) -> &GateStatus {
+    pub fn gate_status(&self) -> &GateStatus {
         &self.gate_status
     }
 
     /// Defines the [gates](Gate) that guard a [Destination]
-    pub fn gates(self: &Self) -> &Vec<Box<dyn Gate>> {
+    pub fn gates(&self) -> &Vec<Box<dyn Gate>> {
         &self.gates
     }
 }
@@ -114,10 +114,10 @@ pub trait Gate {
 /// Information about the source trying to access the resource, read by [gates](Gate) to match
 /// descriptions
 pub trait Suspect {
-    fn client_ip(self: &Self) -> &str;
-    fn user_agent(self: &Self) -> &str;
-    fn target_host(self: &Self) -> &str;
-    fn target_path(self: &Self) -> &str;
+    fn client_ip(&self) -> &str;
+    fn user_agent(&self) -> &str;
+    fn target_host(&self) -> &str;
+    fn target_path(&self) -> &str;
 }
 
 /// A Proof-of-Work challenge to be solved before being granted access
