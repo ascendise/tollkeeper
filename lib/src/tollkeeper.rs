@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 /// Default implementation of the [Tollkeeper]. Uses a list of defined forward hosts and filter rules
 /// to [Challenge] access for [Host] endpoints.
 pub struct TollkeeperImpl {

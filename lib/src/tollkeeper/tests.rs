@@ -1,5 +1,4 @@
-use ::tollkeeper::tollkeeper::Host;
-use tollkeeper::tollkeeper::{Challenge, Operation, Request, Tollkeeper, TollkeeperImpl, Trap};
+use super::*;
 
 #[test]
 pub fn accessing_guarded_endpoint_without_tripping_filters_should_return_no_challenge() {
