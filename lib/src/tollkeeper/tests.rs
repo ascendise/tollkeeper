@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-pub fn accessing_guarded_endpoint_without_tripping_filters_should_return_no_challenge() {
+pub fn accessing_guarded_endpoint_without_tripping_traps_should_return_no_challenge() {
     // Arrange
     let hosts = vec![Host::new("localhost", Operation::Challenge, vec![])];
     let sut = TollkeeperImpl::new(hosts);
@@ -24,6 +24,30 @@ pub fn accessing_guarded_endpoint_without_tripping_filters_should_return_no_chal
 }
 
 #[test]
+pub fn accessing_guarded_endpoint_without_tripping_traps_should_return_a_challenge_if_traps_are_set_to_allow(
+) {
+    // Arrange
+    let hosts = vec![Host::new("localhost", Operation::Allow, vec![])];
+    let sut = TollkeeperImpl::new(hosts);
+    // Act
+    let mut malicious_request = SpyRequest::new("1.2.3.4", "BadCrawler", "localhost", "/");
+    let result = sut.access::<SpyRequest>(&mut malicious_request, |req| {
+        req.access();
+    });
+    let malicious_request = malicious_request;
+    // Assert
+    assert_eq!(
+        Option::Some(Challenge::new("challenge")),
+        result,
+        "Returned no challenge despite default set to allow and no traps triggered!"
+    );
+    assert!(
+        !malicious_request.is_accessed(),
+        "Host was accessed despite allowed!"
+    );
+}
+
+#[test]
 pub fn accessing_guarded_endpoint_and_tripping_traps_should_return_challenge() {
     // Arrange
     let traps: Vec<Box<dyn Trap>> = vec![Box::new(StubTrap::new(true))];
@@ -34,7 +58,7 @@ pub fn accessing_guarded_endpoint_and_tripping_traps_should_return_challenge() {
     let result = sut.access::<SpyRequest>(&mut malicious_request, |req| {
         req.access();
     });
-    let benign_request = malicious_request;
+    let malicious_request = malicious_request;
     // Assert
     assert_eq!(
         Option::Some(Challenge::new("challenge")),
@@ -42,8 +66,33 @@ pub fn accessing_guarded_endpoint_and_tripping_traps_should_return_challenge() {
         "Did not return a challenge despite triggering trap!"
     );
     assert!(
-        !benign_request.is_accessed(),
+        !malicious_request.is_accessed(),
         "Host was accessed despite triggering trap!"
+    );
+}
+
+#[test]
+pub fn accessing_guarded_endpoint_and_tripping_traps_should_return_no_challenge_if_traps_are_set_to_allow(
+) {
+    // Arrange
+    let traps: Vec<Box<dyn Trap>> = vec![Box::new(StubTrap::new(true))];
+    let hosts = vec![Host::new("localhost", Operation::Allow, traps)];
+    let sut = TollkeeperImpl::new(hosts);
+    // Act
+    let mut benign_request = SpyRequest::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
+    let result = sut.access::<SpyRequest>(&mut benign_request, |req| {
+        req.access();
+    });
+    let benign_request = benign_request;
+    // Assert
+    assert_eq!(
+        Option::None,
+        result,
+        "Returned a challenge despite default set to allow traps triggered!"
+    );
+    assert!(
+        benign_request.is_accessed(),
+        "Host was not accessed despite allowed!"
     );
 }
 

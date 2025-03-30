@@ -27,7 +27,10 @@ impl Tollkeeper for TollkeeperImpl {
             Option::Some(h) => h,
             Option::None => return Option::None,
         };
-        if host.traps().iter().any(|t| t.is_trapped(req)) {
+        let trapped = host.traps().iter().any(|t| t.is_trapped(req));
+        if (trapped && host.on_trap == Operation::Challenge)
+            || (!trapped && host.on_trap == Operation::Allow)
+        {
             return Option::Some(Challenge::new("challenge"));
         }
         on_access(req);
