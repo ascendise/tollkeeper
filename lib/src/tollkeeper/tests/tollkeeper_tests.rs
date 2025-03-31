@@ -16,7 +16,7 @@ pub fn accessing_blacklisted_destination_without_matching_description_should_all
     assert_eq!(
         Option::None,
         result,
-        "Returned a challenge even tho access should be granted!"
+        "Returned a challenge even though access should be granted!"
     );
     assert!(
         benign_suspect.is_accessed(),
