@@ -24,10 +24,10 @@ impl TollkeeperImpl {
         Self { gates }
     }
 
-    fn find_gate(&self, destination: &str) -> Option<&Gate> {
+    fn find_gate(&self, target_host: &str) -> Option<&Gate> {
         self.gates
             .iter()
-            .find(|g| g.destination() == destination)
+            .find(|g| g.destination() == target_host)
             .or(Option::None)
     }
 }
