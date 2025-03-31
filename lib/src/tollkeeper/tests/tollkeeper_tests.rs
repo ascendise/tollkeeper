@@ -4,8 +4,10 @@ use crate::tollkeeper::*;
 #[test]
 pub fn accessing_blacklisted_destination_without_matching_description_should_allow_access() {
     // Arrange
-    let hosts = vec![Destination::new("localhost", GateStatus::Blacklist, vec![])];
-    let sut = TollkeeperImpl::new(hosts);
+    let no_match_description: Box<dyn Description> = Box::new(StubDescription::new(false));
+    let order = Order::new(vec![no_match_description], GateStatus::Blacklist);
+    let gate = Gate::new(String::from("localhost"), vec![order]);
+    let sut = TollkeeperImpl::new(vec![gate]);
     // Act
     let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
     let result = sut.guarded_access::<SpySuspect>(&mut benign_suspect, |req| {
@@ -27,8 +29,10 @@ pub fn accessing_blacklisted_destination_without_matching_description_should_all
 #[test]
 pub fn accessing_whitelisted_destination_without_matching_description_should_return_challenge() {
     // Arrange
-    let hosts = vec![Destination::new("localhost", GateStatus::Whitelist, vec![])];
-    let sut = TollkeeperImpl::new(hosts);
+    let no_match_description: Box<dyn Description> = Box::new(StubDescription::new(false));
+    let order = Order::new(vec![no_match_description], GateStatus::Whitelist);
+    let gate = Gate::new(String::from("localhost"), vec![order]);
+    let sut = TollkeeperImpl::new(vec![gate]);
     // Act
     let mut malicious_suspect = SpySuspect::new("1.2.3.4", "BadCrawler", "localhost", "/");
     let result = sut.guarded_access::<SpySuspect>(&mut malicious_suspect, |req| {
@@ -50,9 +54,10 @@ pub fn accessing_whitelisted_destination_without_matching_description_should_ret
 #[test]
 pub fn accessing_blacklisted_destination_with_matching_description_should_return_challenge() {
     // Arrange
-    let gates: Vec<Box<dyn Gate>> = vec![Box::new(StubGate::new(true))];
-    let hosts = vec![Destination::new("localhost", GateStatus::Blacklist, gates)];
-    let sut = TollkeeperImpl::new(hosts);
+    let match_description: Box<dyn Description> = Box::new(StubDescription::new(true));
+    let order = Order::new(vec![match_description], GateStatus::Blacklist);
+    let gate = Gate::new(String::from("localhost"), vec![order]);
+    let sut = TollkeeperImpl::new(vec![gate]);
     // Act
     let mut malicious_suspect = SpySuspect::new("1.2.3.4", "BadCrawler", "localhost", "/");
     let result = sut.guarded_access::<SpySuspect>(&mut malicious_suspect, |req| {
@@ -74,9 +79,10 @@ pub fn accessing_blacklisted_destination_with_matching_description_should_return
 #[test]
 pub fn accessing_whitelisted_destination_with_matching_description_should_allow_access() {
     // Arrange
-    let gates: Vec<Box<dyn Gate>> = vec![Box::new(StubGate::new(true))];
-    let hosts = vec![Destination::new("localhost", GateStatus::Whitelist, gates)];
-    let sut = TollkeeperImpl::new(hosts);
+    let match_description: Box<dyn Description> = Box::new(StubDescription::new(true));
+    let order = Order::new(vec![match_description], GateStatus::Whitelist);
+    let gate = Gate::new(String::from("localhost"), vec![order]);
+    let sut = TollkeeperImpl::new(vec![gate]);
     // Act
     let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
     let result = sut.guarded_access::<SpySuspect>(&mut benign_suspect, |req| {

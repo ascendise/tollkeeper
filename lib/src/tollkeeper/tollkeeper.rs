@@ -17,12 +17,19 @@ pub trait Tollkeeper {
 /// Default implementation of the [Tollkeeper]. Uses a list of destination machines, each with
 /// their own gates to [Challenge] access for [Destination] endpoints.
 pub struct TollkeeperImpl {
-    destinations: Vec<Destination>,
+    gates: Vec<Gate>,
 }
 
 impl TollkeeperImpl {
-    pub fn new(destinations: Vec<Destination>) -> Self {
-        Self { destinations }
+    pub fn new(gates: Vec<Gate>) -> Self {
+        Self { gates }
+    }
+
+    fn find_gate(&self, destination: &str) -> Option<&Gate> {
+        self.gates
+            .iter()
+            .find(|g| g.destination() == destination)
+            .or(Option::None)
     }
 }
 
@@ -32,24 +39,17 @@ impl Tollkeeper for TollkeeperImpl {
         suspect: &mut TSuspect,
         on_access: impl Fn(&mut TSuspect),
     ) -> Option<Challenge> {
-        let destination = match self
-            .destinations
-            .iter()
-            .find(|d| suspect.target_host().contains(&d.base_url()))
-        {
-            Option::Some(h) => h,
+        let gate = match self.find_gate(suspect.target_host()) {
+            Option::Some(g) => g,
             Option::None => return Option::None,
         };
-        let matches_description = destination
-            .gates()
-            .iter()
-            .any(|t| t.matches_description(suspect));
-        if (matches_description && *destination.gate_status() == GateStatus::Blacklist)
-            || (!matches_description && *destination.gate_status() == GateStatus::Whitelist)
-        {
-            return Option::Some(Challenge::new("challenge"));
+        let result = gate.pass(suspect);
+        match result {
+            Option::Some(g) => Option::Some(g),
+            Option::None => {
+                on_access(suspect);
+                Option::None
+            }
         }
-        on_access(suspect);
-        Option::None
     }
 }

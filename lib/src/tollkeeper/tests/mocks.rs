@@ -49,20 +49,18 @@ impl Suspect for SpySuspect {
     }
 }
 
-pub struct StubGate {
-    matches_description: bool,
+pub struct StubDescription {
+    matches: bool,
 }
 
-impl StubGate {
-    pub fn new(is_trapped: bool) -> Self {
-        Self {
-            matches_description: is_trapped,
-        }
+impl StubDescription {
+    pub fn new(matches: bool) -> Self {
+        Self { matches }
     }
 }
 
-impl Gate for StubGate {
-    fn matches_description(&self, _: &dyn Suspect) -> bool {
-        self.matches_description
+impl Description for StubDescription {
+    fn matches(&self, suspect: &dyn Suspect) -> bool {
+        self.matches
     }
 }
