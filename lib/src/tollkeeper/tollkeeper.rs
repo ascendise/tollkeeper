@@ -1,21 +1,20 @@
 use super::*;
 
-/// Gaurds actions against spam by requiring a PoW [Challenge] to be solved before proceeding.
+/// Gaurds actions against spam by requiring a PoW [challenge](Toll) to be solved before proceeding.
 pub trait Tollkeeper {
-    /// Checks if [Suspect] [matches description](Gate::matches_description) and has to be [challenged](Challenge) before proceeding with it's
+    /// Checks if [Suspect] [matches description](Description::matches) and has to [pay a toll](Toll) before proceeding with it's
     /// action.
     ///
-    /// Returns [Option::None] and calls ```on_access``` if suspect is permitted or [Challenge]
-    /// to be solved before being able to try again.
+    /// Returns [Option::None] and calls ```on_access``` if suspect is permitted or [Toll]
+    /// to be payed before being able to try again.
     fn guarded_access<TSuspect: Suspect>(
         &self,
         suspect: &mut TSuspect,
         on_access: impl Fn(&mut TSuspect),
-    ) -> Option<Challenge>;
+    ) -> Option<Toll>;
 }
 
-/// Default implementation of the [Tollkeeper]. Uses a list of destination machines, each with
-/// their own gates to [Challenge] access for [Destination] endpoints.
+/// Default implementation of the [Tollkeeper].
 pub struct TollkeeperImpl {
     gates: Vec<Gate>,
 }
@@ -32,13 +31,13 @@ impl TollkeeperImpl {
             .or(Option::None)
     }
 }
-
+/// Sends [Suspect] through matching [Gate] and  requests a [Toll] if necessary
 impl Tollkeeper for TollkeeperImpl {
     fn guarded_access<TSuspect: Suspect>(
         &self,
         suspect: &mut TSuspect,
         on_access: impl Fn(&mut TSuspect),
-    ) -> Option<Challenge> {
+    ) -> Option<Toll> {
         let gate = match self.find_gate(suspect.target_host()) {
             Option::Some(g) => g,
             Option::None => return Option::None,

@@ -41,7 +41,7 @@ pub fn accessing_whitelisted_destination_without_matching_description_should_ret
     let malicious_suspect = malicious_suspect;
     // Assert
     assert_eq!(
-        Option::Some(Challenge::new("challenge")),
+        Option::Some(Toll::new("challenge")),
         result,
         "Returned no challenge despite default set to allow and no gates triggered!"
     );
@@ -66,7 +66,7 @@ pub fn accessing_blacklisted_destination_with_matching_description_should_return
     let malicious_suspect = malicious_suspect;
     // Assert
     assert_eq!(
-        Option::Some(Challenge::new("challenge")),
+        Option::Some(Toll::new("challenge")),
         result,
         "Did not return a challenge despite triggering trap!"
     );

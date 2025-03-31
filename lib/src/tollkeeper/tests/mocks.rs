@@ -60,7 +60,7 @@ impl StubDescription {
 }
 
 impl Description for StubDescription {
-    fn matches(&self, suspect: &dyn Suspect) -> bool {
+    fn matches(&self, _: &dyn Suspect) -> bool {
         self.matches
     }
 }
