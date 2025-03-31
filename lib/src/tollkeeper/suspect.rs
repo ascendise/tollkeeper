@@ -1,4 +1,4 @@
-/// Information about the source trying to access the resource, read by [gates](Gate) to match
+/// Information about the source trying to access the resource, read by [gates](super::Gate) to match
 /// descriptions
 pub trait Suspect {
     fn client_ip(&self) -> &str;
