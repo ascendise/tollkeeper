@@ -2,7 +2,7 @@ use super::*;
 use crate::tollkeeper::*;
 
 #[test]
-pub fn accessing_blacklisted_destination_without_matching_description_should_allow_access() {
+pub fn passing_gate_with_a_blacklist_order_but_no_matching_description_should_allow_access() {
     // Arrange
     let no_match_description: Box<dyn Description> = Box::new(StubDescription::new(false));
     let order = Order::new(vec![no_match_description], GateStatus::Blacklist);
@@ -18,7 +18,7 @@ pub fn accessing_blacklisted_destination_without_matching_description_should_all
     assert_eq!(
         Option::None,
         result,
-        "Returned a challenge even though access should be granted!"
+        "Requires toll even though access should be granted!"
     );
     assert!(
         benign_suspect.is_accessed(),
@@ -27,7 +27,7 @@ pub fn accessing_blacklisted_destination_without_matching_description_should_all
 }
 
 #[test]
-pub fn accessing_whitelisted_destination_without_matching_description_should_return_challenge() {
+pub fn passing_gate_with_a_whitelist_order_but_no_matching_description_should_request_toll() {
     // Arrange
     let no_match_description: Box<dyn Description> = Box::new(StubDescription::new(false));
     let order = Order::new(vec![no_match_description], GateStatus::Whitelist);
@@ -43,16 +43,16 @@ pub fn accessing_whitelisted_destination_without_matching_description_should_ret
     assert_eq!(
         Option::Some(Toll::new("challenge")),
         result,
-        "Returned no challenge despite default set to allow and no gates triggered!"
+        "Required no toll despite suspect not matching whitelist order description"
     );
     assert!(
         !malicious_suspect.is_accessed(),
-        "Destination was accessed despite allowed!"
+        "Destination was accessed despite no toll was paid!"
     );
 }
 
 #[test]
-pub fn accessing_blacklisted_destination_with_matching_description_should_return_challenge() {
+pub fn passing_gate_with_a_blacklist_order_and_matching_description_should_request_toll() {
     // Arrange
     let match_description: Box<dyn Description> = Box::new(StubDescription::new(true));
     let order = Order::new(vec![match_description], GateStatus::Blacklist);
@@ -68,7 +68,7 @@ pub fn accessing_blacklisted_destination_with_matching_description_should_return
     assert_eq!(
         Option::Some(Toll::new("challenge")),
         result,
-        "Did not return a challenge despite triggering trap!"
+        "Did not require a toll despite matching description on blacklist order!"
     );
     assert!(
         !malicious_suspect.is_accessed(),
@@ -77,7 +77,7 @@ pub fn accessing_blacklisted_destination_with_matching_description_should_return
 }
 
 #[test]
-pub fn accessing_whitelisted_destination_with_matching_description_should_allow_access() {
+pub fn passing_gate_with_a_whitelist_order_and_matching_description_should_allow_access() {
     // Arrange
     let match_description: Box<dyn Description> = Box::new(StubDescription::new(true));
     let order = Order::new(vec![match_description], GateStatus::Whitelist);
@@ -93,7 +93,7 @@ pub fn accessing_whitelisted_destination_with_matching_description_should_allow_
     assert_eq!(
         Option::None,
         result,
-        "Returned a challenge despite default set to allow gates triggered!"
+        "Required a toll despite suspect not matching whitelist order"
     );
     assert!(
         benign_suspect.is_accessed(),
