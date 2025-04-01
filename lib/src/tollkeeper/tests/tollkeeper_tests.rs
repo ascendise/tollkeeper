@@ -1,4 +1,4 @@
-use super::mocks::*;
+use super::*;
 use crate::tollkeeper::*;
 
 #[test]
