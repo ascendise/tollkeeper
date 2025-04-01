@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-/// Gaurds actions against spam by requiring a PoW [challenge](Toll) to be solved before proceeding.
+/// Guards actions against spam by requiring a PoW [challenge](Toll) to be solved before proceeding.
 pub trait Tollkeeper {
     /// Checks if [Suspect] [matches description](Description::matches) and has to [pay a toll](Toll) before proceeding with it's
     /// action.
@@ -69,9 +69,9 @@ pub struct Gate {
 }
 
 impl Gate {
-    pub fn new(destination: String, orders: Vec<Order>) -> Self {
+    pub fn new(destination: impl Into<String>, orders: Vec<Order>) -> Self {
         Self {
-            destination,
+            destination: destination.into(),
             orders,
         }
     }
@@ -190,10 +190,10 @@ pub struct Toll {
 }
 
 impl Toll {
-    pub fn new(challenge: ChallengeAlgorithm, seed: String, difficulty: u8) -> Self {
+    pub fn new(challenge: ChallengeAlgorithm, seed: impl Into<String>, difficulty: u8) -> Self {
         Self {
             challenge,
-            seed,
+            seed: seed.into(),
             difficulty,
         }
     }
@@ -225,8 +225,11 @@ impl PartialEq for ConfigError {
 }
 
 impl ConfigError {
-    pub fn new(key: String, description: String) -> Self {
-        Self { key, description }
+    pub fn new(key: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            description: description.into(),
+        }
     }
 
     /// Property that caused the error
