@@ -5,7 +5,12 @@ use crate::tollkeeper::*;
 pub fn passing_gate_with_a_blacklist_order_but_no_matching_description_should_allow_access() {
     // Arrange
     let no_match_description: Box<dyn Description> = Box::new(StubDescription::new(false));
-    let order = Order::new(vec![no_match_description], AccessPolicy::Blacklist);
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, String::from("abcd"), 4);
+    let order = Order::new(
+        vec![no_match_description],
+        AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new(toll)),
+    );
     let gate = Gate::new(String::from("localhost"), vec![order]);
     let sut = TollkeeperImpl::new(vec![gate]);
     // Act
@@ -30,7 +35,12 @@ pub fn passing_gate_with_a_blacklist_order_but_no_matching_description_should_al
 pub fn passing_gate_with_a_whitelist_order_but_no_matching_description_should_request_toll() {
     // Arrange
     let no_match_description: Box<dyn Description> = Box::new(StubDescription::new(false));
-    let order = Order::new(vec![no_match_description], AccessPolicy::Whitelist);
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, String::from("abcd"), 4);
+    let order = Order::new(
+        vec![no_match_description],
+        AccessPolicy::Whitelist,
+        Box::new(StubDeclaration::new(toll.clone())),
+    );
     let gate = Gate::new(String::from("localhost"), vec![order]);
     let sut = TollkeeperImpl::new(vec![gate]);
     // Act
@@ -41,7 +51,7 @@ pub fn passing_gate_with_a_whitelist_order_but_no_matching_description_should_re
     let malicious_suspect = malicious_suspect;
     // Assert
     assert_eq!(
-        Option::Some(Toll::new("challenge")),
+        Option::Some(toll),
         result,
         "Required no toll despite suspect not matching whitelist order description"
     );
@@ -55,7 +65,12 @@ pub fn passing_gate_with_a_whitelist_order_but_no_matching_description_should_re
 pub fn passing_gate_with_a_blacklist_order_and_matching_description_should_request_toll() {
     // Arrange
     let match_description: Box<dyn Description> = Box::new(StubDescription::new(true));
-    let order = Order::new(vec![match_description], AccessPolicy::Blacklist);
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, String::from("abcd"), 4);
+    let order = Order::new(
+        vec![match_description],
+        AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new(toll.clone())),
+    );
     let gate = Gate::new(String::from("localhost"), vec![order]);
     let sut = TollkeeperImpl::new(vec![gate]);
     // Act
@@ -66,7 +81,7 @@ pub fn passing_gate_with_a_blacklist_order_and_matching_description_should_reque
     let malicious_suspect = malicious_suspect;
     // Assert
     assert_eq!(
-        Option::Some(Toll::new("challenge")),
+        Option::Some(toll),
         result,
         "Did not require a toll despite matching description on blacklist order!"
     );
@@ -80,7 +95,12 @@ pub fn passing_gate_with_a_blacklist_order_and_matching_description_should_reque
 pub fn passing_gate_with_a_whitelist_order_and_matching_description_should_allow_access() {
     // Arrange
     let match_description: Box<dyn Description> = Box::new(StubDescription::new(true));
-    let order = Order::new(vec![match_description], AccessPolicy::Whitelist);
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, String::from("abcd"), 4);
+    let order = Order::new(
+        vec![match_description],
+        AccessPolicy::Whitelist,
+        Box::new(StubDeclaration::new(toll)),
+    );
     let gate = Gate::new(String::from("localhost"), vec![order]);
     let sut = TollkeeperImpl::new(vec![gate]);
     // Act
@@ -104,17 +124,21 @@ pub fn passing_gate_with_a_whitelist_order_and_matching_description_should_allow
 #[test]
 pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll() {
     // Arrange
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, String::from("abcd"), 4);
     let order1 = Order::new(
         vec![Box::new(StubDescription::new(false))],
         AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new(toll.clone())),
     );
     let order2 = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new(toll.clone())),
     );
     let order3 = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Whitelist,
+        Box::new(StubDeclaration::new(toll.clone())),
     );
     let gate = Gate::new(String::from("localhost"), vec![order1, order2, order3]);
     let sut = TollkeeperImpl::new(vec![gate]);
@@ -126,7 +150,7 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
     let malicious_suspect = malicious_suspect;
     // Assert
     assert_eq!(
-        Option::Some(Toll::new("challenge")),
+        Option::Some(toll),
         result,
         "Required no toll despite first matching order being a blacklist"
     );
@@ -139,17 +163,21 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
 #[test]
 pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_access() {
     // Arrange
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, String::from("abcd"), 4);
     let order1 = Order::new(
         vec![Box::new(StubDescription::new(false))],
         AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new(toll.clone())),
     );
     let order2 = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Whitelist,
+        Box::new(StubDeclaration::new(toll.clone())),
     );
     let order3 = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new(toll.clone())),
     );
     let gate = Gate::new(String::from("localhost"), vec![order1, order2, order3]);
     let sut = TollkeeperImpl::new(vec![gate]);

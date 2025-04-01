@@ -108,13 +108,19 @@ pub enum AccessPolicy {
 pub struct Order {
     descriptions: Vec<Box<dyn Description>>,
     access_policy: AccessPolicy,
+    toll_declaration: Box<dyn Declaration>,
 }
 
 impl Order {
-    pub fn new(descriptions: Vec<Box<dyn Description>>, access_policy: AccessPolicy) -> Self {
+    pub fn new(
+        descriptions: Vec<Box<dyn Description>>,
+        access_policy: AccessPolicy,
+        toll_declaration: Box<dyn Declaration>,
+    ) -> Self {
         Self {
             descriptions,
             access_policy,
+            toll_declaration,
         }
     }
 
@@ -123,7 +129,7 @@ impl Order {
         let require_toll = (matches_description && self.access_policy == AccessPolicy::Blacklist)
             || (!matches_description && self.access_policy == AccessPolicy::Whitelist);
         let toll = if require_toll {
-            Option::Some(Toll::new("challenge"))
+            Option::Some(self.toll_declaration.declare())
         } else {
             Option::None
         };
@@ -136,7 +142,7 @@ impl Order {
     }
 }
 
-/// Defines what kind of [Suspect] the [Tollkeeper] is looking out for  
+/// Defines what kind of [Suspect] the [Tollkeeper] is looking out for
 pub trait Description {
     fn matches(&self, suspect: &dyn Suspect) -> bool;
 }
@@ -163,14 +169,32 @@ impl Examination {
     }
 }
 
+/// Factory for creating [Toll] challenges
+pub trait Declaration {
+    fn declare(&self) -> Toll;
+}
+
 /// A Proof-of-Work challenge to be solved before being granted access
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Toll {
-    name: String,
+    challenge: ChallengeAlgorithm,
+    seed: String,
+    difficulty: u8,
 }
 
 impl Toll {
-    pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into() }
+    pub fn new(challenge: ChallengeAlgorithm, seed: String, difficulty: u8) -> Self {
+        Self {
+            challenge,
+            seed,
+            difficulty,
+        }
     }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum ChallengeAlgorithm {
+    SHA1,
+    SHA256,
+    SHA3,
 }

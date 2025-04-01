@@ -64,3 +64,19 @@ impl Description for StubDescription {
         self.matches
     }
 }
+
+pub struct StubDeclaration {
+    toll: Toll,
+}
+
+impl StubDeclaration {
+    pub fn new(toll: Toll) -> Self {
+        Self { toll }
+    }
+}
+
+impl Declaration for StubDeclaration {
+    fn declare(&self) -> Toll {
+        self.toll.clone()
+    }
+}
