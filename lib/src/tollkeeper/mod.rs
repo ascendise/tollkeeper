@@ -21,8 +21,15 @@ pub struct TollkeeperImpl {
 }
 
 impl TollkeeperImpl {
-    pub fn new(gates: Vec<Gate>) -> Self {
-        Self { gates }
+    pub fn new(gates: Vec<Gate>) -> Result<Self, ConfigError> {
+        if gates.is_empty() {
+            Result::Err(ConfigError::new(
+                String::from("gates"),
+                String::from("No gates defined. Tollkeeper has nothing to protect!"),
+            ))
+        } else {
+            Result::Ok(Self { gates })
+        }
     }
 
     fn find_gate(&self, target_host: &str) -> Option<&Gate> {
@@ -104,7 +111,7 @@ pub enum AccessPolicy {
     Blacklist,
 }
 
-/// Defines operational standards for a [Gate]
+/// Defines conditional process for a [Gate]
 pub struct Order {
     descriptions: Vec<Box<dyn Description>>,
     access_policy: AccessPolicy,
@@ -142,7 +149,7 @@ impl Order {
     }
 }
 
-/// Defines what kind of [Suspect] the [Tollkeeper] is looking out for
+/// Examines [Suspect] for a defined condition like matching IP/User-Agent/...
 pub trait Description {
     fn matches(&self, suspect: &dyn Suspect) -> bool;
 }
@@ -197,4 +204,39 @@ pub enum ChallengeAlgorithm {
     SHA1,
     SHA256,
     SHA3,
+}
+
+/// Return this error when there are problems during creation of the [Tollkeeper] or
+/// it's subentities caused by wrong init arguments
+#[derive(Debug, Eq, Clone)]
+pub struct ConfigError {
+    key: String,
+    description: String,
+}
+
+impl PartialEq for ConfigError {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        self.key != other.key
+    }
+}
+
+impl ConfigError {
+    pub fn new(key: String, description: String) -> Self {
+        Self { key, description }
+    }
+
+    /// Property that caused the error
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    /// User-friendly message describing what is wrong with the configuration
+    /// Not part of equality comparison
+    pub fn description(&self) -> &str {
+        &self.description
+    }
 }
