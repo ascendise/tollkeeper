@@ -6,8 +6,8 @@ pub trait Tollkeeper {
     /// Checks if [Suspect] [matches description](Description::matches) and has to [pay a toll](Toll) before proceeding with it's
     /// action.
     ///
-    /// Returns [Option::None] and calls ```on_access``` if suspect is permitted or [Toll]
-    /// to be payed before being able to try again.
+    /// Returns [Option::None] and calls ```on_access``` if [Suspect] is permitted or [Toll]
+    /// to be paid before being able to try again.
     fn guarded_access<TSuspect: Suspect>(
         &self,
         suspect: &mut TSuspect,
@@ -32,6 +32,7 @@ impl TollkeeperImpl {
             .or(Option::None)
     }
 }
+
 /// Sends [Suspect] through matching [Gate] and  requests a [Toll] if necessary
 impl Tollkeeper for TollkeeperImpl {
     fn guarded_access<TSuspect: Suspect>(
@@ -54,11 +55,6 @@ impl Tollkeeper for TollkeeperImpl {
     }
 }
 
-/// Defines what kind of [Suspect] the [Tollkeeper] is looking out for  
-pub trait Description {
-    fn matches(&self, suspect: &dyn Suspect) -> bool;
-}
-
 /// Defines the target machine and which [suspects](Suspect) are allowed or not
 pub struct Gate {
     destination: String,
@@ -78,28 +74,32 @@ impl Gate {
         &self.destination
     }
 
-    /// Defines which [suspects](Suspect) to look out for and how to proceed with them
+    /// Defines which [suspects](Suspect) to look out for and how to proceed with them. Priority is
+    /// based on order, meaning the first [Order] that explicitly [grants](AccessPolicy::Whitelist) or [denies](AccessPolicy::Blacklist) access will be
+    /// executed.
     pub fn orders(&self) -> &Vec<Order> {
         &self.orders
     }
 
-    /// Examine [Suspect] and check if he has to pay a toll
+    /// Examine [Suspect] and check if it has to pay a [Toll]
     pub fn pass(&self, suspect: &dyn Suspect) -> Option<Toll> {
         for order in &self.orders {
-            let exam = order.investigate(suspect);
-            match exam {
-                Option::Some(c) => return Option::Some(c),
-                Option::None => continue,
-            };
+            let exam = order.examine(suspect);
+            if exam.access_granted {
+                return Option::None;
+            }
+            if exam.toll.is_some() {
+                return exam.toll;
+            }
         }
         Option::None
     }
 }
 
-/// Defines if [gates](super::Gate) act as a defense [GateStatus::Blacklist] or as a gateway
-/// [GateStatus::Whitelist]
+/// Defines if [gates](Gate) suspects are allowed or denied on matching [Description]
+/// [AccessPolicy::Whitelist]
 #[derive(Debug, PartialEq, Eq)]
-pub enum GateStatus {
+pub enum AccessPolicy {
     Whitelist,
     Blacklist,
 }
@@ -107,31 +107,38 @@ pub enum GateStatus {
 /// Defines operational standards for a [Gate]
 pub struct Order {
     descriptions: Vec<Box<dyn Description>>,
-    status: GateStatus,
+    access_policy: AccessPolicy,
 }
 
 impl Order {
-    pub fn new(descriptions: Vec<Box<dyn Description>>, status: GateStatus) -> Self {
+    pub fn new(descriptions: Vec<Box<dyn Description>>, access_policy: AccessPolicy) -> Self {
         Self {
             descriptions,
-            status,
+            access_policy,
         }
     }
 
-    pub fn investigate(&self, suspect: &dyn Suspect) -> Option<Toll> {
-        let is_match = self.is_match(suspect);
-        let require_challenge = (is_match && self.status == GateStatus::Blacklist)
-            || (!is_match && self.status == GateStatus::Whitelist);
-        if require_challenge {
+    fn examine(&self, suspect: &dyn Suspect) -> Examination {
+        let matches_description = self.is_match(suspect);
+        let require_toll = (matches_description && self.access_policy == AccessPolicy::Blacklist)
+            || (!matches_description && self.access_policy == AccessPolicy::Whitelist);
+        let toll = if require_toll {
             Option::Some(Toll::new("challenge"))
         } else {
             Option::None
-        }
+        };
+        let access_granted = toll.is_none() && matches_description;
+        Examination::new(toll, access_granted)
     }
 
     fn is_match(&self, suspect: &dyn Suspect) -> bool {
         self.descriptions.iter().any(|d| d.matches(suspect))
     }
+}
+
+/// Defines what kind of [Suspect] the [Tollkeeper] is looking out for  
+pub trait Description {
+    fn matches(&self, suspect: &dyn Suspect) -> bool;
 }
 
 /// Information about the source trying to access the resource
@@ -140,6 +147,20 @@ pub trait Suspect {
     fn user_agent(&self) -> &str;
     fn target_host(&self) -> &str;
     fn target_path(&self) -> &str;
+}
+
+struct Examination {
+    toll: Option<Toll>,
+    access_granted: bool,
+}
+
+impl Examination {
+    fn new(toll: Option<Toll>, access_granted: bool) -> Self {
+        Self {
+            toll,
+            access_granted,
+        }
+    }
 }
 
 /// A Proof-of-Work challenge to be solved before being granted access
