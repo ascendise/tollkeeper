@@ -2,7 +2,7 @@ use super::*;
 use crate::tollkeeper::*;
 
 #[test]
-pub fn creating_new_toolkeeper_with_no_orders_should_fail() {
+pub fn creating_new_toolkeeper_with_no_gates_should_fail() {
     // Arrange
     // Act
     let result = TollkeeperImpl::new(vec![]);
@@ -23,7 +23,7 @@ pub fn passing_gate_with_a_blacklist_order_but_no_matching_description_should_al
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll)),
     );
-    let gate = Gate::new("localhost", vec![order]);
+    let gate = Gate::new("localhost", vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
@@ -53,7 +53,7 @@ pub fn passing_gate_with_a_whitelist_order_but_no_matching_description_should_re
         AccessPolicy::Whitelist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new("localhost", vec![order]);
+    let gate = Gate::new("localhost", vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let mut malicious_suspect = SpySuspect::new("1.2.3.4", "BadCrawler", "localhost", "/");
@@ -83,7 +83,7 @@ pub fn passing_gate_with_a_blacklist_order_and_matching_description_should_reque
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new("localhost", vec![order]);
+    let gate = Gate::new("localhost", vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let mut malicious_suspect = SpySuspect::new("1.2.3.4", "BadCrawler", "localhost", "/");
@@ -113,7 +113,7 @@ pub fn passing_gate_with_a_whitelist_order_and_matching_description_should_allow
         AccessPolicy::Whitelist,
         Box::new(StubDeclaration::new(toll)),
     );
-    let gate = Gate::new("localhost", vec![order]);
+    let gate = Gate::new("localhost", vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
@@ -152,7 +152,7 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
         AccessPolicy::Whitelist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new("localhost", vec![order1, order2, order3]);
+    let gate = Gate::new("localhost", vec![order1, order2, order3]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let mut malicious_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
@@ -191,7 +191,7 @@ pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_acces
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new("localhost", vec![order1, order2, order3]);
+    let gate = Gate::new("localhost", vec![order1, order2, order3]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");

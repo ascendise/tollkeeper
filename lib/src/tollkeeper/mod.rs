@@ -69,10 +69,17 @@ pub struct Gate {
 }
 
 impl Gate {
-    pub fn new(destination: impl Into<String>, orders: Vec<Order>) -> Self {
-        Self {
-            destination: destination.into(),
-            orders,
+    pub fn new(destination: impl Into<String>, orders: Vec<Order>) -> Result<Self, ConfigError> {
+        if orders.is_empty() {
+            Result::Err(ConfigError::new(
+                "orders",
+                "You need to define at least one order for the gate!",
+            ))
+        } else {
+            Result::Ok(Self {
+                destination: destination.into(),
+                orders,
+            })
         }
     }
 
@@ -89,7 +96,7 @@ impl Gate {
     }
 
     /// Examine [Suspect] and check if it has to pay a [Toll]
-    pub fn pass(&self, suspect: &dyn Suspect) -> Option<Toll> {
+    fn pass(&self, suspect: &dyn Suspect) -> Option<Toll> {
         for order in &self.orders {
             let exam = order.examine(suspect);
             if exam.access_granted {
@@ -214,16 +221,6 @@ pub struct ConfigError {
     description: String,
 }
 
-impl PartialEq for ConfigError {
-    fn eq(&self, other: &Self) -> bool {
-        self.key == other.key
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        self.key != other.key
-    }
-}
-
 impl ConfigError {
     pub fn new(key: impl Into<String>, description: impl Into<String>) -> Self {
         Self {
@@ -241,5 +238,15 @@ impl ConfigError {
     /// Not part of equality comparison
     pub fn description(&self) -> &str {
         &self.description
+    }
+}
+
+impl PartialEq for ConfigError {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        self.key != other.key
     }
 }
