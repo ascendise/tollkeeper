@@ -230,3 +230,26 @@ pub fn passing_gate_with_valid_payment_should_allow_access() {
     );
     assert!(suspect.is_accessed(), "No access despite having payment");
 }
+
+#[test]
+pub fn passing_gate_with_wrong_payment_should_return_new_toll() {
+    // Arrange
+    let my_toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
+    let new_toll = Toll::new(ChallengeAlgorithm::SHA3, "gofuckyourself", 99);
+    let require_payment_order = Order::new(
+        vec![Box::new(StubDescription::new(true))],
+        AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new_payment_stub(new_toll.clone(), false)),
+    );
+    let gate = Gate::new("localhost", vec![require_payment_order]).unwrap();
+    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
+    // Act
+    let payment = Payment::new(my_toll.clone(), "valid");
+    let mut suspect = SpySuspect::with_payment("1.2.3.4", "Bot", "localhost", "/", payment);
+    let result = sut.guarded_access::<SpySuspect>(&mut suspect, |req| {
+        req.access();
+    });
+    // Assert
+    assert_eq!(Option::Some(new_toll), result);
+    assert!(!suspect.is_accessed(), "Was accessed despite wrong payment");
+}
