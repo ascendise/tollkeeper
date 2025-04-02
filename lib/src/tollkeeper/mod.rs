@@ -142,7 +142,7 @@ impl Order {
         let matches_description = self.is_match(suspect);
         let require_toll = (matches_description && self.access_policy == AccessPolicy::Blacklist)
             || (!matches_description && self.access_policy == AccessPolicy::Whitelist);
-        let toll = if require_toll {
+        let toll = if require_toll && !self.has_paid(suspect) {
             Option::Some(self.toll_declaration.declare())
         } else {
             Option::None
@@ -153,6 +153,13 @@ impl Order {
 
     fn is_match(&self, suspect: &dyn Suspect) -> bool {
         self.descriptions.iter().any(|d| d.matches(suspect))
+    }
+
+    fn has_paid(&self, suspect: &dyn Suspect) -> bool {
+        match suspect.payment() {
+            Option::Some(p) => self.toll_declaration.pay(&p),
+            Option::None => false,
+        }
     }
 }
 
@@ -167,6 +174,7 @@ pub trait Suspect {
     fn user_agent(&self) -> &str;
     fn target_host(&self) -> &str;
     fn target_path(&self) -> &str;
+    fn payment(&self) -> &Option<Payment>;
 }
 
 struct Examination {
@@ -183,9 +191,10 @@ impl Examination {
     }
 }
 
-/// Factory for creating [Toll] challenges
+/// Creates and verifies [tolls](Toll)
 pub trait Declaration {
     fn declare(&self) -> Toll;
+    fn pay(&self, payment: &Payment) -> bool;
 }
 
 /// A Proof-of-Work challenge to be solved before being granted access
@@ -211,6 +220,30 @@ pub enum ChallengeAlgorithm {
     SHA1,
     SHA256,
     SHA3,
+}
+
+/// Solution for solved [challenge](Toll)
+pub struct Payment {
+    toll: Toll,
+    value: String,
+}
+
+impl Payment {
+    /// Creates a payment containing the [challenge][Toll] to be solved and the calculated hash
+    pub fn new(toll: Toll, value: impl Into<String>) -> Self {
+        Self {
+            toll,
+            value: value.into(),
+        }
+    }
+
+    pub fn toll(&self) -> &Toll {
+        &self.toll
+    }
+
+    pub fn value(&self) -> &str {
+        &self.value
+    }
 }
 
 /// Return this error when there are problems during creation of the [Tollkeeper] or
