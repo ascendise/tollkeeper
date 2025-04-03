@@ -23,11 +23,13 @@ pub fn passing_gate_with_a_blacklist_order_but_no_matching_description_should_al
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll)),
     );
-    let gate = Gate::new("localhost", vec![order]).unwrap();
+    let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
-    let result = sut.guarded_access::<SpySuspect>(&mut benign_suspect, |req| {
+    let mut benign_suspect =
+        Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
+    let mut request = SpyRequest::new();
+    let result = sut.guarded_access::<SpyRequest>(&mut benign_suspect, &mut request, |req| {
         req.access();
     });
     // Assert
@@ -37,7 +39,7 @@ pub fn passing_gate_with_a_blacklist_order_but_no_matching_description_should_al
         "Requires toll even though access should be granted!"
     );
     assert!(
-        benign_suspect.is_accessed(),
+        request.accessed(),
         "Destination was not accessed despite allowed!"
     );
 }
@@ -52,11 +54,13 @@ pub fn passing_gate_with_a_whitelist_order_but_no_matching_description_should_re
         AccessPolicy::Whitelist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new("localhost", vec![order]).unwrap();
+    let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let mut malicious_suspect = SpySuspect::new("1.2.3.4", "BadCrawler", "localhost", "/");
-    let result = sut.guarded_access::<SpySuspect>(&mut malicious_suspect, |req| {
+    let mut malicious_suspect =
+        Suspect::new("1.2.3.4", "BadCrawler", Destination::new("localhost"));
+    let mut request = SpyRequest::new();
+    let result = sut.guarded_access::<SpyRequest>(&mut malicious_suspect, &mut request, |req| {
         req.access();
     });
     // Assert
@@ -66,7 +70,7 @@ pub fn passing_gate_with_a_whitelist_order_but_no_matching_description_should_re
         "Required no toll despite suspect not matching whitelist order description"
     );
     assert!(
-        !malicious_suspect.is_accessed(),
+        !request.accessed(),
         "Destination was accessed despite no toll was paid!"
     );
 }
@@ -81,11 +85,13 @@ pub fn passing_gate_with_a_blacklist_order_and_matching_description_should_reque
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new("localhost", vec![order]).unwrap();
+    let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let mut malicious_suspect = SpySuspect::new("1.2.3.4", "BadCrawler", "localhost", "/");
-    let result = sut.guarded_access::<SpySuspect>(&mut malicious_suspect, |req| {
+    let mut malicious_suspect =
+        Suspect::new("1.2.3.4", "BadCrawler", Destination::new("localhost"));
+    let mut request = SpyRequest::new();
+    let result = sut.guarded_access::<SpyRequest>(&mut malicious_suspect, &mut request, |req| {
         req.access();
     });
     // Assert
@@ -95,7 +101,7 @@ pub fn passing_gate_with_a_blacklist_order_and_matching_description_should_reque
         "Did not require a toll despite matching description on blacklist order!"
     );
     assert!(
-        !malicious_suspect.is_accessed(),
+        !request.accessed(),
         "Destination was accessed despite triggering trap!"
     );
 }
@@ -110,11 +116,13 @@ pub fn passing_gate_with_a_whitelist_order_and_matching_description_should_allow
         AccessPolicy::Whitelist,
         Box::new(StubDeclaration::new(toll)),
     );
-    let gate = Gate::new("localhost", vec![order]).unwrap();
+    let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
-    let result = sut.guarded_access::<SpySuspect>(&mut benign_suspect, |req| {
+    let mut benign_suspect =
+        Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
+    let mut request = SpyRequest::new();
+    let result = sut.guarded_access::<SpyRequest>(&mut benign_suspect, &mut request, |req| {
         req.access();
     });
     // Assert
@@ -124,7 +132,7 @@ pub fn passing_gate_with_a_whitelist_order_and_matching_description_should_allow
         "Required a toll despite suspect not matching whitelist order"
     );
     assert!(
-        benign_suspect.is_accessed(),
+        request.accessed(),
         "Destination was not accessed despite allowed!"
     );
 }
@@ -148,11 +156,13 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
         AccessPolicy::Whitelist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new("localhost", vec![order1, order2, order3]).unwrap();
+    let gate = Gate::new(Destination::new("localhost"), vec![order1, order2, order3]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let mut malicious_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
-    let result = sut.guarded_access::<SpySuspect>(&mut malicious_suspect, |req| {
+    let mut malicious_suspect =
+        Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
+    let mut request = SpyRequest::new();
+    let result = sut.guarded_access::<SpyRequest>(&mut malicious_suspect, &mut request, |req| {
         req.access();
     });
     // Assert
@@ -162,7 +172,7 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
         "Required no toll despite first matching order being a blacklist"
     );
     assert!(
-        !malicious_suspect.is_accessed(),
+        !request.accessed(),
         "Destination was not accessed despite allowed!"
     );
 }
@@ -186,11 +196,13 @@ pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_acces
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new("localhost", vec![order1, order2, order3]).unwrap();
+    let gate = Gate::new(Destination::new("localhost"), vec![order1, order2, order3]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let mut benign_suspect = SpySuspect::new("1.2.3.4", "FriendlyCrawler", "localhost", "/");
-    let result = sut.guarded_access::<SpySuspect>(&mut benign_suspect, |req| {
+    let mut benign_suspect =
+        Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
+    let mut request = SpyRequest::new();
+    let result = sut.guarded_access::<SpyRequest>(&mut benign_suspect, &mut request, |req| {
         req.access();
     });
     // Assert
@@ -200,7 +212,7 @@ pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_acces
         "Required a toll despite first matching order being a whitelist"
     );
     assert!(
-        benign_suspect.is_accessed(),
+        request.accessed(),
         "Destination was not accessed despite allowed!"
     );
 }
@@ -214,12 +226,14 @@ pub fn passing_gate_with_valid_payment_should_allow_access() {
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new_payment_stub(toll.clone(), true)),
     );
-    let gate = Gate::new("localhost", vec![require_payment_order]).unwrap();
+    let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let payment = Payment::new(toll.clone(), "valid");
-    let mut suspect = SpySuspect::with_payment("1.2.3.4", "Bot", "localhost", "/", payment);
-    let result = sut.guarded_access::<SpySuspect>(&mut suspect, |req| {
+    let mut suspect =
+        Suspect::with_payment("1.2.3.4", "Bot", Destination::new("localhost"), payment);
+    let mut request = SpyRequest::new();
+    let result = sut.guarded_access::<SpyRequest>(&mut suspect, &mut request, |req| {
         req.access();
     });
     // Assert
@@ -228,7 +242,7 @@ pub fn passing_gate_with_valid_payment_should_allow_access() {
         result,
         "Required a toll despite having payment!"
     );
-    assert!(suspect.is_accessed(), "No access despite having payment");
+    assert!(request.accessed(), "No access despite having payment");
 }
 
 #[test]
@@ -241,15 +255,17 @@ pub fn passing_gate_with_wrong_payment_should_return_new_toll() {
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new_payment_stub(new_toll.clone(), false)),
     );
-    let gate = Gate::new("localhost", vec![require_payment_order]).unwrap();
+    let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let payment = Payment::new(my_toll.clone(), "valid");
-    let mut suspect = SpySuspect::with_payment("1.2.3.4", "Bot", "localhost", "/", payment);
-    let result = sut.guarded_access::<SpySuspect>(&mut suspect, |req| {
+    let mut suspect =
+        Suspect::with_payment("1.2.3.4", "Bot", Destination::new("localhost"), payment);
+    let mut request = SpyRequest::new();
+    let result = sut.guarded_access::<SpyRequest>(&mut suspect, &mut request, |req| {
         req.access();
     });
     // Assert
     assert_eq!(Option::Some(new_toll), result);
-    assert!(!suspect.is_accessed(), "Was accessed despite wrong payment");
+    assert!(!request.accessed(), "Was accessed despite wrong payment");
 }

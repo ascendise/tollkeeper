@@ -4,7 +4,7 @@ use crate::tollkeeper::*;
 pub fn creating_gate_without_orders_should_fail() {
     // Arrange
     // Act
-    let result = Gate::new("example.com", vec![]);
+    let result = Gate::new(Destination::new("example.com"), vec![]);
     // Assert
     assert!(
         result.is_err(),
