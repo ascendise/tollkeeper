@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 #[cfg(test)]
 mod tests;
 
@@ -11,9 +13,16 @@ pub trait Tollkeeper {
     fn guarded_access<T>(
         &self,
         suspect: &Suspect,
+        visa: &Option<Visa>,
         request: &mut T,
         on_access: impl Fn(&mut T),
     ) -> Option<Toll>;
+
+    /// Pay the [Toll] for a [Gate] [Order]. Changing priorities in orders may require you to get a
+    /// new [Visa], if the new [Order] is higher ordered than the [Order] the [Visa] was bought for
+    ///
+    /// Returns [Option::None] if [Payment] is invalid
+    fn buy_visa(&self, suspect: &Suspect, payment: &Payment) -> Option<Visa>;
 }
 ///
 /// Default implementation of the [Tollkeeper].
@@ -46,6 +55,7 @@ impl Tollkeeper for TollkeeperImpl {
     fn guarded_access<T>(
         &self,
         suspect: &Suspect,
+        visa: &Option<Visa>,
         request: &mut T,
         on_access: impl Fn(&mut T),
     ) -> Option<Toll> {
@@ -53,7 +63,7 @@ impl Tollkeeper for TollkeeperImpl {
             Option::Some(g) => g,
             Option::None => return Option::None,
         };
-        let result = gate.pass(suspect);
+        let result = gate.pass(suspect, visa);
         match result {
             Option::Some(g) => Option::Some(g),
             Option::None => {
@@ -61,6 +71,10 @@ impl Tollkeeper for TollkeeperImpl {
                 Option::None
             }
         }
+    }
+
+    fn buy_visa(&self, suspect: &Suspect, payment: &Payment) -> Option<Visa> {
+        Option::None
     }
 }
 
@@ -98,9 +112,9 @@ impl Gate {
     }
 
     /// Examine [Suspect] and check if it has to pay a [Toll]
-    fn pass(&self, suspect: &Suspect) -> Option<Toll> {
+    fn pass(&self, suspect: &Suspect, visa: &Option<Visa>) -> Option<Toll> {
         for order in &self.orders {
-            let exam = order.examine(suspect);
+            let exam = order.examine(suspect, visa);
             if exam.access_granted {
                 return Option::None;
             }
@@ -122,6 +136,7 @@ pub enum AccessPolicy {
 
 /// Defines conditional process for a [Gate]
 pub struct Order {
+    id: String,
     descriptions: Vec<Box<dyn Description>>,
     access_policy: AccessPolicy,
     toll_declaration: Box<dyn Declaration>,
@@ -134,17 +149,18 @@ impl Order {
         toll_declaration: Box<dyn Declaration>,
     ) -> Self {
         Self {
+            id: Uuid::new_v4().to_string(),
             descriptions,
             access_policy,
             toll_declaration,
         }
     }
 
-    fn examine(&self, suspect: &Suspect) -> Examination {
+    fn examine(&self, suspect: &Suspect, visa: &Option<Visa>) -> Examination {
         let matches_description = self.is_match(suspect);
         let require_toll = (matches_description && self.access_policy == AccessPolicy::Blacklist)
             || (!matches_description && self.access_policy == AccessPolicy::Whitelist);
-        let toll = if require_toll && !self.has_paid(suspect) {
+        let toll = if require_toll && !self.has_valid_visa(suspect, visa) {
             Option::Some(self.toll_declaration.declare())
         } else {
             Option::None
@@ -157,11 +173,15 @@ impl Order {
         self.descriptions.iter().any(|d| d.matches(suspect))
     }
 
-    fn has_paid(&self, suspect: &Suspect) -> bool {
-        match suspect.payment() {
-            Option::Some(p) => self.toll_declaration.pay(&p),
+    fn has_valid_visa(&self, suspect: &Suspect, visa: &Option<Visa>) -> bool {
+        match visa {
+            Option::Some(v) => v.order_id() == self.id,
             Option::None => false,
         }
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
     }
 }
 
@@ -171,11 +191,11 @@ pub trait Description {
 }
 
 /// Information about the source trying to access the resource
+#[derive(Clone)]
 pub struct Suspect {
     client_ip: String,
     user_agent: String,
     destination: Destination,
-    payment: Option<Payment>,
 }
 
 impl Suspect {
@@ -188,20 +208,6 @@ impl Suspect {
             client_ip: client_ip.into(),
             user_agent: user_agent.into(),
             destination,
-            payment: Option::None,
-        }
-    }
-    pub fn with_payment(
-        client_ip: impl Into<String>,
-        user_agent: impl Into<String>,
-        destination: Destination,
-        payment: Payment,
-    ) -> Self {
-        Self {
-            client_ip: client_ip.into(),
-            user_agent: user_agent.into(),
-            destination,
-            payment: Option::Some(payment),
         }
     }
 
@@ -216,13 +222,9 @@ impl Suspect {
     pub fn destination(&self) -> &Destination {
         &self.destination
     }
-
-    pub fn payment(&self) -> &Option<Payment> {
-        &self.payment
-    }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Destination {
     base_url: String,
     port: u16,
@@ -307,13 +309,15 @@ pub enum ChallengeAlgorithm {
 /// Solution for solved [challenge](Toll)
 pub struct Payment {
     toll: Toll,
+    order: Order,
     value: String,
 }
 
 impl Payment {
     /// Creates a payment containing the [challenge][Toll] to be solved and the calculated hash
-    pub fn new(toll: Toll, value: impl Into<String>) -> Self {
+    pub fn new(toll: Toll, order: Order, value: impl Into<String>) -> Self {
         Self {
+            order,
             toll,
             value: value.into(),
         }
@@ -323,8 +327,34 @@ impl Payment {
         &self.toll
     }
 
+    pub fn order(&self) -> &Order {
+        &self.order
+    }
+
     pub fn value(&self) -> &str {
         &self.value
+    }
+}
+
+pub struct Visa {
+    order_id: String,
+    suspect: Suspect,
+}
+
+impl Visa {
+    pub fn new(order_id: impl Into<String>, suspect: Suspect) -> Self {
+        Self {
+            order_id: order_id.into(),
+            suspect,
+        }
+    }
+
+    pub fn order_id(&self) -> &str {
+        &self.order_id
+    }
+
+    pub fn suspect(&self) -> &Suspect {
+        &self.suspect
     }
 }
 
