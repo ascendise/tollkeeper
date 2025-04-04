@@ -3,6 +3,8 @@ name = "tollkeeper"
 version = "0.1.0"
 edition = "2021"
 
+[dependencies]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.uuid]
@@ -10,3 +12,6 @@ version = "1.16.0"
 features = [
   "v4" # required to generate UUIDs
 ]
+
+[dev-dependencies]
+test-case = "3.3.1"

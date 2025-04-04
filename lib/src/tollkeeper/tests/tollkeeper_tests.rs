@@ -1,5 +1,6 @@
 use super::*;
 use crate::tollkeeper::*;
+use test_case::test_case;
 
 #[test]
 pub fn creating_new_toolkeeper_with_no_gates_should_fail() {
@@ -13,25 +14,28 @@ pub fn creating_new_toolkeeper_with_no_gates_should_fail() {
     );
 }
 
-#[test]
-pub fn passing_gate_with_a_blacklist_order_but_no_matching_description_should_allow_access() {
+#[test_case(AccessPolicy::Blacklist, false ; "accessing gate with a blacklist order and not matching description")]
+#[test_case(AccessPolicy::Whitelist, true ; "accessing gate with a matching whitelist order description")]
+pub fn should_require_no_toll_if_not_matching_toll_requirements(
+    access_policy: AccessPolicy,
+    matches_description: bool,
+) {
     // Arrange
-    let no_match_description: Box<dyn Description> = Box::new(StubDescription::new(false));
+    let description: Box<dyn Description> = Box::new(StubDescription::new(matches_description));
     let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
     let order = Order::new(
-        vec![no_match_description],
-        AccessPolicy::Blacklist,
+        vec![description],
+        access_policy,
         Box::new(StubDeclaration::new(toll)),
     );
     let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let benign_suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
+    let suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
     let mut request = SpyRequest::new();
-    let result =
-        sut.guarded_access::<SpyRequest>(&benign_suspect, &Option::None, &mut request, |req| {
-            req.access();
-        });
+    let result = sut.guarded_access::<SpyRequest>(&suspect, &Option::None, &mut request, |req| {
+        req.access();
+    });
     // Assert
     assert_eq!(
         Option::None,
@@ -44,25 +48,28 @@ pub fn passing_gate_with_a_blacklist_order_but_no_matching_description_should_al
     );
 }
 
-#[test]
-pub fn passing_gate_with_a_whitelist_order_but_no_matching_description_should_request_toll() {
+#[test_case(AccessPolicy::Blacklist, true ; "accessing a gate with a matching blacklist order description")]
+#[test_case(AccessPolicy::Whitelist, false ; "accessing a gate with a whitelist order and not matching description")]
+pub fn should_require_toll_if_matching_toll_requirement(
+    access_policy: AccessPolicy,
+    matches_description: bool,
+) {
     // Arrange
-    let no_match_description: Box<dyn Description> = Box::new(StubDescription::new(false));
+    let description: Box<dyn Description> = Box::new(StubDescription::new(matches_description));
     let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
     let order = Order::new(
-        vec![no_match_description],
-        AccessPolicy::Whitelist,
+        vec![description],
+        access_policy,
         Box::new(StubDeclaration::new(toll.clone())),
     );
     let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let malicious_suspect = Suspect::new("1.2.3.4", "BadCrawler", Destination::new("localhost"));
+    let suspect = Suspect::new("1.2.3.4", "BadCrawler", Destination::new("localhost"));
     let mut request = SpyRequest::new();
-    let result =
-        sut.guarded_access::<SpyRequest>(&malicious_suspect, &Option::None, &mut request, |req| {
-            req.access();
-        });
+    let result = sut.guarded_access::<SpyRequest>(&suspect, &Option::None, &mut request, |req| {
+        req.access();
+    });
     // Assert
     assert_eq!(
         Option::Some(toll),
@@ -76,87 +83,29 @@ pub fn passing_gate_with_a_whitelist_order_but_no_matching_description_should_re
 }
 
 #[test]
-pub fn passing_gate_with_a_blacklist_order_and_matching_description_should_request_toll() {
-    // Arrange
-    let match_description: Box<dyn Description> = Box::new(StubDescription::new(true));
-    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
-    let order = Order::new(
-        vec![match_description],
-        AccessPolicy::Blacklist,
-        Box::new(StubDeclaration::new(toll.clone())),
-    );
-    let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
-    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
-    // Act
-    let malicious_suspect = Suspect::new("1.2.3.4", "BadCrawler", Destination::new("localhost"));
-    let mut request = SpyRequest::new();
-    let result =
-        sut.guarded_access::<SpyRequest>(&malicious_suspect, &Option::None, &mut request, |req| {
-            req.access();
-        });
-    // Assert
-    assert_eq!(
-        Option::Some(toll),
-        result,
-        "Did not require a toll despite matching description on blacklist order!"
-    );
-    assert!(
-        !request.accessed(),
-        "Destination was accessed despite triggering trap!"
-    );
-}
-
-#[test]
-pub fn passing_gate_with_a_whitelist_order_and_matching_description_should_allow_access() {
-    // Arrange
-    let match_description: Box<dyn Description> = Box::new(StubDescription::new(true));
-    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
-    let order = Order::new(
-        vec![match_description],
-        AccessPolicy::Whitelist,
-        Box::new(StubDeclaration::new(toll)),
-    );
-    let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
-    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
-    // Act
-    let benign_suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
-    let mut request = SpyRequest::new();
-    let result =
-        sut.guarded_access::<SpyRequest>(&benign_suspect, &Option::None, &mut request, |req| {
-            req.access();
-        });
-    // Assert
-    assert_eq!(
-        Option::None,
-        result,
-        "Required a toll despite suspect not matching whitelist order"
-    );
-    assert!(
-        request.accessed(),
-        "Destination was not accessed despite allowed!"
-    );
-}
-
-#[test]
 pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll() {
     // Arrange
     let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
-    let order1 = Order::new(
+    let first_order = Order::new(
         vec![Box::new(StubDescription::new(false))],
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let order2 = Order::new(
+    let matching_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let order3 = Order::new(
+    let last_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Whitelist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new(Destination::new("localhost"), vec![order1, order2, order3]).unwrap();
+    let gate = Gate::new(
+        Destination::new("localhost"),
+        vec![first_order, matching_order, last_order],
+    )
+    .unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let malicious_suspect =
@@ -182,22 +131,26 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
 pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_access() {
     // Arrange
     let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
-    let order1 = Order::new(
+    let first_order = Order::new(
         vec![Box::new(StubDescription::new(false))],
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let order2 = Order::new(
+    let matching_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Whitelist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let order3 = Order::new(
+    let last_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new(toll.clone())),
     );
-    let gate = Gate::new(Destination::new("localhost"), vec![order1, order2, order3]).unwrap();
+    let gate = Gate::new(
+        Destination::new("localhost"),
+        vec![first_order, matching_order, last_order],
+    )
+    .unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let benign_suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
