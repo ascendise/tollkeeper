@@ -219,3 +219,32 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     assert_eq!(Option::Some(new_toll), result);
     assert!(!request.accessed(), "Was accessed despite not having visa!");
 }
+
+#[test_case(true, |order_id, suspect, _| Result::Ok(Visa::new(order_id, suspect)))]
+#[test_case(false, |_, _, toll| Result::Err(toll)) ]
+pub fn buying_a_visa_with_valid_payment_should_return_visa_for_suspect(
+    accept_payment: bool,
+    expected_result: impl Fn(&str, Suspect, Toll) -> Result<Visa, Toll>,
+) {
+    // Arrange
+    let new_toll = Toll::new(ChallengeAlgorithm::SHA3, "gofuckyourself", 99);
+    let require_payment_order = Order::new(
+        vec![Box::new(StubDescription::new(true))],
+        AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new_payment_stub(
+            new_toll.clone(),
+            accept_payment,
+        )),
+    );
+    let order_id = require_payment_order.id.clone();
+    let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
+    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
+    // Act
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let payment = Payment::new(&order_id, "legal tender");
+    let result = sut.buy_visa(&suspect, &payment);
+    assert_eq!(
+        result,
+        Result::Ok(expected_result(&order_id, suspect, new_toll))
+    );
+}

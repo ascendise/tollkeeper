@@ -1,3 +1,5 @@
+use std::{error::Error, fmt::Display};
+
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -21,8 +23,13 @@ pub trait Tollkeeper {
     /// Pay the [Toll] for a [Gate] [Order]. Changing priorities in orders may require you to get a
     /// new [Visa], if the new [Order] is higher ordered than the [Order] the [Visa] was bought for
     ///
-    /// Returns [Option::None] if [Payment] is invalid
-    fn buy_visa(&self, suspect: &Suspect, payment: &Payment) -> Option<Visa>;
+    /// Returns new [Toll] if [Payment] is invalid
+    /// Returns a [GatewayError] if there was a problem processing the [Payment]
+    fn buy_visa(
+        &self,
+        suspect: &Suspect,
+        payment: &Payment,
+    ) -> Result<Result<Visa, Toll>, GatewayError>;
 }
 ///
 /// Default implementation of the [Tollkeeper].
@@ -61,7 +68,7 @@ impl Tollkeeper for TollkeeperImpl {
     ) -> Option<Toll> {
         let gate = match self.find_gate(suspect) {
             Option::Some(g) => g,
-            Option::None => return Option::None,
+            Option::None => return Option::None, //TODO: Communicate somehow that no gate was found!
         };
         let result = gate.pass(suspect, visa);
         match result {
@@ -73,13 +80,24 @@ impl Tollkeeper for TollkeeperImpl {
         }
     }
 
-    fn buy_visa(&self, suspect: &Suspect, payment: &Payment) -> Option<Visa> {
-        Option::None
+    fn buy_visa(
+        &self,
+        suspect: &Suspect,
+        payment: &Payment,
+    ) -> Result<Result<Visa, Toll>, GatewayError> {
+        let order = self
+            .gates
+            .iter()
+            .map(|g| &g.orders)
+            .flatten()
+            .find(|o| o.id == payment.order_id)
+            .or_else(MissingOrderError::new());
     }
 }
 
 /// Defines the target machine and which [suspects](Suspect) are allowed or not
 pub struct Gate {
+    id: String,
     destination: Destination,
     orders: Vec<Order>,
 }
@@ -93,6 +111,7 @@ impl Gate {
             ))
         } else {
             Result::Ok(Self {
+                id: Uuid::new_v4().to_string(),
                 destination,
                 orders,
             })
@@ -191,7 +210,7 @@ pub trait Description {
 }
 
 /// Information about the source trying to access the resource
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Suspect {
     client_ip: String,
     user_agent: String,
@@ -224,7 +243,7 @@ impl Suspect {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Destination {
     base_url: String,
     port: u16,
@@ -308,27 +327,21 @@ pub enum ChallengeAlgorithm {
 
 /// Solution for solved [challenge](Toll)
 pub struct Payment {
-    toll: Toll,
-    order: Order,
+    order_id: String,
     value: String,
 }
 
 impl Payment {
     /// Creates a payment containing the [challenge][Toll] to be solved and the calculated hash
-    pub fn new(toll: Toll, order: Order, value: impl Into<String>) -> Self {
+    pub fn new(order_id: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
-            order,
-            toll,
+            order_id: order_id.into(),
             value: value.into(),
         }
     }
 
-    pub fn toll(&self) -> &Toll {
-        &self.toll
-    }
-
-    pub fn order(&self) -> &Order {
-        &self.order
+    pub fn order(&self) -> &str {
+        &self.order_id
     }
 
     pub fn value(&self) -> &str {
@@ -336,6 +349,8 @@ impl Payment {
     }
 }
 
+/// Represents an access token for a an [Order]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Visa {
     order_id: String,
     suspect: Suspect,
@@ -349,12 +364,139 @@ impl Visa {
         }
     }
 
+    /// [Order] the [Visa] was issued for
     pub fn order_id(&self) -> &str {
         &self.order_id
     }
 
+    /// [Suspect] the [Visa] was issued for
     pub fn suspect(&self) -> &Suspect {
         &self.suspect
+    }
+}
+
+/// Return this error when there was a problem during a [Suspect] passing a [Gate].
+///
+/// E.g. a [Destination] with no matching [Gate]
+#[derive(Debug, PartialEq, Eq)]
+pub struct GatewayError {
+    gate_id: Option<String>,
+    order_id: Option<String>,
+    description: String,
+}
+
+impl GatewayError {
+    pub fn new(description: impl Into<String>) -> Self {
+        Self {
+            gate_id: Option::None,
+            order_id: Option::None,
+            description: description.into(),
+        }
+    }
+
+    pub fn failure_in_order(
+        gate_id: impl Into<String>,
+        order_id: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
+        Self {
+            gate_id: Option::Some(gate_id.into()),
+            order_id: Option::Some(order_id.into()),
+            description: description.into(),
+        }
+    }
+
+    pub fn failure_in_gate(gate_id: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            gate_id: Option::Some(gate_id.into()),
+            order_id: Option::None,
+            description: description.into(),
+        }
+    }
+}
+
+impl Error for GatewayError {}
+impl Display for GatewayError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.order_id.is_some() {
+            write!(
+                f,
+                "A problem occured while trying to process order '{}': '{}'",
+                &self.order_id.unwrap(),
+                &self.description
+            )
+        } else if self.gate_id.is_some() {
+            write!(
+                f,
+                "A problem occured while passing gate '{}': '{}'",
+                &self.gate_id.unwrap(),
+                &self.description
+            )
+        } else {
+            write!(
+                f,
+                "A problem occured while evaluating access: '{}'",
+                &self.description
+            )
+        }
+    }
+}
+
+impl From<MissingGateError> for GatewayError {
+    fn from(value: MissingGateError) -> Self {
+        Self {
+            gate_id: Option::Some(value.gate_id),
+            order_id: Option::None,
+            description: String::from("Gate not found"),
+        }
+    }
+}
+
+impl From<MissingOrderError> for GatewayError {
+    fn from(value: MissingOrderError) -> Self {
+        Self {
+            gate_id: Option::Some(value.gate_id),
+            order_id: Option::Some(value.order_id),
+            description: String::from("Gate not found"),
+        }
+    }
+}
+
+pub struct MissingGateError {
+    gate_id: String,
+}
+
+impl MissingGateError {
+    pub fn new(gate_id: impl Into<String>) -> Self {
+        Self {
+            gate_id: gate_id.into(),
+        }
+    }
+
+    pub fn gate_id(&self) -> &str {
+        &self.gate_id
+    }
+}
+
+pub struct MissingOrderError {
+    gate_id: String,
+    order_id: String,
+}
+
+impl MissingOrderError {
+    pub fn new(gate_id: impl Into<String>, order_id: impl Into<String>) -> Self {
+        Self {
+            gate_id: gate_id.into(),
+            order_id: order_id.into(),
+        }
+    }
+
+    pub fn gate_id(&self) -> &str {
+        &self.gate_id
+    }
+
+    pub fn order_id(&self) -> &str {
+        &self.order_id
     }
 }
 
@@ -383,6 +525,18 @@ impl ConfigError {
     /// Not part of equality comparison
     pub fn description(&self) -> &str {
         &self.description
+    }
+}
+
+impl Error for ConfigError {}
+
+impl Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Failed to load config value '{}': '{}'",
+            &self.key, &self.description
+        )
     }
 }
 
