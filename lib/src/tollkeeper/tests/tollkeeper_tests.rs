@@ -182,10 +182,11 @@ pub fn passing_gate_with_valid_visa_should_allow_access() {
     );
     let order_id = require_payment_order.id.clone();
     let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
+    let gate_id = gate.id.clone();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost"));
-    let visa = Visa::new(order_id, suspect.clone());
+    let visa = Visa::new(&gate_id, &order_id, suspect.clone());
     let mut request = SpyRequest::new();
     let result =
         sut.guarded_access::<SpyRequest>(&suspect, &Option::Some(visa), &mut request, |req| {
@@ -206,10 +207,11 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
         Box::new(StubDeclaration::new(new_toll.clone())),
     );
     let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
+    let gate_id = gate.id.clone();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost"));
-    let visa = Visa::new("not_an_order_id", suspect.clone());
+    let visa = Visa::new(&gate_id, "not_an_order_id", suspect.clone());
     let mut request = SpyRequest::new();
     let result =
         sut.guarded_access::<SpyRequest>(&suspect, &Option::Some(visa), &mut request, |req| {
@@ -220,11 +222,11 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     assert!(!request.accessed(), "Was accessed despite not having visa!");
 }
 
-#[test_case(true, |order_id, suspect, _| Result::Ok(Visa::new(order_id, suspect)))]
-#[test_case(false, |_, _, toll| Result::Err(toll)) ]
+#[test_case(true, |gate_id, order_id, suspect, _| Result::Ok(Visa::new(gate_id, order_id, suspect)))]
+#[test_case(false, |_, _, _, toll| Result::Err(toll)) ]
 pub fn buying_a_visa_with_valid_payment_should_return_visa_for_suspect(
     accept_payment: bool,
-    expected_result: impl Fn(&str, Suspect, Toll) -> Result<Visa, Toll>,
+    expected_result: impl Fn(&str, &str, Suspect, Toll) -> Result<Visa, Toll>,
 ) {
     // Arrange
     let new_toll = Toll::new(ChallengeAlgorithm::SHA3, "gofuckyourself", 99);
@@ -238,13 +240,14 @@ pub fn buying_a_visa_with_valid_payment_should_return_visa_for_suspect(
     );
     let order_id = require_payment_order.id.clone();
     let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
+    let gate_id = gate.id.clone();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
-    let payment = Payment::new(&order_id, "legal tender");
+    let payment = Payment::new(&gate_id, &order_id, "legal tender");
     let result = sut.buy_visa(&suspect, &payment);
     assert_eq!(
         result,
-        Result::Ok(expected_result(&order_id, suspect, new_toll))
+        Result::Ok(expected_result(&gate_id, &order_id, suspect, new_toll))
     );
 }

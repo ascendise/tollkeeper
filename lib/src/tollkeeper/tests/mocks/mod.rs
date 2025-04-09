@@ -40,8 +40,13 @@ impl Declaration for StubDeclaration {
     fn declare(&self) -> Toll {
         self.toll.clone()
     }
-    fn pay(&self, _: &Payment) -> bool {
-        self.accept_payment
+    fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, Toll> {
+        if self.accept_payment {
+            let visa = Visa::new(&payment.gate_id, &payment.order_id, suspect.clone());
+            Result::Ok(visa)
+        } else {
+            Result::Err(self.declare())
+        }
     }
 }
 

@@ -85,13 +85,17 @@ impl Tollkeeper for TollkeeperImpl {
         suspect: &Suspect,
         payment: &Payment,
     ) -> Result<Result<Visa, Toll>, GatewayError> {
-        let order = self
+        let gate = self
             .gates
             .iter()
-            .map(|g| &g.orders)
-            .flatten()
+            .find(|g| g.id == payment.gate_id)
+            .ok_or(MissingGateError::new(&payment.gate_id))?;
+        let order = gate
+            .orders
+            .iter()
             .find(|o| o.id == payment.order_id)
-            .or_else(MissingOrderError::new());
+            .ok_or(MissingOrderError::new(&payment.gate_id, &payment.order_id))?;
+        Result::Ok(order.toll_declaration.pay(&payment, &suspect))
     }
 }
 
@@ -297,7 +301,7 @@ impl Examination {
 /// Creates and verifies [tolls](Toll)
 pub trait Declaration {
     fn declare(&self) -> Toll;
-    fn pay(&self, payment: &Payment) -> bool;
+    fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, Toll>;
 }
 
 /// A Proof-of-Work challenge to be solved before being granted access
@@ -327,20 +331,30 @@ pub enum ChallengeAlgorithm {
 
 /// Solution for solved [challenge](Toll)
 pub struct Payment {
+    gate_id: String,
     order_id: String,
     value: String,
 }
 
 impl Payment {
     /// Creates a payment containing the [challenge][Toll] to be solved and the calculated hash
-    pub fn new(order_id: impl Into<String>, value: impl Into<String>) -> Self {
+    pub fn new(
+        gate_id: impl Into<String>,
+        order_id: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
         Self {
+            gate_id: gate_id.into(),
             order_id: order_id.into(),
             value: value.into(),
         }
     }
 
-    pub fn order(&self) -> &str {
+    pub fn gate_id(&self) -> &str {
+        &self.order_id
+    }
+
+    pub fn order_id(&self) -> &str {
         &self.order_id
     }
 
@@ -352,13 +366,15 @@ impl Payment {
 /// Represents an access token for a an [Order]
 #[derive(Debug, PartialEq, Eq)]
 pub struct Visa {
+    gate_id: String,
     order_id: String,
     suspect: Suspect,
 }
 
 impl Visa {
-    pub fn new(order_id: impl Into<String>, suspect: Suspect) -> Self {
+    pub fn new(gate_id: impl Into<String>, order_id: impl Into<String>, suspect: Suspect) -> Self {
         Self {
+            gate_id: gate_id.into(),
             order_id: order_id.into(),
             suspect,
         }
@@ -418,19 +434,25 @@ impl GatewayError {
 impl Error for GatewayError {}
 impl Display for GatewayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let order_id = match &self.order_id {
+            Option::Some(id) => id.clone(),
+            Option::None => String::from("[UNKNOWN]"),
+        };
+        let gate_id = match &self.gate_id {
+            Option::Some(id) => id.clone(),
+            Option::None => String::from("[UNKNOWN]"),
+        };
         if self.order_id.is_some() {
             write!(
                 f,
                 "A problem occured while trying to process order '{}': '{}'",
-                &self.order_id.unwrap(),
-                &self.description
+                &order_id, &self.description
             )
         } else if self.gate_id.is_some() {
             write!(
                 f,
                 "A problem occured while passing gate '{}': '{}'",
-                &self.gate_id.unwrap(),
-                &self.description
+                &gate_id, &self.description
             )
         } else {
             write!(
@@ -445,7 +467,7 @@ impl Display for GatewayError {
 impl From<MissingGateError> for GatewayError {
     fn from(value: MissingGateError) -> Self {
         Self {
-            gate_id: Option::Some(value.gate_id),
+            gate_id: Option::Some(value.expected_gate_id),
             order_id: Option::None,
             description: String::from("Gate not found"),
         }
@@ -456,38 +478,38 @@ impl From<MissingOrderError> for GatewayError {
     fn from(value: MissingOrderError) -> Self {
         Self {
             gate_id: Option::Some(value.gate_id),
-            order_id: Option::Some(value.order_id),
+            order_id: Option::Some(value.expected_order_id),
             description: String::from("Gate not found"),
         }
     }
 }
 
 pub struct MissingGateError {
-    gate_id: String,
+    expected_gate_id: String,
 }
 
 impl MissingGateError {
-    pub fn new(gate_id: impl Into<String>) -> Self {
+    pub fn new(expected_gate_id: impl Into<String>) -> Self {
         Self {
-            gate_id: gate_id.into(),
+            expected_gate_id: expected_gate_id.into(),
         }
     }
 
     pub fn gate_id(&self) -> &str {
-        &self.gate_id
+        &self.expected_gate_id
     }
 }
 
 pub struct MissingOrderError {
     gate_id: String,
-    order_id: String,
+    expected_order_id: String,
 }
 
 impl MissingOrderError {
-    pub fn new(gate_id: impl Into<String>, order_id: impl Into<String>) -> Self {
+    pub fn new(gate_id: impl Into<String>, expected_order_id: impl Into<String>) -> Self {
         Self {
             gate_id: gate_id.into(),
-            order_id: order_id.into(),
+            expected_order_id: expected_order_id.into(),
         }
     }
 
@@ -496,7 +518,7 @@ impl MissingOrderError {
     }
 
     pub fn order_id(&self) -> &str {
-        &self.order_id
+        &self.expected_order_id
     }
 }
 
