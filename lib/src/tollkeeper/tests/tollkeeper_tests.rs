@@ -21,8 +21,9 @@ pub fn should_require_no_toll_if_not_matching_toll_requirements(
     matches_description: bool,
 ) {
     // Arrange
+    let suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
     let description: Box<dyn Description> = Box::new(StubDescription::new(matches_description));
-    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4, suspect.clone());
     let order = Order::new(
         vec![description],
         access_policy,
@@ -31,7 +32,6 @@ pub fn should_require_no_toll_if_not_matching_toll_requirements(
     let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
     let mut request = SpyRequest::new();
     let result = sut.guarded_access::<SpyRequest>(&suspect, &Option::None, &mut request, |req| {
         req.access();
@@ -55,8 +55,9 @@ pub fn should_require_toll_if_matching_toll_requirement(
     matches_description: bool,
 ) {
     // Arrange
+    let suspect = Suspect::new("1.2.3.4", "BadCrawler", Destination::new("localhost"));
     let description: Box<dyn Description> = Box::new(StubDescription::new(matches_description));
-    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4, suspect.clone());
     let order = Order::new(
         vec![description],
         access_policy,
@@ -65,7 +66,6 @@ pub fn should_require_toll_if_matching_toll_requirement(
     let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "BadCrawler", Destination::new("localhost"));
     let mut request = SpyRequest::new();
     let result = sut.guarded_access::<SpyRequest>(&suspect, &Option::None, &mut request, |req| {
         req.access();
@@ -85,7 +85,14 @@ pub fn should_require_toll_if_matching_toll_requirement(
 #[test]
 pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll() {
     // Arrange
-    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
+    let malicious_suspect =
+        Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
+    let toll = Toll::new(
+        ChallengeAlgorithm::SHA1,
+        "abcd",
+        4,
+        malicious_suspect.clone(),
+    );
     let first_order = Order::new(
         vec![Box::new(StubDescription::new(false))],
         AccessPolicy::Blacklist,
@@ -108,8 +115,6 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
     .unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let malicious_suspect =
-        Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
     let mut request = SpyRequest::new();
     let result =
         sut.guarded_access::<SpyRequest>(&malicious_suspect, &Option::None, &mut request, |req| {
@@ -130,7 +135,8 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
 #[test]
 pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_access() {
     // Arrange
-    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
+    let benign_suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4, benign_suspect.clone());
     let first_order = Order::new(
         vec![Box::new(StubDescription::new(false))],
         AccessPolicy::Blacklist,
@@ -153,7 +159,6 @@ pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_acces
     .unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let benign_suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
     let mut request = SpyRequest::new();
     let result =
         sut.guarded_access::<SpyRequest>(&benign_suspect, &Option::None, &mut request, |req| {
@@ -174,7 +179,8 @@ pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_acces
 #[test]
 pub fn passing_gate_with_valid_visa_should_allow_access() {
     // Arrange
-    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4);
+    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost"));
+    let toll = Toll::new(ChallengeAlgorithm::SHA1, "abcd", 4, suspect.clone());
     let require_payment_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
@@ -185,7 +191,6 @@ pub fn passing_gate_with_valid_visa_should_allow_access() {
     let gate_id = gate.id.clone();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost"));
     let visa = Visa::new(&gate_id, &order_id, suspect.clone());
     let mut request = SpyRequest::new();
     let result =
@@ -200,7 +205,13 @@ pub fn passing_gate_with_valid_visa_should_allow_access() {
 #[test]
 pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     // Arrange
-    let new_toll = Toll::new(ChallengeAlgorithm::SHA3, "gofuckyourself", 99);
+    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost"));
+    let new_toll = Toll::new(
+        ChallengeAlgorithm::SHA3,
+        "gofuckyourself",
+        99,
+        suspect.clone(),
+    );
     let require_payment_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
@@ -210,7 +221,6 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     let gate_id = gate.id.clone();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost"));
     let visa = Visa::new(&gate_id, "not_an_order_id", suspect.clone());
     let mut request = SpyRequest::new();
     let result =
@@ -222,14 +232,20 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     assert!(!request.accessed(), "Was accessed despite not having visa!");
 }
 
-#[test_case(true, |gate_id, order_id, suspect, _| Result::Ok(Visa::new(gate_id, order_id, suspect)) ; "with valid payment should return visa")]
+#[test_case(true, |gate_id, order_id, suspect, _| Result::Ok(Visa::new(gate_id, order_id, suspect.clone())) ; "with valid payment should return visa")]
 #[test_case(false, |_, _, _, toll| Result::Err(toll) ; "with invalid payment should return toll")]
 pub fn buying_visa_for_valid_order(
     accept_payment: bool,
     expected_result: impl Fn(&str, &str, Suspect, Toll) -> Result<Visa, Toll>,
 ) {
     // Arrange
-    let new_toll = Toll::new(ChallengeAlgorithm::SHA3, "gofuckyourself", 99);
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let new_toll = Toll::new(
+        ChallengeAlgorithm::SHA3,
+        "gofuckyourself",
+        99,
+        suspect.clone(),
+    );
     let require_payment_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
@@ -243,7 +259,6 @@ pub fn buying_visa_for_valid_order(
     let gate_id = gate.id.clone();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
     let payment = Payment::new(&gate_id, &order_id, "legal tender");
     let result = sut.buy_visa(&suspect, &payment);
     assert_eq!(
@@ -255,7 +270,13 @@ pub fn buying_visa_for_valid_order(
 #[test]
 pub fn buying_visa_for_unknown_gate_should_return_error() {
     // Arrange
-    let new_toll = Toll::new(ChallengeAlgorithm::SHA3, "gofuckyourself", 99);
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let new_toll = Toll::new(
+        ChallengeAlgorithm::SHA3,
+        "gofuckyourself",
+        99,
+        suspect.clone(),
+    );
     let require_payment_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
@@ -265,7 +286,6 @@ pub fn buying_visa_for_unknown_gate_should_return_error() {
     let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
     let payment = Payment::new("wrong gate number", &order_id, "legal tender");
     let result = sut.buy_visa(&suspect, &payment);
     let expected: Result<Result<Visa, Toll>, GatewayError> =
@@ -276,7 +296,13 @@ pub fn buying_visa_for_unknown_gate_should_return_error() {
 #[test]
 pub fn buying_visa_for_unknown_order_should_return_error() {
     // Arrange
-    let new_toll = Toll::new(ChallengeAlgorithm::SHA3, "gofuckyourself", 99);
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let new_toll = Toll::new(
+        ChallengeAlgorithm::SHA3,
+        "gofuckyourself",
+        99,
+        suspect.clone(),
+    );
     let require_payment_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
@@ -286,7 +312,6 @@ pub fn buying_visa_for_unknown_order_should_return_error() {
     let gate_id = gate.id.clone();
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
     let payment = Payment::new(&gate_id, "wrong order number", "legal tender");
     let result = sut.buy_visa(&suspect, &payment);
     let expected: Result<Result<Visa, Toll>, GatewayError> =

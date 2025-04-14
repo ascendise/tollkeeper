@@ -313,14 +313,21 @@ pub struct Toll {
     challenge: ChallengeAlgorithm,
     seed: String,
     difficulty: u8,
+    recipient: Suspect,
 }
 
 impl Toll {
-    pub fn new(challenge: ChallengeAlgorithm, seed: impl Into<String>, difficulty: u8) -> Self {
+    pub fn new(
+        challenge: ChallengeAlgorithm,
+        seed: impl Into<String>,
+        difficulty: u8,
+        recipient: Suspect,
+    ) -> Self {
         Self {
             challenge,
             seed: seed.into(),
             difficulty,
+            recipient,
         }
     }
 }
