@@ -222,9 +222,9 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     assert!(!request.accessed(), "Was accessed despite not having visa!");
 }
 
-#[test_case(true, |gate_id, order_id, suspect, _| Result::Ok(Visa::new(gate_id, order_id, suspect)))]
-#[test_case(false, |_, _, _, toll| Result::Err(toll)) ]
-pub fn buying_a_visa_with_valid_payment_should_return_visa_for_suspect(
+#[test_case(true, |gate_id, order_id, suspect, _| Result::Ok(Visa::new(gate_id, order_id, suspect)) ; "with valid payment should return visa")]
+#[test_case(false, |_, _, _, toll| Result::Err(toll) ; "with invalid payment should return toll")]
+pub fn buying_visa_for_valid_order(
     accept_payment: bool,
     expected_result: impl Fn(&str, &str, Suspect, Toll) -> Result<Visa, Toll>,
 ) {
@@ -247,7 +247,49 @@ pub fn buying_a_visa_with_valid_payment_should_return_visa_for_suspect(
     let payment = Payment::new(&gate_id, &order_id, "legal tender");
     let result = sut.buy_visa(&suspect, &payment);
     assert_eq!(
-        result,
-        Result::Ok(expected_result(&gate_id, &order_id, suspect, new_toll))
+        Result::Ok(expected_result(&gate_id, &order_id, suspect, new_toll)),
+        result
     );
+}
+
+#[test]
+pub fn buying_visa_for_unknown_gate_should_return_error() {
+    // Arrange
+    let new_toll = Toll::new(ChallengeAlgorithm::SHA3, "gofuckyourself", 99);
+    let require_payment_order = Order::new(
+        vec![Box::new(StubDescription::new(true))],
+        AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new_payment_stub(new_toll.clone(), true)),
+    );
+    let order_id = require_payment_order.id.clone();
+    let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
+    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
+    // Act
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let payment = Payment::new("wrong gate number", &order_id, "legal tender");
+    let result = sut.buy_visa(&suspect, &payment);
+    let expected: Result<Result<Visa, Toll>, GatewayError> =
+        Result::Err(MissingGateError::new("wrong gate number").into());
+    assert_eq!(expected, result);
+}
+
+#[test]
+pub fn buying_visa_for_unknown_order_should_return_error() {
+    // Arrange
+    let new_toll = Toll::new(ChallengeAlgorithm::SHA3, "gofuckyourself", 99);
+    let require_payment_order = Order::new(
+        vec![Box::new(StubDescription::new(true))],
+        AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new_payment_stub(new_toll.clone(), true)),
+    );
+    let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
+    let gate_id = gate.id.clone();
+    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
+    // Act
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let payment = Payment::new(&gate_id, "wrong order number", "legal tender");
+    let result = sut.buy_visa(&suspect, &payment);
+    let expected: Result<Result<Visa, Toll>, GatewayError> =
+        Result::Err(MissingOrderError::new(gate_id, "wrong order number").into());
+    assert_eq!(expected, result);
 }

@@ -93,6 +93,7 @@ impl From<MissingOrderError> for GatewayError {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct MissingGateError {
     expected_gate_id: String,
 }
@@ -109,6 +110,7 @@ impl MissingGateError {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct MissingOrderError {
     gate_id: String,
     expected_order_id: String,
