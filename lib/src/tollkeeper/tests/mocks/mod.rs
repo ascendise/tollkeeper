@@ -17,35 +17,33 @@ impl Description for StubDescription {
 }
 
 pub struct StubDeclaration {
-    toll: Toll,
     accept_payment: bool,
 }
 
 impl StubDeclaration {
-    pub fn new(toll: Toll) -> Self {
+    pub fn new() -> Self {
         Self {
-            toll,
             accept_payment: false,
         }
     }
-    pub fn new_payment_stub(toll: Toll, accept_payment: bool) -> Self {
+    pub fn new_payment_stub() -> Self {
         Self {
-            toll,
-            accept_payment,
+            accept_payment: true,
         }
     }
 }
 
 impl Declaration for StubDeclaration {
-    fn declare(&self) -> Toll {
-        self.toll.clone()
+    fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll {
+        Toll::new(ChallengeAlgorithm::SHA1, "12345", 99, suspect, order_id)
     }
+
     fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, Toll> {
         if self.accept_payment {
-            let visa = Visa::new(&payment.gate_id, &payment.order_id, suspect.clone());
+            let visa = Visa::new(payment.order_id().clone(), suspect.clone());
             Result::Ok(visa)
         } else {
-            Result::Err(self.declare())
+            Result::Err(self.declare(suspect.clone(), payment.order_id().clone()))
         }
     }
 }

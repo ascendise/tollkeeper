@@ -34,7 +34,7 @@ pub trait Tollkeeper {
         payment: &Payment,
     ) -> Result<Result<Visa, Toll>, GatewayError>;
 }
-///
+
 /// Default implementation of the [Tollkeeper].
 pub struct TollkeeperImpl {
     gates: Vec<Gate>,
@@ -91,13 +91,16 @@ impl Tollkeeper for TollkeeperImpl {
         let gate = self
             .gates
             .iter()
-            .find(|g| g.id == payment.gate_id)
-            .ok_or(MissingGateError::new(&payment.gate_id))?;
+            .find(|g| g.id == payment.order_id().gate_id)
+            .ok_or(MissingGateError::new(&payment.order_id().gate_id))?;
         let order = gate
             .orders
             .iter()
-            .find(|o| o.id == payment.order_id)
-            .ok_or(MissingOrderError::new(&payment.gate_id, &payment.order_id))?;
+            .find(|o| o.id == payment.order_id().order_id)
+            .ok_or(MissingOrderError::new(
+                &payment.order_id().gate_id,
+                &payment.order_id().order_id,
+            ))?;
         Result::Ok(order.toll_declaration.pay(&payment, &suspect))
     }
 }
@@ -140,7 +143,7 @@ impl Gate {
     /// Examine [Suspect] and check if it has to pay a [Toll]
     fn pass(&self, suspect: &Suspect, visa: &Option<Visa>) -> Option<Toll> {
         for order in &self.orders {
-            let exam = order.examine(suspect, visa);
+            let exam = order.examine(suspect, visa, &self.id);
             if exam.access_granted {
                 return Option::None;
             }
@@ -182,12 +185,15 @@ impl Order {
         }
     }
 
-    fn examine(&self, suspect: &Suspect, visa: &Option<Visa>) -> Examination {
+    fn examine(&self, suspect: &Suspect, visa: &Option<Visa>, gate_id: &str) -> Examination {
         let matches_description = self.is_match(suspect);
         let require_toll = (matches_description && self.access_policy == AccessPolicy::Blacklist)
             || (!matches_description && self.access_policy == AccessPolicy::Whitelist);
         let toll = if require_toll && !self.has_valid_visa(suspect, visa) {
-            Option::Some(self.toll_declaration.declare())
+            Option::Some(self.toll_declaration.declare(
+                suspect.clone(),
+                OrderIdentifier::new(gate_id, self.id.clone()),
+            ))
         } else {
             Option::None
         };
@@ -201,7 +207,7 @@ impl Order {
 
     fn has_valid_visa(&self, suspect: &Suspect, visa: &Option<Visa>) -> bool {
         match visa {
-            Option::Some(v) => v.order_id() == self.id,
+            Option::Some(v) => v.order_id().order_id == self.id,
             Option::None => false,
         }
     }
@@ -303,7 +309,7 @@ impl Examination {
 
 /// Creates and verifies [tolls](Toll)
 pub trait Declaration {
-    fn declare(&self) -> Toll;
+    fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll;
     fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, Toll>;
 }
 
@@ -314,6 +320,7 @@ pub struct Toll {
     seed: String,
     difficulty: u8,
     recipient: Suspect,
+    order_id: OrderIdentifier,
 }
 
 impl Toll {
@@ -322,12 +329,14 @@ impl Toll {
         seed: impl Into<String>,
         difficulty: u8,
         recipient: Suspect,
+        order_id: OrderIdentifier,
     ) -> Self {
         Self {
             challenge,
             seed: seed.into(),
             difficulty,
             recipient,
+            order_id,
         }
     }
 }
@@ -339,33 +348,39 @@ pub enum ChallengeAlgorithm {
     SHA3,
 }
 
-/// Solution for solved [challenge](Toll)
-pub struct Payment {
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct OrderIdentifier {
     gate_id: String,
     order_id: String,
+}
+
+impl OrderIdentifier {
+    pub fn new(gate_id: impl Into<String>, order_id: impl Into<String>) -> Self {
+        Self {
+            gate_id: gate_id.into(),
+            order_id: order_id.into(),
+        }
+    }
+}
+
+/// Solution for solved [challenge](Toll)
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Payment {
+    toll: Toll,
     value: String,
 }
 
 impl Payment {
     /// Creates a payment containing the [challenge][Toll] to be solved and the calculated hash
-    pub fn new(
-        gate_id: impl Into<String>,
-        order_id: impl Into<String>,
-        value: impl Into<String>,
-    ) -> Self {
+    pub fn new(toll: Toll, value: impl Into<String>) -> Self {
         Self {
-            gate_id: gate_id.into(),
-            order_id: order_id.into(),
+            toll,
             value: value.into(),
         }
     }
 
-    pub fn gate_id(&self) -> &str {
-        &self.order_id
-    }
-
-    pub fn order_id(&self) -> &str {
-        &self.order_id
+    pub fn order_id(&self) -> &OrderIdentifier {
+        &self.toll.order_id
     }
 
     pub fn value(&self) -> &str {
@@ -376,22 +391,17 @@ impl Payment {
 /// Represents an access token for a an [Order]
 #[derive(Debug, PartialEq, Eq)]
 pub struct Visa {
-    gate_id: String,
-    order_id: String,
+    order_id: OrderIdentifier,
     suspect: Suspect,
 }
 
 impl Visa {
-    pub fn new(gate_id: impl Into<String>, order_id: impl Into<String>, suspect: Suspect) -> Self {
-        Self {
-            gate_id: gate_id.into(),
-            order_id: order_id.into(),
-            suspect,
-        }
+    pub fn new(order_id: OrderIdentifier, suspect: Suspect) -> Self {
+        Self { order_id, suspect }
     }
 
     /// [Order] the [Visa] was issued for
-    pub fn order_id(&self) -> &str {
+    pub fn order_id(&self) -> &OrderIdentifier {
         &self.order_id
     }
 
