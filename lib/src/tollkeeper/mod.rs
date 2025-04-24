@@ -101,7 +101,14 @@ impl Tollkeeper for TollkeeperImpl {
                 &payment.order_id().gate_id,
                 &payment.order_id().order_id,
             ))?;
-        Result::Ok(order.toll_declaration.pay(&payment, &suspect))
+        if suspect != &payment.toll.recipient {
+            Result::Ok(Result::Err(order.toll_declaration.declare(
+                suspect.clone(),
+                OrderIdentifier::new(&gate.id, &order.id),
+            )))
+        } else {
+            Result::Ok(order.toll_declaration.pay(&payment, &suspect))
+        }
     }
 }
 

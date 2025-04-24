@@ -217,9 +217,6 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     assert!(!request.accessed(), "Was accessed despite not having visa!");
 }
 
-//#[test_case(true, |gate_id, order_id, suspect, _| Result::Ok(Visa::new(OrderIdentifier::new(gate_id, order_id), suspect.clone())) ; "with valid payment should return visa")]
-//#[test_case(false, |_, _, _, toll| Result::Err(toll) ; "with invalid payment should return toll")]
-
 #[test]
 pub fn buying_visa_for_valid_order_with_valid_payment_should_return_visa() {
     // Arrange
