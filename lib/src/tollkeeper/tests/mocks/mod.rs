@@ -35,7 +35,7 @@ impl StubDeclaration {
 
 impl Declaration for StubDeclaration {
     fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll {
-        Toll::new(ChallengeAlgorithm::SHA1, "12345", 99, suspect, order_id)
+        Toll::new(suspect, order_id, HashMap::new())
     }
 
     fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, Toll> {

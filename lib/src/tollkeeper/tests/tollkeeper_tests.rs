@@ -262,11 +262,9 @@ pub fn buying_visa_for_valid_order_with_valid_payment_should_return_visa() {
     let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
     let gate_id = gate.id.clone();
     let toll = Toll::new(
-        ChallengeAlgorithm::SHA1,
-        "1234",
-        4,
         suspect.clone(),
         OrderIdentifier::new(&gate_id, order_id),
+        HashMap::new(),
     );
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
@@ -291,11 +289,9 @@ pub fn buying_visa_for_valid_order_with_invalid_payment_should_return_visa() {
     let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
     let gate_id = gate.id.clone();
     let toll = Toll::new(
-        ChallengeAlgorithm::SHA1,
-        "1234",
-        4,
         suspect.clone(),
         OrderIdentifier::new(&gate_id, order_id),
+        HashMap::new(),
     );
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
@@ -321,11 +317,9 @@ pub fn buying_visa_for_different_suspect_should_return_new_toll_for_current_susp
     let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
     let gate_id = gate.id.clone();
     let bobs_toll = Toll::new(
-        ChallengeAlgorithm::SHA1,
-        "1234",
-        4,
         suspect_bob.clone(),
         OrderIdentifier::new(&gate_id, order_id),
+        HashMap::new(),
     );
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
@@ -350,11 +344,9 @@ pub fn buying_visa_for_unknown_gate_should_return_error() {
     let order_id = require_payment_order.id.clone();
     let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
     let toll = Toll::new(
-        ChallengeAlgorithm::SHA1,
-        "1234",
-        4,
         suspect.clone(),
         OrderIdentifier::new("gate?", order_id),
+        HashMap::new(),
     );
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
@@ -377,11 +369,9 @@ pub fn buying_visa_for_unknown_order_should_return_error() {
     let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
     let gate_id = gate.id.clone();
     let toll = Toll::new(
-        ChallengeAlgorithm::SHA1,
-        "1234",
-        4,
         suspect.clone(),
         OrderIdentifier::new(&gate_id, "order?"),
+        HashMap::new(),
     );
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act

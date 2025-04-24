@@ -3,7 +3,7 @@ pub mod err;
 #[cfg(test)]
 mod tests;
 
-use std::{error::Error, fmt::Display};
+use std::{collections::HashMap, error::Error, fmt::Display};
 
 use err::*;
 use uuid::Uuid;
@@ -13,7 +13,7 @@ pub trait Tollkeeper {
     /// Checks if [Suspect] [matches description](Description::matches) and has to [pay a toll](Toll) before proceeding with it's
     /// action.
     ///
-    /// Returns [Option::None] and calls ```on_access``` if [Suspect] is permitted or [Toll]
+    /// Returns [Option::None] and calls ```on_access``` if [Suspect] is permitted, or [Toll]
     /// to be paid before being able to try again.
     fn guarded_access<T>(
         &self,
@@ -323,36 +323,38 @@ pub trait Declaration {
 /// A Proof-of-Work challenge to be solved before being granted access
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Toll {
-    challenge: ChallengeAlgorithm,
-    seed: String,
-    difficulty: u8,
     recipient: Suspect,
     order_id: OrderIdentifier,
+    challenge: HashMap<String, String>,
 }
 
 impl Toll {
     pub fn new(
-        challenge: ChallengeAlgorithm,
-        seed: impl Into<String>,
-        difficulty: u8,
         recipient: Suspect,
         order_id: OrderIdentifier,
+        challenge: HashMap<String, String>,
     ) -> Self {
         Self {
-            challenge,
-            seed: seed.into(),
-            difficulty,
             recipient,
             order_id,
+            challenge,
         }
     }
-}
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum ChallengeAlgorithm {
-    SHA1,
-    SHA256,
-    SHA3,
+    /// Who has to pay the toll
+    pub fn recipient(&self) -> &Suspect {
+        &self.recipient
+    }
+
+    /// Order the toll has to be paid for
+    pub fn order_id(&self) -> &OrderIdentifier {
+        &self.order_id
+    }
+
+    /// All values required to solve the challenge, like seed values, algorithms, etc.
+    pub fn challenge(&self) -> &HashMap<String, String> {
+        &self.challenge
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -395,7 +397,7 @@ impl Payment {
     }
 }
 
-/// Represents an access token for a an [Order]
+/// Represents an access token for an [Order]
 #[derive(Debug, PartialEq, Eq)]
 pub struct Visa {
     order_id: OrderIdentifier,
