@@ -213,7 +213,39 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
             req.access();
         });
     // Assert
+    assert!(
+        result.is_some(),
+        "Did not return new toll despite suspect being a different one!"
+    );
+    assert!(!request.accessed(), "Was accessed despite not having visa!");
+}
+
+#[test]
+pub fn passing_gate_with_visa_for_different_suspect_should_return_new_toll_for_current_suspect() {
+    // Arrange
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let require_payment_order = Order::new(
+        vec![Box::new(StubDescription::new(true))],
+        AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new()),
+    );
+    let order_id = require_payment_order.id.clone();
+    let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
+    let gate_id = gate.id.clone();
+    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
+    // Act
+    let visa = Visa::new(
+        OrderIdentifier::new(&gate_id, &order_id),
+        Suspect::new("4.3.2.1", "Alice", Destination::new("localhost")),
+    );
+    let mut request = SpyRequest::new();
+    let result =
+        sut.guarded_access::<SpyRequest>(&suspect, &Option::Some(visa), &mut request, |req| {
+            req.access();
+        });
+    // Assert
     assert!(result.is_some());
+    assert!(result.unwrap().recipient == suspect);
     assert!(!request.accessed(), "Was accessed despite not having visa!");
 }
 

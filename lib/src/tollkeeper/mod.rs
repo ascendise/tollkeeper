@@ -214,7 +214,7 @@ impl Order {
 
     fn has_valid_visa(&self, suspect: &Suspect, visa: &Option<Visa>) -> bool {
         match visa {
-            Option::Some(v) => v.order_id().order_id == self.id,
+            Option::Some(v) => v.order_id().order_id == self.id && &v.suspect == suspect,
             Option::None => false,
         }
     }
