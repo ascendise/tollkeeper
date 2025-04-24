@@ -204,7 +204,7 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let visa = Visa::new(
-        OrderIdentifier::new(&gate_id, "not_an_order_id"),
+        OrderIdentifier::new(gate_id, "not_an_order_id"),
         suspect.clone(),
     );
     let mut request = SpyRequest::new();
@@ -235,7 +235,7 @@ pub fn passing_gate_with_visa_for_different_suspect_should_return_new_toll_for_c
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
     // Act
     let visa = Visa::new(
-        OrderIdentifier::new(&gate_id, &order_id),
+        OrderIdentifier::new(gate_id, order_id),
         Suspect::new("4.3.2.1", "Alice", Destination::new("localhost")),
     );
     let mut request = SpyRequest::new();
@@ -263,7 +263,7 @@ pub fn buying_visa_for_valid_order_with_valid_payment_should_return_visa() {
     let gate_id = gate.id.clone();
     let toll = Toll::new(
         suspect.clone(),
-        OrderIdentifier::new(&gate_id, order_id),
+        OrderIdentifier::new(gate_id, order_id),
         HashMap::new(),
     );
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
@@ -290,7 +290,7 @@ pub fn buying_visa_for_valid_order_with_invalid_payment_should_return_visa() {
     let gate_id = gate.id.clone();
     let toll = Toll::new(
         suspect.clone(),
-        OrderIdentifier::new(&gate_id, order_id),
+        OrderIdentifier::new(gate_id, order_id),
         HashMap::new(),
     );
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();
@@ -318,7 +318,7 @@ pub fn buying_visa_for_different_suspect_should_return_new_toll_for_current_susp
     let gate_id = gate.id.clone();
     let bobs_toll = Toll::new(
         suspect_bob.clone(),
-        OrderIdentifier::new(&gate_id, order_id),
+        OrderIdentifier::new(gate_id, order_id),
         HashMap::new(),
     );
     let sut = TollkeeperImpl::new(vec![gate]).unwrap();

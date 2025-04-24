@@ -177,8 +177,4 @@ impl PartialEq for ConfigError {
     fn eq(&self, other: &Self) -> bool {
         self.key == other.key
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        self.key != other.key
-    }
 }
