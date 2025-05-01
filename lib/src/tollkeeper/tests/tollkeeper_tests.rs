@@ -329,7 +329,13 @@ pub fn buying_visa_for_different_suspect_should_return_new_toll_for_current_susp
         Result::Ok(_) => panic!("Returned visa despite different suspect paying!"),
         Result::Err(e) => e,
     };
-    assert_eq!(err.recipient, suspect_alice);
+    let err = match err {
+        PaymentDeniedError::MismatchedSuspect(e) => e,
+        PaymentDeniedError::InvalidPayment(_) => {
+            panic!("Unexpected failure do to unexpected payment")
+        }
+    };
+    assert_eq!(err.new_toll().recipient, suspect_alice);
 }
 
 #[test]
@@ -352,7 +358,7 @@ pub fn buying_visa_for_unknown_gate_should_return_error() {
     // Act
     let payment = Payment::new(toll, "legal tender");
     let result = sut.buy_visa(&suspect, &payment);
-    let expected: Result<Result<Visa, Toll>, GatewayError> =
+    let expected: Result<Result<Visa, PaymentDeniedError>, GatewayError> =
         Result::Err(MissingGateError::new("gate?").into());
     assert_eq!(expected, result);
 }
@@ -377,7 +383,7 @@ pub fn buying_visa_for_unknown_order_should_return_error() {
     // Act
     let payment = Payment::new(toll, "legal tender");
     let result = sut.buy_visa(&suspect, &payment);
-    let expected: Result<Result<Visa, Toll>, GatewayError> =
+    let expected: Result<Result<Visa, PaymentDeniedError>, GatewayError> =
         Result::Err(MissingOrderError::new(gate_id, "order?").into());
     assert_eq!(expected, result);
 }

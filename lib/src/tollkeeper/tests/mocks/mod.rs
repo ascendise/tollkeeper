@@ -38,12 +38,15 @@ impl Declaration for StubDeclaration {
         Toll::new(suspect, order_id, HashMap::new())
     }
 
-    fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, Toll> {
+    fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, PaymentDeniedError> {
         if self.accept_payment {
             let visa = Visa::new(payment.order_id().clone(), suspect.clone());
             Result::Ok(visa)
         } else {
-            Result::Err(self.declare(suspect.clone(), payment.order_id().clone()))
+            let new_toll = self.declare(suspect.clone(), payment.order_id().clone());
+            let error = InvalidPaymentError::new(Box::new(payment.clone()), Box::new(new_toll));
+            let error = PaymentDeniedError::InvalidPayment(error);
+            Result::Err(error)
         }
     }
 }

@@ -32,7 +32,7 @@ pub trait Tollkeeper {
         &self,
         suspect: &Suspect,
         payment: &Payment,
-    ) -> Result<Result<Visa, Toll>, GatewayError>;
+    ) -> Result<Result<Visa, PaymentDeniedError>, GatewayError>;
 }
 
 /// Default implementation of the [Tollkeeper].
@@ -87,7 +87,7 @@ impl Tollkeeper for TollkeeperImpl {
         &self,
         suspect: &Suspect,
         payment: &Payment,
-    ) -> Result<Result<Visa, Toll>, GatewayError> {
+    ) -> Result<Result<Visa, PaymentDeniedError>, GatewayError> {
         let gate = self
             .gates
             .iter()
@@ -102,10 +102,12 @@ impl Tollkeeper for TollkeeperImpl {
                 &payment.order_id().order_id,
             ))?;
         if suspect != &payment.toll.recipient {
-            Result::Ok(Result::Err(order.toll_declaration.declare(
-                suspect.clone(),
-                OrderIdentifier::new(&gate.id, &order.id),
-            )))
+            let new_toll = order
+                .toll_declaration
+                .declare(suspect.clone(), OrderIdentifier::new(&gate.id, &order.id));
+            let error = MismatchedSuspectError::new(Box::new(suspect.clone()), Box::new(new_toll));
+            let error = PaymentDeniedError::MismatchedSuspect(error);
+            Result::Ok(Result::Err(error))
         } else {
             Result::Ok(order.toll_declaration.pay(payment, suspect))
         }
@@ -261,6 +263,11 @@ impl Suspect {
     pub fn destination(&self) -> &Destination {
         &self.destination
     }
+
+    /// Full 'name' of suspect
+    pub fn identifier(&self) -> String {
+        format!("({})[{}]", self.user_agent, self.client_ip)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -317,7 +324,7 @@ impl Examination {
 /// Creates and verifies [tolls](Toll)
 pub trait Declaration {
     fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll;
-    fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, Toll>;
+    fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, PaymentDeniedError>;
 }
 
 /// A Proof-of-Work challenge to be solved before being granted access
