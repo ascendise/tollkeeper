@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::*;
 use crate::tollkeeper::*;
 use test_case::test_case;
@@ -245,7 +247,7 @@ pub fn passing_gate_with_visa_for_different_suspect_should_return_new_toll_for_c
         });
     // Assert
     assert!(result.is_some());
-    assert!(result.unwrap().recipient == suspect);
+    assert!(result.unwrap().recipient() == &suspect);
     assert!(!request.accessed(), "Was accessed despite not having visa!");
 }
 
@@ -335,7 +337,7 @@ pub fn buying_visa_for_different_suspect_should_return_new_toll_for_current_susp
             panic!("Unexpected failure do to unexpected payment")
         }
     };
-    assert_eq!(err.new_toll().recipient, suspect_alice);
+    assert_eq!(err.new_toll().recipient(), &suspect_alice);
 }
 
 #[test]
