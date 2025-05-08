@@ -1,9 +1,13 @@
 #[cfg(test)]
 mod tests;
 
+use std::mem::size_of;
+
+use sha1::Digest;
+
 use super::*;
 
-/// [Declaration] for Hashcash-style challenges [tolls](Toll)
+/// [Declaration] for Hashcash-style [challenges](Toll)
 ///
 /// See <http://hashcash.org> for more information
 pub struct HashcashDeclaration {}
@@ -55,7 +59,6 @@ impl Stamp {
         date: Timestamp,
         resource: impl Into<String>,
         ext: Extension,
-        rand: impl Into<String>,
     ) -> Self {
         Self {
             ver,
@@ -63,14 +66,31 @@ impl Stamp {
             date,
             resource: resource.into(),
             ext,
-            rand: rand.into(),
+            rand: uuid::Uuid::new_v4().to_string(),
             counter: String::from("0"),
         }
     }
 
     /// Returns ```true``` if hash has correct amount of zero bits
-    pub fn check_hash(&self) -> bool {
-        false
+    pub fn is_valid(&self) -> bool {
+        let mut sha1 = sha1::Sha1::new();
+        sha1.update(self.to_string().into_bytes());
+        let result = sha1.finalize();
+        let mut required_bits = self.bits;
+        for byte in result {
+            let zeros = byte.leading_zeros() as u8;
+            if zeros >= required_bits {
+                return true;
+            }
+            required_bits = match required_bits.checked_sub(zeros) {
+                Option::Some(v) => v,
+                Option::None => 0,
+            };
+            if zeros as usize != size_of::<u8>() {
+                break;
+            }
+        }
+        required_bits == 0
     }
 
     /// Stamp format version. Currently 1 is expected
