@@ -1,5 +1,6 @@
 pub mod declarations;
 pub mod err;
+pub mod util;
 
 #[cfg(test)]
 mod tests;

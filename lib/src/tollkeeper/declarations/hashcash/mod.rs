@@ -5,16 +5,59 @@ use std::mem::size_of;
 
 use sha1::Digest;
 
+use crate::tollkeeper::util::{DateTimeProvider, RandomStringGen};
+
 use super::*;
 
 /// [Declaration] for Hashcash-style [challenges](Toll)
 ///
 /// See <http://hashcash.org> for more information
-pub struct HashcashDeclaration {}
+pub struct HashcashDeclaration {
+    difficulty: u8,
+    date_provider: Box<dyn DateTimeProvider>,
+    random_string_gen: Box<dyn RandomStringGen>,
+}
+
+impl HashcashDeclaration {
+    pub fn new(
+        difficulty: u8,
+        date_provider: Box<dyn DateTimeProvider>,
+        random_string_gen: Box<dyn RandomStringGen>,
+    ) -> Self {
+        Self {
+            difficulty,
+            date_provider,
+            random_string_gen,
+        }
+    }
+
+    fn generate_challenge(&self, suspect: &Suspect) -> HashMap<String, String> {
+        let mut challenge = HashMap::<String, String>::new();
+        challenge.insert("ver".into(), "1".into());
+        challenge.insert("bits".into(), self.difficulty.to_string().into());
+        challenge.insert(
+            "date".into(),
+            Timestamp(self.date_provider.now()).to_string().into(),
+        );
+        let dest = suspect.destination();
+        challenge.insert(
+            "resource".into(),
+            format!("{}:{}{}", dest.base_url(), dest.port(), dest.path()),
+        );
+        challenge.insert("ext".into(), format!("suspect.ip={}", suspect.client_ip()));
+        challenge.insert(
+            "rand".into(),
+            self.random_string_gen.generate_random_string(),
+        );
+        challenge.insert("counter".into(), "0".into());
+        challenge
+    }
+}
 
 impl Declaration for HashcashDeclaration {
     fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll {
-        todo!()
+        let challenge = self.generate_challenge(&suspect);
+        Toll::new(suspect, order_id, challenge)
     }
 
     fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, InvalidPaymentError> {

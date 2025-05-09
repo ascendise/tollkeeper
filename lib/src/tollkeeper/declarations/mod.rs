@@ -82,6 +82,10 @@ impl Destination {
     pub fn port(&self) -> u16 {
         self.port
     }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
 }
 
 /// A Proof-of-Work challenge to be solved before being granted access
