@@ -1,10 +1,13 @@
+pub mod declarations;
 pub mod err;
+pub mod util;
 
 #[cfg(test)]
 mod tests;
 
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{error::Error, fmt::Display};
 
+use declarations::{Declaration, Destination, OrderIdentifier, Payment, Suspect, Toll, Visa};
 use err::*;
 use uuid::Uuid;
 
@@ -29,9 +32,9 @@ pub trait Tollkeeper {
     /// Returns new [Toll] if [Payment] is invalid
     /// Returns a [GatewayError] if there was a problem processing the [Payment]
     fn buy_visa(
-        &self,
+        &mut self,
         suspect: &Suspect,
-        payment: &Payment,
+        payment: Payment,
     ) -> Result<Result<Visa, PaymentDeniedError>, GatewayError>;
 }
 
@@ -55,7 +58,7 @@ impl TollkeeperImpl {
     fn find_gate(&self, suspect: &Suspect) -> Option<&Gate> {
         self.gates
             .iter()
-            .find(|g| g.destination == suspect.destination)
+            .find(|g| g.destination() == suspect.destination())
             .or(Option::None)
     }
 }
@@ -69,10 +72,7 @@ impl Tollkeeper for TollkeeperImpl {
         request: &mut T,
         on_access: impl Fn(&mut T),
     ) -> Option<Toll> {
-        let gate = match self.find_gate(suspect) {
-            Option::Some(g) => g,
-            Option::None => return Option::None, //TODO: Communicate somehow that no gate was found!
-        };
+        let gate = self.find_gate(suspect)?;
         let result = gate.pass(suspect, visa);
         match result {
             Option::Some(g) => Option::Some(g),
@@ -84,24 +84,24 @@ impl Tollkeeper for TollkeeperImpl {
     }
 
     fn buy_visa(
-        &self,
+        &mut self,
         suspect: &Suspect,
-        payment: &Payment,
+        payment: Payment,
     ) -> Result<Result<Visa, PaymentDeniedError>, GatewayError> {
         let gate = self
             .gates
-            .iter()
-            .find(|g| g.id == payment.order_id().gate_id)
-            .ok_or(MissingGateError::new(&payment.order_id().gate_id))?;
+            .iter_mut()
+            .find(|g| g.id == payment.order_id().gate_id())
+            .ok_or(MissingGateError::new(payment.order_id().gate_id()))?;
         let order = gate
             .orders
-            .iter()
-            .find(|o| o.id == payment.order_id().order_id)
+            .iter_mut()
+            .find(|o| o.id == payment.order_id().order_id())
             .ok_or(MissingOrderError::new(
-                &payment.order_id().gate_id,
-                &payment.order_id().order_id,
+                payment.order_id().gate_id(),
+                payment.order_id().order_id(),
             ))?;
-        if suspect != &payment.toll.recipient {
+        if suspect != payment.toll().recipient() {
             let new_toll = order
                 .toll_declaration
                 .declare(suspect.clone(), OrderIdentifier::new(&gate.id, &order.id));
@@ -109,7 +109,11 @@ impl Tollkeeper for TollkeeperImpl {
             let error = PaymentDeniedError::MismatchedSuspect(error);
             Result::Ok(Result::Err(error))
         } else {
-            Result::Ok(order.toll_declaration.pay(payment, suspect))
+            let payment_result = match order.toll_declaration.pay(payment.clone(), suspect) {
+                Result::Ok(visa) => Result::Ok(visa),
+                Result::Err(err) => Result::Err(PaymentDeniedError::InvalidPayment(err)),
+            };
+            Result::Ok(payment_result)
         }
     }
 }
@@ -216,7 +220,7 @@ impl Order {
 
     fn has_valid_visa(&self, suspect: &Suspect, visa: &Option<Visa>) -> bool {
         match visa {
-            Option::Some(v) => v.order_id().order_id == self.id && &v.suspect == suspect,
+            Option::Some(v) => v.order_id().order_id() == self.id && v.suspect() == suspect,
             Option::None => false,
         }
     }
@@ -231,82 +235,6 @@ pub trait Description {
     fn matches(&self, suspect: &Suspect) -> bool;
 }
 
-/// Information about the source trying to access the resource
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Suspect {
-    client_ip: String,
-    user_agent: String,
-    destination: Destination,
-}
-
-impl Suspect {
-    pub fn new(
-        client_ip: impl Into<String>,
-        user_agent: impl Into<String>,
-        destination: Destination,
-    ) -> Self {
-        Self {
-            client_ip: client_ip.into(),
-            user_agent: user_agent.into(),
-            destination,
-        }
-    }
-
-    pub fn client_ip(&self) -> &str {
-        &self.client_ip
-    }
-
-    pub fn user_agent(&self) -> &str {
-        &self.user_agent
-    }
-
-    pub fn destination(&self) -> &Destination {
-        &self.destination
-    }
-
-    /// Full 'name' of suspect
-    pub fn identifier(&self) -> String {
-        format!("({})[{}]", self.user_agent, self.client_ip)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Destination {
-    base_url: String,
-    port: u16,
-    path: String,
-}
-
-impl Destination {
-    pub fn new(base_url: impl Into<String>) -> Self {
-        Self {
-            base_url: base_url.into(),
-            port: 80,
-            path: String::from("/"),
-        }
-    }
-
-    pub fn new_with_details(
-        base_url: impl Into<String>,
-        port: u16,
-        path: impl Into<String>,
-    ) -> Self {
-        Self {
-            base_url: base_url.into(),
-            port,
-            path: path.into(),
-        }
-    }
-
-    pub fn base_url(&self) -> &str {
-        &self.base_url
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-}
-
 struct Examination {
     toll: Option<Toll>,
     access_granted: bool,
@@ -318,111 +246,5 @@ impl Examination {
             toll,
             access_granted,
         }
-    }
-}
-
-/// Creates and verifies [tolls](Toll)
-pub trait Declaration {
-    fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll;
-    fn pay(&self, payment: &Payment, suspect: &Suspect) -> Result<Visa, PaymentDeniedError>;
-}
-
-/// A Proof-of-Work challenge to be solved before being granted access
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Toll {
-    recipient: Suspect,
-    order_id: OrderIdentifier,
-    challenge: HashMap<String, String>,
-}
-
-impl Toll {
-    pub fn new(
-        recipient: Suspect,
-        order_id: OrderIdentifier,
-        challenge: HashMap<String, String>,
-    ) -> Self {
-        Self {
-            recipient,
-            order_id,
-            challenge,
-        }
-    }
-
-    /// Who has to pay the toll
-    pub fn recipient(&self) -> &Suspect {
-        &self.recipient
-    }
-
-    /// Order the toll has to be paid for
-    pub fn order_id(&self) -> &OrderIdentifier {
-        &self.order_id
-    }
-
-    /// All values required to solve the challenge, like seed values, algorithms, etc.
-    pub fn challenge(&self) -> &HashMap<String, String> {
-        &self.challenge
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct OrderIdentifier {
-    gate_id: String,
-    order_id: String,
-}
-
-impl OrderIdentifier {
-    pub fn new(gate_id: impl Into<String>, order_id: impl Into<String>) -> Self {
-        Self {
-            gate_id: gate_id.into(),
-            order_id: order_id.into(),
-        }
-    }
-}
-
-/// Solution for solved [challenge](Toll)
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Payment {
-    toll: Toll,
-    value: String,
-}
-
-impl Payment {
-    /// Creates a payment containing the [challenge][Toll] to be solved and the calculated hash
-    pub fn new(toll: Toll, value: impl Into<String>) -> Self {
-        Self {
-            toll,
-            value: value.into(),
-        }
-    }
-
-    pub fn order_id(&self) -> &OrderIdentifier {
-        &self.toll.order_id
-    }
-
-    pub fn value(&self) -> &str {
-        &self.value
-    }
-}
-
-/// Represents an access token for an [Order]
-#[derive(Debug, PartialEq, Eq)]
-pub struct Visa {
-    order_id: OrderIdentifier,
-    suspect: Suspect,
-}
-
-impl Visa {
-    pub fn new(order_id: OrderIdentifier, suspect: Suspect) -> Self {
-        Self { order_id, suspect }
-    }
-
-    /// [Order] the [Visa] was issued for
-    pub fn order_id(&self) -> &OrderIdentifier {
-        &self.order_id
-    }
-
-    /// [Suspect] the [Visa] was issued for
-    pub fn suspect(&self) -> &Suspect {
-        &self.suspect
     }
 }

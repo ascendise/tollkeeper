@@ -1,4 +1,4 @@
-use super::*;
+use super::{declarations::InvalidPaymentError, *};
 
 /// Return this error when [Suspect] is required to pay [Toll]
 #[derive(Debug, PartialEq, Eq)]
@@ -22,102 +22,6 @@ impl Display for AccessDeniedError {
         write!(f, "Access denied; Pay the toll and acquire a visa to enter")
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PaymentDeniedError {
-    InvalidPayment(InvalidPaymentError),
-    MismatchedSuspect(MismatchedSuspectError),
-}
-
-impl Error for PaymentDeniedError {}
-impl Display for PaymentDeniedError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidPayment(e) => e.fmt(f),
-            Self::MismatchedSuspect(e) => e.fmt(f),
-        }
-    }
-}
-impl From<InvalidPaymentError> for PaymentDeniedError {
-    fn from(value: InvalidPaymentError) -> Self {
-        PaymentDeniedError::InvalidPayment(value)
-    }
-}
-impl From<MismatchedSuspectError> for PaymentDeniedError {
-    fn from(value: MismatchedSuspectError) -> Self {
-        PaymentDeniedError::MismatchedSuspect(value)
-    }
-}
-
-/// Return this error when [Payment::value()] is invalid
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InvalidPaymentError {
-    payment: Box<Payment>,
-    new_toll: Box<Toll>,
-}
-
-impl InvalidPaymentError {
-    pub fn new(payment: Box<Payment>, new_toll: Box<Toll>) -> Self {
-        Self { payment, new_toll }
-    }
-
-    pub fn payment(&self) -> &Payment {
-        &self.payment
-    }
-
-    pub fn new_toll(&self) -> &Toll {
-        &self.new_toll
-    }
-}
-
-impl Error for InvalidPaymentError {}
-impl Display for InvalidPaymentError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Value '{}' does not match criteria! A new toll was issued",
-            self.payment.value()
-        )
-    }
-}
-
-/// Return this error when [Payment] was issued for different [Suspect]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MismatchedSuspectError {
-    expected: Box<Suspect>,
-    new_toll: Box<Toll>,
-}
-
-impl MismatchedSuspectError {
-    pub fn new(expected: Box<Suspect>, new_toll: Box<Toll>) -> Self {
-        Self { expected, new_toll }
-    }
-
-    pub fn expected(&self) -> &Suspect {
-        &self.expected
-    }
-
-    pub fn actual(&self) -> &Suspect {
-        &self.new_toll.recipient
-    }
-
-    pub fn new_toll(&self) -> &Toll {
-        &self.new_toll
-    }
-}
-
-impl Error for MismatchedSuspectError {}
-impl Display for MismatchedSuspectError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "'{}' tried to pay toll for {}!",
-            self.actual().identifier(),
-            self.expected().identifier(),
-        )
-    }
-}
-
 /// Return this error when there was a problem during a [Suspect] passing a [Gate].
 ///
 /// E.g. a [Destination] with no matching [Gate]
@@ -201,6 +105,68 @@ impl Display for MissingOrderError {
             "Gate '{}' does not contain order '{}'",
             &self.gate_id(),
             &self.order_id()
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaymentDeniedError {
+    InvalidPayment(InvalidPaymentError),
+    MismatchedSuspect(MismatchedSuspectError),
+}
+
+impl Error for PaymentDeniedError {}
+impl Display for PaymentDeniedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidPayment(e) => e.fmt(f),
+            Self::MismatchedSuspect(e) => e.fmt(f),
+        }
+    }
+}
+impl From<InvalidPaymentError> for PaymentDeniedError {
+    fn from(value: InvalidPaymentError) -> Self {
+        PaymentDeniedError::InvalidPayment(value)
+    }
+}
+impl From<MismatchedSuspectError> for PaymentDeniedError {
+    fn from(value: MismatchedSuspectError) -> Self {
+        PaymentDeniedError::MismatchedSuspect(value)
+    }
+}
+/// Return this error when [Payment] was issued for different [Suspect]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MismatchedSuspectError {
+    expected: Box<Suspect>,
+    new_toll: Box<Toll>,
+}
+
+impl MismatchedSuspectError {
+    pub fn new(expected: Box<Suspect>, new_toll: Box<Toll>) -> Self {
+        Self { expected, new_toll }
+    }
+
+    pub fn expected(&self) -> &Suspect {
+        &self.expected
+    }
+
+    pub fn actual(&self) -> &Suspect {
+        self.new_toll().recipient()
+    }
+
+    pub fn new_toll(&self) -> &Toll {
+        &self.new_toll
+    }
+}
+
+impl Error for MismatchedSuspectError {}
+impl Display for MismatchedSuspectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "'{}' tried to pay toll for {}!",
+            self.actual().identifier(),
+            self.expected().identifier(),
         )
     }
 }

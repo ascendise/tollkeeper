@@ -1,0 +1,62 @@
+name: cargo-jobs
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  cargo-test:
+    runs-on: ubuntu-latest
+    container: 
+      image: docker.ascendise.ch/ascendise/cargo-runner:1.0.2
+      credentials:
+        username: ${{ secrets.DOCKER_USER }}
+        password: ${{ secrets.DOCKER_PASS }}
+    strategy:
+      matrix:
+        module: [ ./lib, ./app]
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v3
+      - name: Cache build output
+        id: build-cache 
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ matrix.module }}/target
+          key: build-output
+      - name: Run cargo test
+        run: cargo test --manifest-path ${{ matrix.module }}/Cargo.toml 
+      - name: Cache build output
+        id: build-cache 
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ matrix.module }}/target
+          key: build-output
+  cargo-clippy:
+    runs-on: ubuntu-latest
+    container: 
+      image: docker.ascendise.ch/ascendise/cargo-runner:1.0.2
+      credentials:
+        username: ${{ secrets.DOCKER_USER }}
+        password: ${{ secrets.DOCKER_PASS }}
+    strategy:
+      matrix:
+        module: [./lib, ./app]
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v3
+      - name: Cache build output
+        id: build-cache 
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ matrix.module }}/target
+          key: build-output
+      - name: Run cargo clippy
+        run: cargo clippy --manifest-path ${{ matrix.module }}/Cargo.toml -- -D warning
+      - name: Cache build output
+        id: build-cache 
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ matrix.module }}/target
+          key: build-output
