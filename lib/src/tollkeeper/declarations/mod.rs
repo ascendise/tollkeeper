@@ -2,90 +2,12 @@ pub mod hashcash;
 
 use std::{collections::HashMap, error::Error, fmt::Display};
 
+use super::descriptions::Suspect;
+
 /// Creates and verifies [tolls](Toll)
 pub trait Declaration {
     fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll;
     fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, InvalidPaymentError>;
-}
-
-/// Information about the source trying to access the resource
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Suspect {
-    client_ip: String,
-    user_agent: String,
-    destination: Destination,
-}
-
-impl Suspect {
-    pub fn new(
-        client_ip: impl Into<String>,
-        user_agent: impl Into<String>,
-        destination: Destination,
-    ) -> Self {
-        Self {
-            client_ip: client_ip.into(),
-            user_agent: user_agent.into(),
-            destination,
-        }
-    }
-
-    pub fn client_ip(&self) -> &str {
-        &self.client_ip
-    }
-
-    pub fn user_agent(&self) -> &str {
-        &self.user_agent
-    }
-
-    pub fn destination(&self) -> &Destination {
-        &self.destination
-    }
-
-    /// Full 'name' of suspect
-    pub fn identifier(&self) -> String {
-        format!("({})[{}]", self.user_agent, self.client_ip)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Destination {
-    base_url: String,
-    port: u16,
-    path: String,
-}
-
-impl Destination {
-    pub fn new(base_url: impl Into<String>) -> Self {
-        Self {
-            base_url: base_url.into(),
-            port: 80,
-            path: String::from("/"),
-        }
-    }
-
-    pub fn new_with_details(
-        base_url: impl Into<String>,
-        port: u16,
-        path: impl Into<String>,
-    ) -> Self {
-        Self {
-            base_url: base_url.into(),
-            port,
-            path: path.into(),
-        }
-    }
-
-    pub fn base_url(&self) -> &str {
-        &self.base_url
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
-    pub fn path(&self) -> &str {
-        &self.path
-    }
 }
 
 /// A Proof-of-Work challenge to be solved before being granted access
@@ -177,7 +99,7 @@ impl Payment {
     }
 }
 
-/// Represents an access token for an [Order]
+/// Represents an access token for an [super::Order]
 #[derive(Debug, PartialEq, Eq)]
 pub struct Visa {
     order_id: OrderIdentifier,
@@ -189,7 +111,7 @@ impl Visa {
         Self { order_id, suspect }
     }
 
-    /// [Order] the [Visa] was issued for
+    /// [super::Order] the [Visa] was issued for
     pub fn order_id(&self) -> &OrderIdentifier {
         &self.order_id
     }

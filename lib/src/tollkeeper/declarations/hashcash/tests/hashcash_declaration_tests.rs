@@ -1,11 +1,9 @@
-#[cfg(test)]
-use crate::tollkeeper::declarations::{Destination, OrderIdentifier, Suspect};
+use crate::tollkeeper::declarations::*;
 use crate::tollkeeper::{
     declarations::{
         hashcash::{DoubleSpentDatabaseImpl, HashcashDeclaration},
         Declaration, Payment,
-    },
-    util::FakeDateTimeProvider,
+    }, descriptions::Destination, util::FakeDateTimeProvider
 };
 use chrono::TimeZone;
 

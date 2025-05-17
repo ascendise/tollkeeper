@@ -1,4 +1,5 @@
 pub mod declarations;
+pub mod descriptions;
 pub mod err;
 pub mod util;
 
@@ -7,7 +8,8 @@ mod tests;
 
 use std::{error::Error, fmt::Display};
 
-use declarations::{Declaration, Destination, OrderIdentifier, Payment, Suspect, Toll, Visa};
+use declarations::*;
+use descriptions::*;
 use err::*;
 use uuid::Uuid;
 
@@ -228,11 +230,6 @@ impl Order {
     pub fn id(&self) -> &str {
         &self.id
     }
-}
-
-/// Examines [Suspect] for a defined condition like matching IP/User-Agent/...
-pub trait Description {
-    fn matches(&self, suspect: &Suspect) -> bool;
 }
 
 struct Examination {

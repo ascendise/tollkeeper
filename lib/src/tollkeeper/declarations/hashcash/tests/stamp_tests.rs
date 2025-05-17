@@ -1,6 +1,5 @@
 use chrono::TimeZone;
 
-#[cfg(test)]
 use crate::tollkeeper::declarations::hashcash::*;
 
 #[test]
