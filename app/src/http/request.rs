@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::Method;
+use super::*;
 
 pub struct Request {
     method: Method,
@@ -8,8 +8,8 @@ pub struct Request {
     http_version: String,
     host: String,
     headers: Headers,
+    body: BodyStream,
 }
-
 impl Request {
     /// HTTP Protocol version
     pub fn http_version(&self) -> &str {
