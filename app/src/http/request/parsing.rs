@@ -15,7 +15,7 @@ pub trait Parse: Sized {
     fn parse(stream: &mut Cursor<&[u8]>) -> Result<Self, Self::Err>;
     fn get_string_until(stream: &mut Cursor<&[u8]>, byte: u8) -> Result<String, ()> {
         let mut buffer = Vec::new();
-        if let Err(_) = stream.read_until(byte, &mut buffer) {
+        if stream.read_until(byte, &mut buffer).is_err() {
             return Err(());
         };
         buffer.pop(); //Remove whitespace from read

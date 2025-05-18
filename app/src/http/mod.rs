@@ -1,36 +1,33 @@
-use std::{
-    io::Read,
-    str::FromStr,
-};
+use std::{io::Read, str::FromStr};
 
 mod request;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Method {
-    OPTIONS,
-    GET,
-    HEAD,
-    POST,
-    PUT,
-    DELETE,
-    TRACE,
-    CONNECT,
-    EXTENSION(String),
+    Options,
+    Get,
+    Head,
+    Post,
+    Put,
+    Delete,
+    Trace,
+    Connect,
+    Extension(String),
 }
 impl FromStr for Method {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let method = match s {
-            "OPTIONS" => Method::OPTIONS,
-            "GET" => Method::GET,
-            "HEAD" => Method::HEAD,
-            "POST" => Method::POST,
-            "PUT" => Method::PUT,
-            "DELETE" => Method::DELETE,
-            "TRACE" => Method::TRACE,
-            "CONNECT" => Method::CONNECT,
-            _ => Method::EXTENSION(s.into()),
+            "OPTIONS" => Method::Options,
+            "GET" => Method::Get,
+            "HEAD" => Method::Head,
+            "POST" => Method::Post,
+            "PUT" => Method::Put,
+            "DELETE" => Method::Delete,
+            "TRACE" => Method::Trace,
+            "CONNECT" => Method::Connect,
+            _ => Method::Extension(s.into()),
         };
         Ok(method)
     }

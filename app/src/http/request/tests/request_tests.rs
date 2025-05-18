@@ -14,7 +14,7 @@ pub fn parse_should_read_minimal_http_request() {
     let request = Request::parse(&mut io::Cursor::new(raw_request))
         .expect("Failed to parse perfectly valid request");
     // Assert
-    assert_eq!(Method::GET, *request.method());
+    assert_eq!(Method::Get, *request.method());
     assert_eq!("/", request.uri());
     assert_eq!("HTTP/1.1", request.http_version());
     let mut headers = HashMap::<String, String>::new();
