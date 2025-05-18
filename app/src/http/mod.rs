@@ -1,4 +1,8 @@
-use std::{io::Read, net, str::FromStr};
+use std::{
+    io::{BufReader, Read},
+    net,
+    str::FromStr,
+};
 
 mod request;
 pub use request::*;
@@ -35,10 +39,10 @@ impl FromStr for Method {
 }
 
 pub struct BodyStream {
-    tcp_stream: net::TcpStream,
+    cursor: std::io::Cursor<Vec<u8>>,
 }
 impl Read for BodyStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.tcp_stream.read(buf)
+        self.cursor.read(buf)
     }
 }

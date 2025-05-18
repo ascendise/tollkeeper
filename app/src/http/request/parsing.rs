@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::Display,
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader, Cursor, Read},
     str::FromStr,
 };
 
@@ -10,36 +10,14 @@ use crate::http::Method;
 
 use super::{Headers, Request};
 
-pub trait Parse {
-    fn parse(stream: impl Read) -> Result<Request, RequestParseError>;
+pub trait Parse<T>: Sized {
+    type Err;
+    fn parse(stream: Cursor<T>) -> Result<Self, Self::Err>;
 }
-impl Parse for Request {
-    fn parse(stream: impl Read) -> Result<Request, RequestParseError> {
-        let reader = BufReader::new(stream);
-        let lines: Vec<String> = reader
-            .lines()
-            .map(|r| r.unwrap())
-            .take_while(|l| l.is_empty())
-            .collect();
-        let status_line = StatusLine::from_str(&lines[0]).unwrap();
-        let mut headers = HashMap::<String, String>::new();
-        for line in lines.iter().skip(1) {
-            let header = line.split(':').collect::<Vec<&str>>();
-            if header.len() != 2 {
-                let error = RequestParseError::HeaderParseFail(line.into());
-                return Err(error);
-            }
-            let field_name = header[0];
-            let field_value = header[1].trim();
-            headers.insert(field_name.into(), field_value.into());
-        }
-        let req = Request::new(
-            status_line.method,
-            status_line.request_target,
-            status_line.http_version,
-            Headers::new(headers),
-        );
-        Ok(req)
+impl Parse<&[u8]> for Request {
+    type Err = RequestParseError;
+    fn parse(stream: Cursor<&[u8]>) -> Result<Request, RequestParseError> {
+        todo!();
     }
 }
 
