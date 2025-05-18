@@ -1,11 +1,9 @@
 use std::{
-    io::{BufReader, Read},
-    net,
+    io::Read,
     str::FromStr,
 };
 
 mod request;
-pub use request::*;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Method {

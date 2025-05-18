@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::Display,
-    io::{BufRead, BufReader, Cursor, Read},
+    io::{BufRead, Cursor},
     str::FromStr,
 };
 
@@ -10,27 +10,46 @@ use crate::http::Method;
 
 use super::{Headers, Request};
 
-pub trait Parse<T>: Sized {
+pub trait Parse: Sized {
     type Err;
-    fn parse(stream: Cursor<T>) -> Result<Self, Self::Err>;
+    fn parse(stream: &mut Cursor<&[u8]>) -> Result<Self, Self::Err>;
+    fn get_string_until(stream: &mut Cursor<&[u8]>, byte: u8) -> Result<String, ()> {
+        let mut buffer = Vec::new();
+        if let Err(_) = stream.read_until(byte, &mut buffer) {
+            return Err(());
+        };
+        buffer.pop(); //Remove whitespace from read
+        match String::from_utf8(buffer) {
+            Ok(s) => Ok(s),
+            Err(_) => Err(()),
+        }
+    }
 }
-impl Parse<&[u8]> for Request {
+impl Parse for Request {
     type Err = RequestParseError;
-    fn parse(stream: Cursor<&[u8]>) -> Result<Request, RequestParseError> {
-        todo!();
+    fn parse(stream: &mut Cursor<&[u8]>) -> Result<Request, RequestParseError> {
+        let status_line = StatusLine::parse(stream).unwrap();
+        let headers = Headers::new(HashMap::new());
+        let request = Request::new(
+            status_line.method,
+            status_line.request_target,
+            status_line.http_version,
+            headers,
+        );
+        Ok(request)
     }
 }
 
 #[derive(Debug)]
 pub enum RequestParseError {
-    StatusLineParseFail(String),
+    StatusLineParseFail,
     HeaderParseFail(String),
 }
 impl Error for RequestParseError {}
 impl Display for RequestParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RequestParseError::StatusLineParseFail(v) => write!(f, "Invalid status line: '{v}'"),
+            RequestParseError::StatusLineParseFail => write!(f, "Invalid status line"),
             RequestParseError::HeaderParseFail(v) => write!(f, "Invalid header line: '{v}'"),
         }
     }
@@ -41,20 +60,22 @@ struct StatusLine {
     request_target: String,
     http_version: String,
 }
-impl FromStr for StatusLine {
+impl Parse for StatusLine {
     type Err = RequestParseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let status_line = s.split(' ').collect::<Vec<&str>>();
-        if status_line.len() != 3 {
-            Err(RequestParseError::StatusLineParseFail(s.into()))
-        } else {
-            let status_line = StatusLine {
-                method: Method::from_str(status_line[0]).expect("Failed to parse method"),
-                request_target: status_line[1].into(),
-                http_version: status_line[2].into(),
-            };
-            Ok(status_line)
-        }
+    fn parse(stream: &mut Cursor<&[u8]>) -> Result<Self, Self::Err> {
+        let result = |result: Result<_, _>| match result {
+            Ok(v) => Ok(v),
+            Err(_) => Err(RequestParseError::StatusLineParseFail),
+        };
+        let method = result(Self::get_string_until(stream, b' '))?;
+        let request_target = result(Self::get_string_until(stream, b' '))?;
+        let http_version = result(Self::get_string_until(stream, b' '))?;
+        let status_line = StatusLine {
+            method: Method::from_str(&method).unwrap(),
+            request_target,
+            http_version,
+        };
+        Ok(status_line)
     }
 }

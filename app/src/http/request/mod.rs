@@ -8,7 +8,7 @@ use super::*;
 
 pub struct Request {
     method: Method,
-    uri: String,
+    request_target: String,
     http_version: String,
     headers: Headers,
     body: Option<BodyStream>,
@@ -22,7 +22,7 @@ impl Request {
     ) -> Self {
         Self {
             method,
-            uri: uri.into(),
+            request_target: uri.into(),
             http_version: http_version.into(),
             headers,
             body: None,
@@ -38,7 +38,7 @@ impl Request {
     ) -> Self {
         Self {
             method,
-            uri: uri.into(),
+            request_target: uri.into(),
             http_version: http_version.into(),
             headers,
             body: Some(body),
@@ -52,7 +52,7 @@ impl Request {
 
     /// Location of the resource. Can be relative or absolute
     pub fn uri(&self) -> &str {
-        &self.uri
+        &self.request_target
     }
 
     pub fn method(&self) -> &Method {
