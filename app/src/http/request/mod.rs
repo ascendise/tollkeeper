@@ -10,7 +10,6 @@ pub struct Request {
     method: Method,
     uri: String,
     http_version: String,
-    host: String,
     headers: Headers,
     body: Option<BodyStream>,
 }
@@ -19,14 +18,12 @@ impl Request {
         method: Method,
         uri: impl Into<String>,
         http_version: impl Into<String>,
-        host: impl Into<String>,
         headers: Headers,
     ) -> Self {
         Self {
             method,
             uri: uri.into(),
             http_version: http_version.into(),
-            host: host.into(),
             headers,
             body: None,
         }
@@ -36,7 +33,6 @@ impl Request {
         method: Method,
         uri: impl Into<String>,
         http_version: impl Into<String>,
-        host: impl Into<String>,
         headers: Headers,
         body: BodyStream,
     ) -> Self {
@@ -44,7 +40,6 @@ impl Request {
             method,
             uri: uri.into(),
             http_version: http_version.into(),
-            host: host.into(),
             headers,
             body: Some(body),
         }
@@ -64,11 +59,6 @@ impl Request {
         &self.method
     }
 
-    /// Target host for request
-    pub fn host(&self) -> &str {
-        &self.host
-    }
-
     /// Request headers
     pub fn headers(&self) -> &Headers {
         &self.headers
@@ -79,6 +69,7 @@ impl Request {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct Headers {
     headers: HashMap<String, String>,
 }
@@ -115,8 +106,8 @@ impl Headers {
         self.headers.get("From")
     }
 
-    pub fn host(&self) -> Option<&String> {
-        self.headers.get("Host")
+    pub fn host(&self) -> &String {
+        self.headers.get("Host").unwrap()
     }
 
     pub fn if_match(&self) -> Option<&String> {

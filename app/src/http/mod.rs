@@ -1,8 +1,9 @@
-use std::{io::Read, net};
+use std::{io::Read, net, str::FromStr};
 
 mod request;
 pub use request::*;
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Method {
     OPTIONS,
     GET,
@@ -13,6 +14,24 @@ pub enum Method {
     TRACE,
     CONNECT,
     EXTENSION(String),
+}
+impl FromStr for Method {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let method = match s {
+            "OPTIONS" => Method::OPTIONS,
+            "GET" => Method::GET,
+            "HEAD" => Method::HEAD,
+            "POST" => Method::POST,
+            "PUT" => Method::PUT,
+            "DELETE" => Method::DELETE,
+            "TRACE" => Method::TRACE,
+            "CONNECT" => Method::CONNECT,
+            _ => Method::EXTENSION(s.into()),
+        };
+        Ok(method)
+    }
 }
 
 pub struct BodyStream {
