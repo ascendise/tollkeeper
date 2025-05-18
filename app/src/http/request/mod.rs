@@ -1,3 +1,7 @@
+mod parsing;
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashMap;
 
 use super::*;
@@ -8,9 +12,44 @@ pub struct Request {
     http_version: String,
     host: String,
     headers: Headers,
-    body: BodyStream,
+    body: Option<BodyStream>,
 }
 impl Request {
+    pub fn new(
+        method: Method,
+        uri: impl Into<String>,
+        http_version: impl Into<String>,
+        host: impl Into<String>,
+        headers: Headers,
+    ) -> Self {
+        Self {
+            method,
+            uri: uri.into(),
+            http_version: http_version.into(),
+            host: host.into(),
+            headers,
+            body: None,
+        }
+    }
+
+    pub fn with_body(
+        method: Method,
+        uri: impl Into<String>,
+        http_version: impl Into<String>,
+        host: impl Into<String>,
+        headers: Headers,
+        body: BodyStream,
+    ) -> Self {
+        Self {
+            method,
+            uri: uri.into(),
+            http_version: http_version.into(),
+            host: host.into(),
+            headers,
+            body: Some(body),
+        }
+    }
+
     /// HTTP Protocol version
     pub fn http_version(&self) -> &str {
         &self.http_version
@@ -33,6 +72,10 @@ impl Request {
     /// Request headers
     pub fn headers(&self) -> &Headers {
         &self.headers
+    }
+
+    pub fn body(&mut self) -> &Option<BodyStream> {
+        &self.body
     }
 }
 

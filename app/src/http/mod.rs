@@ -1,6 +1,7 @@
 use std::{io::Read, net};
 
-pub mod request;
+mod request;
+pub use request::*;
 
 pub enum Method {
     OPTIONS,
