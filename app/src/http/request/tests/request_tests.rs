@@ -8,7 +8,7 @@ use crate::http::Method;
 #[test]
 pub fn parse_should_read_minimal_http_request() {
     // Arrange
-    let raw_request = String::from("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    let raw_request = String::from("GET / HTTP/1.1\r\nHost:localhost\r\n\r\n");
     let raw_request = raw_request.as_bytes();
     // Act
     let request = Request::parse(&mut io::Cursor::new(raw_request))
