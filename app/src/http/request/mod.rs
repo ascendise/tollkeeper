@@ -64,8 +64,8 @@ impl Request {
         &self.headers
     }
 
-    pub fn body(&mut self) -> &Option<BodyStream> {
-        &self.body
+    pub fn body(&mut self) -> &mut Option<BodyStream> {
+        &mut self.body
     }
 }
 

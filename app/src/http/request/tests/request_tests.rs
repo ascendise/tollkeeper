@@ -46,12 +46,13 @@ pub fn parse_should_read_http_request_with_body() {
     expected_headers.insert("Content-Type".into(), "text/raw; charset=utf8".into());
     let expected_headers = Headers::new(expected_headers);
     assert_eq!(&expected_headers, request.headers());
-    let body = match request.body() {
-        Some(b) => b,
+    let mut content = String::new();
+    match request.body() {
+        Some(b) => b
+            .read_to_string(&mut content)
+            .expect("Something bad happened while trying to read body"),
         None => panic!("No body found"),
     };
-    let mut content = String::new();
-    //body.read_to_string(&mut content);
     let expected_content = "Hello, World!\r\n";
     assert_eq!(expected_content, content);
 }

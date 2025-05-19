@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::Display,
-    io::{BufRead, Cursor, Read},
+    io::{BufRead, Cursor, Read, Seek, SeekFrom},
     str::FromStr,
 };
 
@@ -32,12 +32,19 @@ impl Parse for Request {
 
 fn parse_headers(cursor: &mut Cursor<&[u8]>) -> Result<HashMap<String, String>, ()> {
     let mut headers = HashMap::new();
-    let key = get_string_until(cursor, b':')?;
-    let value = get_string_until(cursor, b'\r')?;
-    let mut newline = [0; 1];
-    cursor.read_exact(&mut newline).unwrap();
-    headers.insert(key, value);
+    while !is_headers_eof(cursor) {
+        let key = get_string_until(cursor, b':')?;
+        let value = get_string_until(cursor, b'\r')?;
+        let mut newline = [0; 1];
+        cursor.read_exact(&mut newline).unwrap();
+        headers.insert(key, value);
+    }
     Ok(headers)
+}
+fn is_headers_eof(cursor: &mut Cursor<&[u8]>) -> bool {
+    let skipped = cursor.skip_until(b'\n').unwrap() as i64;
+    cursor.seek(SeekFrom::Current(skipped * -1)).unwrap();
+    skipped == 2
 }
 fn get_string_until(stream: &mut Cursor<&[u8]>, byte: u8) -> Result<String, ()> {
     let mut buffer = Vec::new();

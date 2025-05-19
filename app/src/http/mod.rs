@@ -36,6 +36,12 @@ impl FromStr for Method {
 pub struct BodyStream {
     cursor: std::io::Cursor<Vec<u8>>,
 }
+
+impl BodyStream {
+    pub fn new(cursor: std::io::Cursor<Vec<u8>>) -> Self {
+        Self { cursor }
+    }
+}
 impl Read for BodyStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.cursor.read(buf)
