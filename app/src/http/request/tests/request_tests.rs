@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io;
+use std::io::{self, Read};
 
 use crate::http::request::Headers;
 use crate::http::request::{parsing::Parse, Request};
@@ -8,7 +8,7 @@ use crate::http::Method;
 #[test]
 pub fn parse_should_read_minimal_http_request() {
     // Arrange
-    let raw_request = String::from("GET / HTTP/1.1\r\nHost:localhost\r\n\r\n");
+    let raw_request = concat!("GET / HTTP/1.1\r\n", "Host:localhost\r\n\r\n");
     let raw_request = raw_request.as_bytes();
     // Act
     let request = Request::parse(&mut io::Cursor::new(raw_request))
@@ -21,4 +21,37 @@ pub fn parse_should_read_minimal_http_request() {
     headers.insert("Host".into(), "localhost".into());
     let expected_headers = Headers::new(headers);
     assert_eq!(expected_headers, *request.headers());
+}
+
+#[test]
+pub fn parse_should_read_http_request_with_body() {
+    // Arrange
+    let raw_request = concat!(
+        "POST / HTTP/1.1\r\n",
+        "Host:localhost\r\n",
+        "Content-Type:text/raw; charset=utf8\r\n",
+        "\r\n",
+        "Hello, World!\r\n"
+    );
+    let raw_request = raw_request.as_bytes();
+    // Act
+    let mut request = Request::parse(&mut io::Cursor::new(raw_request))
+        .expect("Failed to parse perfectly valid request");
+    // Assert
+    assert_eq!(&Method::Post, request.method());
+    assert_eq!("/", request.uri());
+    assert_eq!("HTTP/1.1", request.http_version());
+    let mut expected_headers = HashMap::<String, String>::new();
+    expected_headers.insert("Host".into(), "localhost".into());
+    expected_headers.insert("Content-Type".into(), "text/raw; charset=utf8".into());
+    let expected_headers = Headers::new(expected_headers);
+    assert_eq!(&expected_headers, request.headers());
+    let body = match request.body() {
+        Some(b) => b,
+        None => panic!("No body found"),
+    };
+    let mut content = String::new();
+    //body.read_to_string(&mut content);
+    let expected_content = "Hello, World!\r\n";
+    assert_eq!(expected_content, content);
 }
