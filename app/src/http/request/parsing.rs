@@ -20,22 +20,32 @@ impl Parse for Request {
         let status_line = StatusLine::parse(cursor).unwrap();
         let headers = parse_headers(cursor).or(Err(RequestParseError::HeaderParseFail))?;
         let headers = Headers::new(headers);
-        let mut body = Vec::new();
-        cursor.read_to_end(&mut body).or(Err(RequestParseError::ReadBodyFail))?;
-        let request = if body.len() < 4 {
-            Request::new(
-                status_line.method,
-                status_line.request_target,
-                status_line.http_version,
-                headers)
-        } else {
-            body = body.drain(2..).collect();
-            Request::with_body(
+        let request = match headers.content_length() {
+            Some(v) => {
+                let content_length = v.parse().expect("Failed to parse content length");
+                let mut body = vec![0u8; content_length];
+                cursor
+                    .seek(SeekFrom::Current(2))
+                    .expect("Failed skipping newline for reading body");
+                cursor
+                    .read_exact(&mut body)
+                    .or(Err(RequestParseError::ReadBodyFail))?;
+                println!("{}", body.len());
+                let body_cursor = Cursor::new(body);
+                Request::with_body(
+                    status_line.method,
+                    status_line.request_target,
+                    status_line.http_version,
+                    headers,
+                    BodyStream::new(body_cursor),
+                )
+            }
+            None => Request::new(
                 status_line.method,
                 status_line.request_target,
                 status_line.http_version,
                 headers,
-                BodyStream::new(Cursor::new(body)))
+            ),
         };
         Ok(request)
     }

@@ -154,6 +154,10 @@ impl Headers {
         self.headers.get("User-Agent")
     }
 
+    pub fn content_length(&self) -> Option<&String> {
+        self.headers.get("Content-Length")
+    }
+
     pub fn extension(&self, name: &str) -> Option<&String> {
         self.headers.get(name)
     }

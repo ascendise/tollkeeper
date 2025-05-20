@@ -30,6 +30,7 @@ pub fn parse_should_read_http_request_with_body() {
         "POST / HTTP/1.1\r\n",
         "Host:localhost\r\n",
         "Content-Type:text/raw; charset=utf8\r\n",
+        "Content-Length:15\r\n",
         "\r\n",
         "Hello, World!\r\n"
     );
@@ -44,6 +45,7 @@ pub fn parse_should_read_http_request_with_body() {
     let mut expected_headers = HashMap::<String, String>::new();
     expected_headers.insert("Host".into(), "localhost".into());
     expected_headers.insert("Content-Type".into(), "text/raw; charset=utf8".into());
+    expected_headers.insert("Content-Length".into(), "15".into());
     let expected_headers = Headers::new(expected_headers);
     assert_eq!(&expected_headers, request.headers());
     let mut content = String::new();
