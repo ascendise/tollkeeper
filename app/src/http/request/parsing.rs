@@ -15,10 +15,10 @@ pub trait Parse: Sized {
     fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Self, Self::Err>;
 }
 impl Parse for Request {
-    type Err = RequestParseError;
-    fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Request, RequestParseError> {
-        let status_line = StatusLine::parse(cursor).unwrap();
-        let headers = parse_headers(cursor).or(Err(RequestParseError::HeaderParseFail))?;
+    type Err = ParseError;
+    fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Request, ParseError> {
+        let status_line = RequestLine::parse(cursor).unwrap();
+        let headers = parse_headers(cursor).or(Err(ParseError::Header))?;
         let headers = Headers::new(headers);
         let request = match headers.content_length() {
             Some(v) => {
@@ -27,9 +27,7 @@ impl Parse for Request {
                 cursor
                     .seek(SeekFrom::Current(2))
                     .expect("Failed skipping newline for reading body");
-                cursor
-                    .read_exact(&mut body)
-                    .or(Err(RequestParseError::ReadBodyFail))?;
+                cursor.read_exact(&mut body).or(Err(ParseError::Body))?;
                 println!("{}", body.len());
                 let body_cursor = Cursor::new(body);
                 Request::with_body(
@@ -79,42 +77,42 @@ fn get_string_until(stream: &mut Cursor<&[u8]>, byte: u8) -> Result<String, ()> 
     }
 }
 
-#[derive(Debug)]
-pub enum RequestParseError {
-    StatusLineParseFail,
-    HeaderParseFail,
-    ReadBodyFail,
+#[derive(Debug, PartialEq, Eq)]
+pub enum ParseError {
+    StatusLine,
+    Header,
+    Body,
 }
-impl Error for RequestParseError {}
-impl Display for RequestParseError {
+impl Error for ParseError {}
+impl Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RequestParseError::StatusLineParseFail => write!(f, "Invalid status line"),
-            RequestParseError::HeaderParseFail => write!(f, "Invalid header line"),
-            RequestParseError::ReadBodyFail => write!(f, "Failed to read body"),
+            ParseError::StatusLine => write!(f, "Invalid status line"),
+            ParseError::Header => write!(f, "Invalid header line"),
+            ParseError::Body => write!(f, "Failed to read body"),
         }
     }
 }
 
-struct StatusLine {
+struct RequestLine {
     method: Method,
     request_target: String,
     http_version: String,
 }
-impl Parse for StatusLine {
-    type Err = RequestParseError;
+impl Parse for RequestLine {
+    type Err = ParseError;
 
     fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Self, Self::Err> {
         let result = |result: Result<_, _>| match result {
             Ok(v) => Ok(v),
-            Err(_) => Err(RequestParseError::StatusLineParseFail),
+            Err(_) => Err(ParseError::StatusLine),
         };
         let method = result(get_string_until(cursor, b' '))?;
         let request_target = result(get_string_until(cursor, b' '))?;
         let http_version = result(get_string_until(cursor, b'\r'))?;
         let mut newline = [0; 1];
         cursor.read_exact(&mut newline).unwrap();
-        let status_line = StatusLine {
+        let status_line = RequestLine {
             method: Method::from_str(&method).unwrap(),
             request_target,
             http_version,

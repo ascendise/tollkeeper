@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::io::{self, Read};
+use test_case::test_case;
 
 use crate::http::request::Headers;
-use crate::http::request::{parsing::Parse, Request};
+use crate::http::request::{parsing::*, Request};
 use crate::http::Method;
 
 #[test]
@@ -57,4 +58,29 @@ pub fn parse_should_read_http_request_with_body() {
     };
     let expected_content = "Hello, World!\r\n";
     assert_eq!(expected_content, content);
+}
+
+#[test_case(String::from("Hello") ; "Hello")]
+#[test_case(String::from("GET/HTTP/1.1\r\n") ; "no whitespace")]
+#[test_case(String::from("GET/HTTP /1.1\r\n") ; "only some whitespace")]
+#[test_case(String::from("GET   /   HTTP/1.1\r\n") ; "tab instead of whitespace")]
+#[test_case(String::from("GET   /   HTTP/1.1\r\n") ; "too much whitespace")]
+#[test_case(String::from("GET   /   HTTP/1.1\r") ; "no line feed")]
+#[test_case(String::from("GET   /   HTTP/1.1\n") ; "no carriage return")]
+#[test_case(String::from("GET   /   HTTP/1.1") ; "no new line")]
+#[test_case(String::from("    GET / HTTP/1.1\r\n") ; "leading whitespace")]
+#[test_case(String::from("GET / HTTP/1.1     \r\n") ; "trailing whitespace")]
+pub fn parse_should_reject_status_line_with_invalid_format(status_line: String) {
+    // Arrange
+    let raw_request = status_line + "Host:localhost\r\n\r\n";
+    // Act
+    let mut cursor = io::Cursor::new(raw_request.as_bytes());
+    let result = Request::parse(&mut cursor);
+    // Assert
+    let error = match result {
+        Ok(_) => panic!("Request with invalid status line parsed"),
+        Err(e) => e,
+    };
+    let expected = ParseError::StatusLine;
+    assert_eq!(expected, error);
 }
