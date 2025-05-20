@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::http::Method;
+use crate::http::{BodyStream, Method};
 
 use super::{Headers, Request};
 
@@ -20,12 +20,23 @@ impl Parse for Request {
         let status_line = StatusLine::parse(cursor).unwrap();
         let headers = parse_headers(cursor).or(Err(RequestParseError::HeaderParseFail))?;
         let headers = Headers::new(headers);
-        let request = Request::new(
-            status_line.method,
-            status_line.request_target,
-            status_line.http_version,
-            headers,
-        );
+        let mut body = Vec::new();
+        cursor.read_to_end(&mut body).or(Err(RequestParseError::ReadBodyFail))?;
+        let request = if body.len() < 4 {
+            Request::new(
+                status_line.method,
+                status_line.request_target,
+                status_line.http_version,
+                headers)
+        } else {
+            body = body.drain(2..).collect();
+            Request::with_body(
+                status_line.method,
+                status_line.request_target,
+                status_line.http_version,
+                headers,
+                BodyStream::new(Cursor::new(body)))
+        };
         Ok(request)
     }
 }
@@ -62,6 +73,7 @@ fn get_string_until(stream: &mut Cursor<&[u8]>, byte: u8) -> Result<String, ()> 
 pub enum RequestParseError {
     StatusLineParseFail,
     HeaderParseFail,
+    ReadBodyFail,
 }
 impl Error for RequestParseError {}
 impl Display for RequestParseError {
@@ -69,6 +81,7 @@ impl Display for RequestParseError {
         match self {
             RequestParseError::StatusLineParseFail => write!(f, "Invalid status line"),
             RequestParseError::HeaderParseFail => write!(f, "Invalid header line"),
+            RequestParseError::ReadBodyFail => write!(f, "Failed to read body"),
         }
     }
 }
