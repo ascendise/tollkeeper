@@ -63,7 +63,7 @@ pub fn parse_should_read_http_request_with_body() {
 #[test_case(String::from("Hello") ; "Hello")]
 #[test_case(String::from("GET/HTTP/1.1\r\n") ; "no whitespace")]
 #[test_case(String::from("GET/HTTP /1.1\r\n") ; "only some whitespace")]
-#[test_case(String::from("GET   /   HTTP/1.1\r\n") ; "tab instead of whitespace")]
+#[test_case(String::from("GET\t/\tHTTP/1.1\r\n") ; "tab instead of whitespace")]
 #[test_case(String::from("GET   /   HTTP/1.1\r\n") ; "too much whitespace")]
 #[test_case(String::from("GET   /   HTTP/1.1\r") ; "no line feed")]
 #[test_case(String::from("GET   /   HTTP/1.1\n") ; "no carriage return")]
@@ -94,7 +94,10 @@ pub fn parse_should_reject_status_line_with_invalid_format(request_line: String)
 }
 
 #[test_case(String::from("X-Hello:Do you know where my mommy is?\r\n") ; "no Host header")]
-#[test_case(String::from("Host:localhost\r\nX-Whitespace :text\r\n") ; "forbidden whitespace between field name and colon")]
+#[test_case(String::from("Host:localhost\r\nX-Whitespace :text\r\n") ; "forbidden whitespace (SPACE) between field name and colon")]
+#[test_case(String::from("Host:localhost\r\nX-Whitespace\t:text\r\n") ; "forbidden whitespace (TAB) between field name and colon")]
+#[test_case(String::from("Host:localhost\r") ; "no line feed")]
+#[test_case(String::from("Host:localhost\n") ; "no carriage return")]
 pub fn parse_should_reject_headers_with_invalid_format(headers: String) {
     // Arrange
     let raw_request = format!("GET / HTTP/1.1\r\n{headers}\r\n");

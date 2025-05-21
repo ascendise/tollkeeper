@@ -146,7 +146,7 @@ impl Parse for Headers {
         let mut headers = HashMap::new();
         while !is_end_of_headers(cursor)? {
             let key = get_string_until(cursor, b':', ParseError::Header)?;
-            if key.contains(' ') {
+            if contains_whitespace(&key) {
                 return Err(ParseError::Header);
             }
             let value = get_string_until(cursor, b'\r', ParseError::Header)?;
@@ -158,6 +158,10 @@ impl Parse for Headers {
         }
         Ok(Headers::new(headers)?)
     }
+}
+
+fn contains_whitespace(value: &str) -> bool {
+    value.chars().any(|c| c.is_whitespace())
 }
 
 fn is_end_of_headers(cursor: &mut Cursor<&[u8]>) -> Result<bool, ParseError> {
