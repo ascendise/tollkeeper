@@ -17,7 +17,7 @@ pub trait Parse: Sized {
 impl Parse for Request {
     type Err = ParseError;
     fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Request, ParseError> {
-        let status_line = RequestLine::parse(cursor)?;
+        let request_line = RequestLine::parse(cursor)?;
         let headers = parse_headers(cursor)?;
         let headers = Headers::new(headers);
         let request = match headers.content_length() {
@@ -31,17 +31,17 @@ impl Parse for Request {
                 println!("{}", body.len());
                 let body_cursor = Cursor::new(body);
                 Request::with_body(
-                    status_line.method,
-                    status_line.request_target,
-                    status_line.http_version,
+                    request_line.method,
+                    request_line.request_target,
+                    request_line.http_version,
                     headers,
                     BodyStream::new(body_cursor),
                 )
             }
             None => Request::new(
-                status_line.method,
-                status_line.request_target,
-                status_line.http_version,
+                request_line.method,
+                request_line.request_target,
+                request_line.http_version,
                 headers,
             ),
         };
@@ -113,6 +113,31 @@ struct RequestLine {
     request_target: String,
     http_version: String,
 }
+impl RequestLine {
+    fn new(
+        method: Method,
+        request_target: String,
+        http_version: String,
+    ) -> Result<Self, ParseError> {
+        let request_line = Self {
+            method,
+            request_target: Self::check_field(request_target)?,
+            http_version: Self::check_field(http_version)?,
+        };
+        Ok(request_line)
+    }
+    fn check_field(str: String) -> Result<String, ParseError> {
+        let bytes = str.as_bytes();
+        if bytes.len() == 0 {
+            return Err(ParseError::RequestLine);
+        }
+        if bytes[0] == b' ' || bytes[bytes.len() - 1] == b' ' {
+            Err(ParseError::RequestLine)
+        } else {
+            Ok(str)
+        }
+    }
+}
 impl Parse for RequestLine {
     type Err = ParseError;
 
@@ -128,11 +153,11 @@ impl Parse for RequestLine {
         cursor
             .read_exact(&mut newline)
             .or_else(|e| Err(handle_io_error(e, ParseError::RequestLine)))?;
-        let status_line = RequestLine {
-            method: Method::from_str(&method).or(Err(ParseError::RequestLine))?,
+        let status_line = RequestLine::new(
+            Method::from_str(&method).or(Err(ParseError::RequestLine))?,
             request_target,
             http_version,
-        };
+        )?;
         Ok(status_line)
     }
 }

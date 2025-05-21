@@ -79,7 +79,7 @@ pub fn parse_should_reject_status_line_with_invalid_format(status_line: String) 
     // Assert
     let error = match result {
         Ok(r) => panic!(
-            "Invalid status line got accepted!: '{} {} {}'",
+            "Invalid request line got accepted!: '{} {} {}'",
             r.method(),
             r.uri(),
             r.http_version()
