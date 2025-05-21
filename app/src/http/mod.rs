@@ -34,6 +34,9 @@ impl FromStr for Method {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Err(());
+        }
         let method = match s {
             "OPTIONS" => Method::Options,
             "GET" => Method::Get,

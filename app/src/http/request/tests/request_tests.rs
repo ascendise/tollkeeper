@@ -70,6 +70,9 @@ pub fn parse_should_read_http_request_with_body() {
 #[test_case(String::from("GET   /   HTTP/1.1") ; "no new line")]
 #[test_case(String::from("    GET / HTTP/1.1\r\n") ; "leading whitespace")]
 #[test_case(String::from("GET / HTTP/1.1     \r\n") ; "trailing whitespace")]
+#[test_case(String::from(" / HTTP/1.1\r\n") ; "Missing method")]
+#[test_case(String::from("GET HTTP/1.1\r\n") ; "Missing request target")]
+#[test_case(String::from("GET /\r\n") ; "Missing HTTP version")]
 pub fn parse_should_reject_status_line_with_invalid_format(status_line: String) {
     // Arrange
     let raw_request = status_line + "Host:localhost\r\n\r\n";
