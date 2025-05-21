@@ -74,8 +74,12 @@ pub struct Headers {
     headers: HashMap<String, String>,
 }
 impl Headers {
-    pub fn new(headers: HashMap<String, String>) -> Self {
-        Self { headers }
+    pub fn new(headers: HashMap<String, String>) -> Result<Self, BadRequestError> {
+        if headers.contains_key("Host") {
+            Ok(Self { headers })
+        } else {
+            Err(BadRequestError::NoHostHeader)
+        }
     }
 
     pub fn accept(&self) -> Option<&String> {
@@ -161,4 +165,17 @@ impl Headers {
     pub fn extension(&self, name: &str) -> Option<&String> {
         self.headers.get(name)
     }
+}
+impl Display for Headers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for header in &self.headers {
+            write!(f, "{}:{}\r\n", header.0, header.1)?
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum BadRequestError {
+    NoHostHeader,
 }

@@ -20,7 +20,7 @@ pub fn parse_should_read_minimal_http_request() {
     assert_eq!("HTTP/1.1", request.http_version());
     let mut headers = HashMap::<String, String>::new();
     headers.insert("Host".into(), "localhost".into());
-    let expected_headers = Headers::new(headers);
+    let expected_headers = Headers::new(headers).unwrap();
     assert_eq!(expected_headers, *request.headers());
 }
 
@@ -47,7 +47,7 @@ pub fn parse_should_read_http_request_with_body() {
     expected_headers.insert("Host".into(), "localhost".into());
     expected_headers.insert("Content-Type".into(), "text/raw; charset=utf8".into());
     expected_headers.insert("Content-Length".into(), "15".into());
-    let expected_headers = Headers::new(expected_headers);
+    let expected_headers = Headers::new(expected_headers).unwrap();
     assert_eq!(&expected_headers, request.headers());
     let mut content = String::new();
     match request.body() {
@@ -73,9 +73,9 @@ pub fn parse_should_read_http_request_with_body() {
 #[test_case(String::from(" / HTTP/1.1\r\n") ; "Missing method")]
 #[test_case(String::from("GET HTTP/1.1\r\n") ; "Missing request target")]
 #[test_case(String::from("GET /\r\n") ; "Missing HTTP version")]
-pub fn parse_should_reject_status_line_with_invalid_format(status_line: String) {
+pub fn parse_should_reject_status_line_with_invalid_format(request_line: String) {
     // Arrange
-    let raw_request = status_line + "Host:localhost\r\n\r\n";
+    let raw_request = request_line + "Host:localhost\r\n\r\n";
     // Act
     let mut cursor = io::Cursor::new(raw_request.as_bytes());
     let result = Request::parse(&mut cursor);
@@ -90,5 +90,22 @@ pub fn parse_should_reject_status_line_with_invalid_format(status_line: String) 
         Err(e) => e,
     };
     let expected = ParseError::RequestLine;
+    assert_eq!(expected, error);
+}
+
+#[test_case(String::from("X-Hello:Do you know where my mommy is?\r\n") ; "no Host header")]
+#[test_case(String::from("Host:localhost\r\nX-Whitespace :text\r\n") ; "forbidden whitespace between field name and colon")]
+pub fn parse_should_reject_headers_with_invalid_format(headers: String) {
+    // Arrange
+    let raw_request = format!("GET / HTTP/1.1\r\n{headers}\r\n");
+    // Act
+    let mut cursor = io::Cursor::new(raw_request.as_bytes());
+    let result = Request::parse(&mut cursor);
+    // Assert
+    let error = match result {
+        Ok(r) => panic!("Invalid headers got accepted!: '{}'", r.headers()),
+        Err(e) => e,
+    };
+    let expected = ParseError::Header;
     assert_eq!(expected, error);
 }

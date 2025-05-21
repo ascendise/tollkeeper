@@ -18,8 +18,7 @@ impl Parse for Request {
     type Err = ParseError;
     fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Request, ParseError> {
         let request_line = RequestLine::parse(cursor)?;
-        let headers = parse_headers(cursor)?;
-        let headers = Headers::new(headers);
+        let headers = Headers::parse(cursor)?;
         let request = match headers.content_length() {
             Some(v) => {
                 let content_length = v.parse().expect("Failed to parse content length");
@@ -47,28 +46,6 @@ impl Parse for Request {
         };
         Ok(request)
     }
-}
-
-fn parse_headers(cursor: &mut Cursor<&[u8]>) -> Result<HashMap<String, String>, ParseError> {
-    let mut headers = HashMap::new();
-    while !is_end_of_headers(cursor)? {
-        let key = get_string_until(cursor, b':', ParseError::Header)?;
-        let value = get_string_until(cursor, b'\r', ParseError::Header)?;
-        let mut newline = [0; 1];
-        cursor
-            .read_exact(&mut newline)
-            .or_else(|e| Err(handle_io_error(e, ParseError::Header)))?;
-        headers.insert(key, value);
-    }
-    Ok(headers)
-}
-
-fn is_end_of_headers(cursor: &mut Cursor<&[u8]>) -> Result<bool, ParseError> {
-    let skipped = cursor
-        .skip_until(b'\n')
-        .or_else(|e| Err(handle_io_error(e, ParseError::Header)))? as i64;
-    cursor.seek(SeekFrom::Current(skipped * -1)).unwrap();
-    Ok(skipped == 2)
 }
 
 fn get_string_until(
@@ -159,5 +136,42 @@ impl Parse for RequestLine {
             http_version,
         )?;
         Ok(status_line)
+    }
+}
+
+impl Parse for Headers {
+    type Err = ParseError;
+
+    fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Self, Self::Err> {
+        let mut headers = HashMap::new();
+        while !is_end_of_headers(cursor)? {
+            let key = get_string_until(cursor, b':', ParseError::Header)?;
+            if key.contains(' ') {
+                return Err(ParseError::Header);
+            }
+            let value = get_string_until(cursor, b'\r', ParseError::Header)?;
+            let mut newline = [0; 1];
+            cursor
+                .read_exact(&mut newline)
+                .or_else(|e| Err(handle_io_error(e, ParseError::Header)))?;
+            headers.insert(key, value);
+        }
+        Ok(Headers::new(headers)?)
+    }
+}
+
+fn is_end_of_headers(cursor: &mut Cursor<&[u8]>) -> Result<bool, ParseError> {
+    let skipped = cursor
+        .skip_until(b'\n')
+        .or_else(|e| Err(handle_io_error(e, ParseError::Header)))? as i64;
+    cursor.seek(SeekFrom::Current(skipped * -1)).unwrap();
+    Ok(skipped == 2)
+}
+
+impl From<super::BadRequestError> for ParseError {
+    fn from(err: super::BadRequestError) -> Self {
+        match err {
+            super::BadRequestError::NoHostHeader => ParseError::Header,
+        }
     }
 }
