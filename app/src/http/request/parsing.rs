@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::Display,
-    io::{BufRead, Cursor, Read, Seek, SeekFrom},
+    io::{self, BufRead, Cursor, Read, Seek, SeekFrom},
     str::FromStr,
 };
 
@@ -17,8 +17,8 @@ pub trait Parse: Sized {
 impl Parse for Request {
     type Err = ParseError;
     fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Request, ParseError> {
-        let status_line = RequestLine::parse(cursor).unwrap();
-        let headers = parse_headers(cursor).or(Err(ParseError::Header))?;
+        let status_line = RequestLine::parse(cursor)?;
+        let headers = parse_headers(cursor)?;
         let headers = Headers::new(headers);
         let request = match headers.content_length() {
             Some(v) => {
@@ -49,37 +49,51 @@ impl Parse for Request {
     }
 }
 
-fn parse_headers(cursor: &mut Cursor<&[u8]>) -> Result<HashMap<String, String>, ()> {
+fn parse_headers(cursor: &mut Cursor<&[u8]>) -> Result<HashMap<String, String>, ParseError> {
     let mut headers = HashMap::new();
-    while !is_headers_eof(cursor) {
-        let key = get_string_until(cursor, b':')?;
-        let value = get_string_until(cursor, b'\r')?;
+    while !is_end_of_headers(cursor)? {
+        let key = get_string_until(cursor, b':', ParseError::Header)?;
+        let value = get_string_until(cursor, b'\r', ParseError::Header)?;
         let mut newline = [0; 1];
-        cursor.read_exact(&mut newline).unwrap();
+        cursor
+            .read_exact(&mut newline)
+            .or_else(|e| Err(handle_io_error(e, ParseError::Header)))?;
         headers.insert(key, value);
     }
     Ok(headers)
 }
-fn is_headers_eof(cursor: &mut Cursor<&[u8]>) -> bool {
-    let skipped = cursor.skip_until(b'\n').unwrap() as i64;
+
+fn is_end_of_headers(cursor: &mut Cursor<&[u8]>) -> Result<bool, ParseError> {
+    let skipped = cursor
+        .skip_until(b'\n')
+        .or_else(|e| Err(handle_io_error(e, ParseError::Header)))? as i64;
     cursor.seek(SeekFrom::Current(skipped * -1)).unwrap();
-    skipped == 2
+    Ok(skipped == 2)
 }
-fn get_string_until(stream: &mut Cursor<&[u8]>, byte: u8) -> Result<String, ()> {
+
+fn get_string_until(
+    stream: &mut Cursor<&[u8]>,
+    byte: u8,
+    on_error: ParseError,
+) -> Result<String, ParseError> {
     let mut buffer = Vec::new();
-    if stream.read_until(byte, &mut buffer).is_err() {
-        return Err(());
-    };
+    stream
+        .read_until(byte, &mut buffer)
+        .or_else(|e| Err(handle_io_error(e, on_error.clone())))?;
     buffer.pop(); //Remove whitespace from read
-    match String::from_utf8(buffer) {
-        Ok(s) => Ok(s),
-        Err(_) => Err(()),
+    String::from_utf8(buffer).or(Err(on_error))
+}
+
+fn handle_io_error(err: io::Error, new_err: ParseError) -> ParseError {
+    match err.kind() {
+        io::ErrorKind::UnexpectedEof => new_err,
+        _ => panic!("Unexpected IO error! : '{}'", err),
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ParseError {
-    StatusLine,
+    RequestLine,
     Header,
     Body,
 }
@@ -87,7 +101,7 @@ impl Error for ParseError {}
 impl Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParseError::StatusLine => write!(f, "Invalid status line"),
+            ParseError::RequestLine => write!(f, "Invalid request line"),
             ParseError::Header => write!(f, "Invalid header line"),
             ParseError::Body => write!(f, "Failed to read body"),
         }
@@ -105,15 +119,17 @@ impl Parse for RequestLine {
     fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Self, Self::Err> {
         let result = |result: Result<_, _>| match result {
             Ok(v) => Ok(v),
-            Err(_) => Err(ParseError::StatusLine),
+            Err(_) => Err(ParseError::RequestLine),
         };
-        let method = result(get_string_until(cursor, b' '))?;
-        let request_target = result(get_string_until(cursor, b' '))?;
-        let http_version = result(get_string_until(cursor, b'\r'))?;
+        let method = result(get_string_until(cursor, b' ', ParseError::RequestLine))?;
+        let request_target = result(get_string_until(cursor, b' ', ParseError::RequestLine))?;
+        let http_version = result(get_string_until(cursor, b'\r', ParseError::RequestLine))?;
         let mut newline = [0; 1];
-        cursor.read_exact(&mut newline).unwrap();
+        cursor
+            .read_exact(&mut newline)
+            .or_else(|e| Err(handle_io_error(e, ParseError::RequestLine)))?;
         let status_line = RequestLine {
-            method: Method::from_str(&method).unwrap(),
+            method: Method::from_str(&method).or(Err(ParseError::RequestLine))?,
             request_target,
             http_version,
         };

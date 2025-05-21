@@ -78,9 +78,14 @@ pub fn parse_should_reject_status_line_with_invalid_format(status_line: String) 
     let result = Request::parse(&mut cursor);
     // Assert
     let error = match result {
-        Ok(_) => panic!("Request with invalid status line parsed"),
+        Ok(r) => panic!(
+            "Invalid status line got accepted!: '{} {} {}'",
+            r.method(),
+            r.uri(),
+            r.http_version()
+        ),
         Err(e) => e,
     };
-    let expected = ParseError::StatusLine;
+    let expected = ParseError::RequestLine;
     assert_eq!(expected, error);
 }

@@ -1,4 +1,4 @@
-use std::{io::Read, str::FromStr};
+use std::{fmt::Display, io::Read, str::FromStr};
 
 mod request;
 
@@ -13,6 +13,22 @@ pub enum Method {
     Trace,
     Connect,
     Extension(String),
+}
+impl Display for Method {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let method = match self {
+            Method::Options => "OPTIONS",
+            Method::Get => "GET",
+            Method::Head => "HEAD",
+            Method::Post => "POST",
+            Method::Put => "PUT",
+            Method::Delete => "DELETE",
+            Method::Trace => "TRACE",
+            Method::Connect => "CONNECT",
+            Method::Extension(v) => v,
+        };
+        write!(f, "{method}")
+    }
 }
 impl FromStr for Method {
     type Err = ();
