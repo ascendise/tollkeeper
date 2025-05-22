@@ -11,9 +11,6 @@ jobs:
       credentials:
         username: ${{ secrets.DOCKER_USER }}
         password: ${{ secrets.DOCKER_PASS }}
-    strategy:
-      matrix:
-        module: [ ./lib, ./app]
     steps:
       - name: Checkout project
         uses: actions/checkout@v3
@@ -21,15 +18,15 @@ jobs:
         id: build-cache 
         uses: actions/cache/restore@v4
         with:
-          path: ${{ matrix.module }}/target
+          path: ./target
           key: build-output
       - name: Run cargo test
-        run: cargo test --manifest-path ${{ matrix.module }}/Cargo.toml 
+        run: cargo test 
       - name: Cache build output
         id: build-cache 
         uses: actions/cache/save@v4
         with:
-          path: ${{ matrix.module }}/target
+          path: ./target
           key: build-output
   cargo-clippy:
     runs-on: ubuntu-latest
@@ -38,9 +35,6 @@ jobs:
       credentials:
         username: ${{ secrets.DOCKER_USER }}
         password: ${{ secrets.DOCKER_PASS }}
-    strategy:
-      matrix:
-        module: [./lib, ./app]
     steps:
       - name: Checkout project
         uses: actions/checkout@v3
@@ -51,10 +45,10 @@ jobs:
           path: ${{ matrix.module }}/target
           key: build-output
       - name: Run cargo clippy
-        run: cargo clippy --manifest-path ${{ matrix.module }}/Cargo.toml -- -D warning
+        run: cargo clippy -- -D warning
       - name: Cache build output
         id: build-cache 
         uses: actions/cache/save@v4
         with:
-          path: ${{ matrix.module }}/target
+          path: ./target
           key: build-output
