@@ -2,54 +2,47 @@ use std::{
     collections::HashMap,
     error::Error,
     fmt::Display,
-    io::{self, BufRead, Cursor, Read, Seek, SeekFrom},
+    io::{self, BufRead, Read},
+    net,
     str::FromStr,
 };
 
-use crate::http::{BodyStream, Method};
-
 use super::{Headers, Request};
+use crate::http::Method;
 
-pub trait Parse: Sized {
+pub trait Parse<T>: Sized {
     type Err;
-    fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Self, Self::Err>;
+    fn parse(stream: T) -> Result<Self, Self::Err>;
 }
-impl Parse for Request {
+impl Parse<io::BufReader<net::TcpStream>> for Request {
     type Err = ParseError;
-    fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Request, ParseError> {
-        let request_line = RequestLine::parse(cursor)?;
-        let headers = Headers::parse(cursor)?;
-        let request = match headers.content_length() {
-            Some(v) => {
-                let content_length = v.parse().expect("Failed to parse content length");
-                let mut body = vec![0u8; content_length];
-                cursor
-                    .seek(SeekFrom::Current(2))
-                    .expect("Failed skipping newline for reading body");
-                cursor.read_exact(&mut body).or(Err(ParseError::Body))?;
-                println!("{}", body.len());
-                let body_cursor = Cursor::new(body);
-                Request::with_body(
-                    request_line.method,
-                    request_line.request_target,
-                    request_line.http_version,
-                    headers,
-                    BodyStream::new(body_cursor),
-                )
-            }
-            None => Request::new(
+    fn parse(mut stream: io::BufReader<net::TcpStream>) -> Result<Request, ParseError> {
+        let request_line = RequestLine::parse(&mut stream)?;
+        let headers = Headers::parse(&mut stream)?;
+        let peek_body = stream.fill_buf().or(Err(ParseError::Body))?;
+        let request = if peek_body == *b"\r\n00" {
+            Request::new(
                 request_line.method,
                 request_line.request_target,
                 request_line.http_version,
                 headers,
-            ),
+            )
+        } else {
+            stream.consume(2);
+            Request::with_body(
+                request_line.method,
+                request_line.request_target,
+                request_line.http_version,
+                headers,
+                stream,
+            )
         };
         Ok(request)
     }
 }
 
 fn get_string_until(
-    stream: &mut Cursor<&[u8]>,
+    stream: &mut io::BufReader<net::TcpStream>,
     byte: u8,
     on_error: ParseError,
 ) -> Result<String, ParseError> {
@@ -115,19 +108,19 @@ impl RequestLine {
         }
     }
 }
-impl Parse for RequestLine {
+impl Parse<&mut io::BufReader<net::TcpStream>> for RequestLine {
     type Err = ParseError;
 
-    fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Self, Self::Err> {
+    fn parse(reader: &mut io::BufReader<net::TcpStream>) -> Result<Self, Self::Err> {
         let result = |result: Result<_, _>| match result {
             Ok(v) => Ok(v),
             Err(_) => Err(ParseError::RequestLine),
         };
-        let method = result(get_string_until(cursor, b' ', ParseError::RequestLine))?;
-        let request_target = result(get_string_until(cursor, b' ', ParseError::RequestLine))?;
-        let http_version = result(get_string_until(cursor, b'\r', ParseError::RequestLine))?;
+        let method = result(get_string_until(reader, b' ', ParseError::RequestLine))?;
+        let request_target = result(get_string_until(reader, b' ', ParseError::RequestLine))?;
+        let http_version = result(get_string_until(reader, b'\r', ParseError::RequestLine))?;
         let mut newline = [0; 1];
-        cursor
+        reader
             .read_exact(&mut newline)
             .or_else(|e| Err(handle_io_error(e, ParseError::RequestLine)))?;
         let status_line = RequestLine::new(
@@ -139,19 +132,19 @@ impl Parse for RequestLine {
     }
 }
 
-impl Parse for Headers {
+impl Parse<&mut io::BufReader<net::TcpStream>> for Headers {
     type Err = ParseError;
 
-    fn parse(cursor: &mut Cursor<&[u8]>) -> Result<Self, Self::Err> {
+    fn parse(reader: &mut io::BufReader<net::TcpStream>) -> Result<Self, Self::Err> {
         let mut headers = HashMap::new();
-        while !is_end_of_headers(cursor)? {
-            let key = get_string_until(cursor, b':', ParseError::Header)?;
+        while !is_end_of_headers(reader)? {
+            let key = get_string_until(reader, b':', ParseError::Header)?;
             if contains_whitespace(&key) {
                 return Err(ParseError::Header);
             }
-            let value = get_string_until(cursor, b'\r', ParseError::Header)?;
+            let value = get_string_until(reader, b'\r', ParseError::Header)?;
             let mut newline = [0; 1];
-            cursor
+            reader
                 .read_exact(&mut newline)
                 .or_else(|e| Err(handle_io_error(e, ParseError::Header)))?;
             headers.insert(key, value);
@@ -164,12 +157,13 @@ fn contains_whitespace(value: &str) -> bool {
     value.chars().any(|c| c.is_whitespace())
 }
 
-fn is_end_of_headers(cursor: &mut Cursor<&[u8]>) -> Result<bool, ParseError> {
-    let skipped = cursor
-        .skip_until(b'\n')
-        .or_else(|e| Err(handle_io_error(e, ParseError::Header)))? as i64;
-    cursor.seek(SeekFrom::Current(skipped * -1)).unwrap();
-    Ok(skipped == 2)
+fn is_end_of_headers(reader: &mut io::BufReader<net::TcpStream>) -> Result<bool, ParseError> {
+    let unread_bytes = reader.fill_buf().or(Err(ParseError::Header))?;
+    if unread_bytes.len() < 2 {
+        Err(ParseError::Header)
+    } else {
+        Ok(unread_bytes[..2] == *b"\r\n")
+    }
 }
 
 impl From<super::BadRequestError> for ParseError {

@@ -1,17 +1,24 @@
-mod parsing;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
+mod parsing;
+
+use std::io;
+use std::{
+    collections::HashMap,
+    net::{self, TcpStream},
+};
 
 use super::*;
+
+type Body = io::BufReader<net::TcpStream>;
 
 pub struct Request {
     method: Method,
     request_target: String,
     http_version: String,
     headers: Headers,
-    body: Option<BodyStream>,
+    body: Option<Body>,
 }
 impl Request {
     pub fn new(
@@ -34,7 +41,7 @@ impl Request {
         uri: impl Into<String>,
         http_version: impl Into<String>,
         headers: Headers,
-        body: BodyStream,
+        body: Body,
     ) -> Self {
         Self {
             method,
@@ -64,7 +71,7 @@ impl Request {
         &self.headers
     }
 
-    pub fn body(&mut self) -> &mut Option<BodyStream> {
+    pub fn body(&mut self) -> &mut Option<Body> {
         &mut self.body
     }
 }

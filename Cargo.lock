@@ -29,6 +29,9 @@ dependencies = [
 [[package]]
 name = "app"
 version = "0.1.0"
+dependencies = [
+ "test-case",
+]
 
 [[package]]
 name = "autocfg"
