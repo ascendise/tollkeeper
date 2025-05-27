@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+#[allow(dead_code)]
 mod http;
 
 fn main() -> Result<(), io::Error> {

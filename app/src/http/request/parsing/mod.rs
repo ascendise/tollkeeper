@@ -1,5 +1,7 @@
+#[cfg(test)]
+mod tests;
+
 use std::{
-    collections::HashMap,
     error::Error,
     fmt::Display,
     io::{self, BufRead, Read},
@@ -7,8 +9,9 @@ use std::{
     str::FromStr,
 };
 
-use super::{Headers, Request};
-use crate::http::Method;
+use indexmap::IndexMap;
+
+use super::{Headers, Method, Request, RequestHeaders};
 
 pub trait Parse<T>: Sized {
     type Err;
@@ -18,7 +21,7 @@ impl Parse<io::BufReader<net::TcpStream>> for Request {
     type Err = ParseError;
     fn parse(mut stream: io::BufReader<net::TcpStream>) -> Result<Request, ParseError> {
         let request_line = RequestLine::parse(&mut stream)?;
-        let headers = Headers::parse(&mut stream)?;
+        let headers = RequestHeaders::parse(&mut stream)?;
         let peek_body = stream.fill_buf().or(Err(ParseError::Body))?;
         let request = if peek_body == *b"\r\n00" {
             Request::new(
@@ -48,7 +51,8 @@ fn get_string_until(
 ) -> Result<String, ParseError> {
     let mut buffer = Vec::new();
     stream
-        .read_until(byte, &mut buffer).map_err(|e| handle_io_error(e, on_error.clone()))?;
+        .read_until(byte, &mut buffer)
+        .map_err(|e| handle_io_error(e, on_error.clone()))?;
     buffer.pop(); //Remove whitespace from read
     String::from_utf8(buffer).or(Err(on_error))
 }
@@ -120,7 +124,8 @@ impl Parse<&mut io::BufReader<net::TcpStream>> for RequestLine {
         let http_version = result(get_string_until(reader, b'\r', ParseError::RequestLine))?;
         let mut newline = [0; 1];
         reader
-            .read_exact(&mut newline).map_err(|e| handle_io_error(e, ParseError::RequestLine))?;
+            .read_exact(&mut newline)
+            .map_err(|e| handle_io_error(e, ParseError::RequestLine))?;
         let status_line = RequestLine::new(
             Method::from_str(&method).or(Err(ParseError::RequestLine))?,
             request_target,
@@ -130,11 +135,11 @@ impl Parse<&mut io::BufReader<net::TcpStream>> for RequestLine {
     }
 }
 
-impl Parse<&mut io::BufReader<net::TcpStream>> for Headers {
+impl Parse<&mut io::BufReader<net::TcpStream>> for RequestHeaders {
     type Err = ParseError;
 
     fn parse(reader: &mut io::BufReader<net::TcpStream>) -> Result<Self, Self::Err> {
-        let mut headers = HashMap::new();
+        let mut headers = IndexMap::new();
         while !is_end_of_headers(reader)? {
             let key = get_string_until(reader, b':', ParseError::Header)?;
             if contains_whitespace(&key) {
@@ -144,10 +149,12 @@ impl Parse<&mut io::BufReader<net::TcpStream>> for Headers {
             value = value.trim().into();
             let mut newline = [0; 1];
             reader
-                .read_exact(&mut newline).map_err(|e| handle_io_error(e, ParseError::Header))?;
+                .read_exact(&mut newline)
+                .map_err(|e| handle_io_error(e, ParseError::Header))?;
             headers.insert(key, value);
         }
-        Ok(Headers::new(headers)?)
+        let headers = Headers::new(headers);
+        Ok(RequestHeaders::new(headers)?)
     }
 }
 

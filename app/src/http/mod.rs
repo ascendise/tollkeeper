@@ -1,53 +1,57 @@
 use std::{fmt::Display, str::FromStr};
 
+use indexmap::IndexMap;
+
+#[cfg(test)]
+mod tests;
+
 mod request;
+mod response;
 
+/// Key-Value collection with case-insensitve access
 #[derive(Debug, PartialEq, Eq)]
-pub enum Method {
-    Options,
-    Get,
-    Head,
-    Post,
-    Put,
-    Delete,
-    Trace,
-    Connect,
-    Extension(String),
+pub struct Headers {
+    headers: IndexMap<String, Header>,
 }
-impl Display for Method {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let method = match self {
-            Method::Options => "OPTIONS",
-            Method::Get => "GET",
-            Method::Head => "HEAD",
-            Method::Post => "POST",
-            Method::Put => "PUT",
-            Method::Delete => "DELETE",
-            Method::Trace => "TRACE",
-            Method::Connect => "CONNECT",
-            Method::Extension(v) => v,
-        };
-        write!(f, "{method}")
+impl Headers {
+    pub fn new(headers: IndexMap<String, String>) -> Self {
+        let headers = Self::map_headers_case_insensitive(headers);
+        Self { headers }
     }
-}
-impl FromStr for Method {
-    type Err = ();
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.is_empty() {
-            return Err(());
-        }
-        let method = match s {
-            "OPTIONS" => Method::Options,
-            "GET" => Method::Get,
-            "HEAD" => Method::Head,
-            "POST" => Method::Post,
-            "PUT" => Method::Put,
-            "DELETE" => Method::Delete,
-            "TRACE" => Method::Trace,
-            "CONNECT" => Method::Connect,
-            _ => Method::Extension(s.into()),
-        };
-        Ok(method)
+    fn map_headers_case_insensitive(headers: IndexMap<String, String>) -> IndexMap<String, Header> {
+        headers
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.to_ascii_lowercase(),
+                    Header {
+                        original_key: k.into(),
+                        value: v.into(),
+                    },
+                )
+            })
+            .collect()
     }
+
+    pub fn get(&self, key: &str) -> Option<&String> {
+        let key = key.to_ascii_lowercase();
+        match self.headers.get(&key) {
+            Some(v) => Some(&v.value),
+            None => None,
+        }
+    }
+}
+impl Display for Headers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for header in &self.headers {
+            write!(f, "{}: {}\r\n", header.1.original_key, header.1.value)?
+        }
+        Ok(())
+    }
+}
+#[derive(Debug, PartialEq, Eq)]
+struct Header {
+    original_key: String,
+    value: String,
 }

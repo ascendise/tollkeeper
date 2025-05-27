@@ -1,11 +1,10 @@
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::io::{BufReader, Read, Write};
 use std::net;
 use test_case::test_case;
 
-use crate::http::request::Headers;
 use crate::http::request::{parsing::*, Request};
-use crate::http::Method;
+use crate::http::request::{Headers, RequestHeaders};
 
 fn setup_listener() -> net::TcpListener {
     net::TcpListener::bind("127.0.0.1:0").expect("Failed to setup test socket")
@@ -36,9 +35,10 @@ pub fn parse_should_read_minimal_http_request() {
     assert_eq!(Method::Get, *request.method());
     assert_eq!("/", request.request_target());
     assert_eq!("HTTP/1.1", request.http_version());
-    let mut headers = HashMap::<String, String>::new();
+    let mut headers = IndexMap::<String, String>::new();
     headers.insert("Host".into(), "localhost".into());
-    let expected_headers = Headers::new(headers).unwrap();
+    let expected_headers = Headers::new(headers);
+    let expected_headers = RequestHeaders::new(expected_headers).unwrap();
     assert_eq!(expected_headers, *request.headers());
 }
 
@@ -63,11 +63,12 @@ pub fn parse_should_read_http_request_with_body() {
     assert_eq!(&Method::Post, request.method());
     assert_eq!("/", request.request_target());
     assert_eq!("HTTP/1.1", request.http_version());
-    let mut expected_headers = HashMap::<String, String>::new();
+    let mut expected_headers = IndexMap::<String, String>::new();
     expected_headers.insert("Host".into(), "localhost".into());
     expected_headers.insert("Content-Type".into(), "text/raw; charset=utf8".into());
     expected_headers.insert("Content-Length".into(), "15".into());
-    let expected_headers = Headers::new(expected_headers).unwrap();
+    let expected_headers = Headers::new(expected_headers);
+    let expected_headers = RequestHeaders::new(expected_headers).unwrap();
     assert_eq!(&expected_headers, request.headers());
     let mut content = String::new();
     match request.body() {

@@ -1,13 +1,7 @@
-#[cfg(test)]
-mod tests;
-
 mod parsing;
 
 use std::io;
-use std::{
-    collections::HashMap,
-    net::{self},
-};
+use std::net::{self};
 
 use super::*;
 
@@ -18,16 +12,15 @@ pub struct Request {
     request_target: String,
     absolute_target: url::Url,
     http_version: String,
-    headers: Headers,
+    headers: RequestHeaders,
     body: Option<Body>,
 }
-#[allow(dead_code)] // I need the getters, just not now
 impl Request {
     fn create(
         method: Method,
         request_target: String,
         http_version: String,
-        headers: Headers,
+        headers: RequestHeaders,
         body: Option<Body>,
     ) -> Result<Self, BadRequestError> {
         let absolute_target = match url::Url::parse(&request_target) {
@@ -56,7 +49,7 @@ impl Request {
         method: Method,
         request_target: impl Into<String>,
         http_version: impl Into<String>,
-        headers: Headers,
+        headers: RequestHeaders,
     ) -> Result<Self, BadRequestError> {
         Self::create(
             method,
@@ -71,7 +64,7 @@ impl Request {
         method: Method,
         request_target: impl Into<String>,
         http_version: impl Into<String>,
-        headers: Headers,
+        headers: RequestHeaders,
         body: Body,
     ) -> Result<Self, BadRequestError> {
         Self::create(
@@ -102,7 +95,7 @@ impl Request {
     }
 
     /// Request headers
-    pub fn headers(&self) -> &Headers {
+    pub fn headers(&self) -> &RequestHeaders {
         &self.headers
     }
 
@@ -112,132 +105,156 @@ impl Request {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Headers {
-    headers: HashMap<String, Header>,
+pub enum Method {
+    Options,
+    Get,
+    Head,
+    Post,
+    Put,
+    Delete,
+    Trace,
+    Connect,
+    Extension(String),
 }
-#[allow(dead_code)] // Dont piss me off about the getters for the headers..
-impl Headers {
-    pub fn new(headers: HashMap<String, String>) -> Result<Self, BadRequestError> {
-        if headers.contains_key("Host") {
-            let headers = Self::map_headers_case_insensitive(headers);
-            Ok(Self { headers })
-        } else {
-            Err(BadRequestError::NoHostHeader)
-        }
-    }
 
-    fn map_headers_case_insensitive(headers: HashMap<String, String>) -> HashMap<String, Header> {
-        headers
-            .iter()
-            .map(|(k, v)| {
-                (
-                    k.to_ascii_lowercase(),
-                    Header {
-                        original_key: k.into(),
-                        value: v.into(),
-                    },
-                )
-            })
-            .collect()
+impl Display for Method {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let method = match self {
+            Method::Options => "OPTIONS",
+            Method::Get => "GET",
+            Method::Head => "HEAD",
+            Method::Post => "POST",
+            Method::Put => "PUT",
+            Method::Delete => "DELETE",
+            Method::Trace => "TRACE",
+            Method::Connect => "CONNECT",
+            Method::Extension(v) => v,
+        };
+        write!(f, "{method}")
+    }
+}
+impl FromStr for Method {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Err(());
+        }
+        let method = match s {
+            "OPTIONS" => Method::Options,
+            "GET" => Method::Get,
+            "HEAD" => Method::Head,
+            "POST" => Method::Post,
+            "PUT" => Method::Put,
+            "DELETE" => Method::Delete,
+            "TRACE" => Method::Trace,
+            "CONNECT" => Method::Connect,
+            _ => Method::Extension(s.into()),
+        };
+        Ok(method)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct RequestHeaders {
+    headers: Headers,
+}
+impl RequestHeaders {
+    pub fn new(headers: Headers) -> Result<Self, BadRequestError> {
+        if headers.get("host").is_none() {
+            Err(BadRequestError::NoHostHeader)
+        } else {
+            Ok(Self { headers })
+        }
     }
 
     pub fn accept(&self) -> Option<&String> {
-        self.read_header("accept")
-    }
-
-    fn read_header(&self, key: &str) -> Option<&String> {
-        match self.headers.get(key) {
-            Some(v) => Some(&v.value),
-            None => None,
-        }
+        self.headers.get("accept")
     }
 
     pub fn accept_charset(&self) -> Option<&String> {
-        self.read_header("accept-charset")
+        self.headers.get("accept-charset")
     }
 
     pub fn accept_encoding(&self) -> Option<&String> {
-        self.read_header("accept-encoding")
+        self.headers.get("accept-encoding")
     }
 
     pub fn accept_language(&self) -> Option<&String> {
-        self.read_header("accept-language")
+        self.headers.get("accept-language")
     }
 
     pub fn authorization(&self) -> Option<&String> {
-        self.read_header("authorization")
+        self.headers.get("authorization")
     }
 
     pub fn expect(&self) -> Option<&String> {
-        self.read_header("expect")
+        self.headers.get("expect")
     }
 
     pub fn from(&self) -> Option<&String> {
-        self.read_header("from")
+        self.headers.get("from")
     }
 
     pub fn host(&self) -> &String {
-        self.read_header("host").unwrap()
+        self.headers.get("host").unwrap()
     }
 
     pub fn if_match(&self) -> Option<&String> {
-        self.read_header("if-match")
+        self.headers.get("if-match")
     }
 
     pub fn if_modified_since(&self) -> Option<&String> {
-        self.read_header("if-modified-since")
+        self.headers.get("if-modified-since")
     }
 
     pub fn if_none_match(&self) -> Option<&String> {
-        self.read_header("if-none-match")
+        self.headers.get("if-none-match")
     }
 
     pub fn if_range(&self) -> Option<&String> {
-        self.read_header("if-range")
+        self.headers.get("if-range")
     }
 
     pub fn if_unmodified_since(&self) -> Option<&String> {
-        self.read_header("if-unmodified-since")
+        self.headers.get("if-unmodified-since")
     }
 
     pub fn max_forwards(&self) -> Option<&String> {
-        self.read_header("max-forwards")
+        self.headers.get("max-forwards")
     }
 
     pub fn proxy_authorization(&self) -> Option<&String> {
-        self.read_header("proxy-authorization")
+        self.headers.get("proxy-authorization")
     }
 
     pub fn range(&self) -> Option<&String> {
-        self.read_header("range")
+        self.headers.get("range")
     }
 
     pub fn referrer(&self) -> Option<&String> {
-        self.read_header("referrer")
+        self.headers.get("referrer")
     }
 
     pub fn te(&self) -> Option<&String> {
-        self.read_header("te")
+        self.headers.get("te")
     }
 
     pub fn user_agent(&self) -> Option<&String> {
-        self.read_header("user-agent")
+        self.headers.get("user-agent")
     }
 
     pub fn content_length(&self) -> Option<&String> {
-        self.read_header("content-length")
+        self.headers.get("content-length")
     }
 
     pub fn extension(&self, name: &str) -> Option<&String> {
-        self.read_header(name)
+        self.headers.get(name)
     }
 }
-impl Display for Headers {
+impl Display for RequestHeaders {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for header in &self.headers {
-            write!(f, "{}:{}\r\n", header.0, header.1.value)?
-        }
-        Ok(())
+        self.headers.fmt(f)
     }
 }
 
@@ -245,10 +262,4 @@ impl Display for Headers {
 pub enum BadRequestError {
     NoHostHeader,
     FailedTargetParse(url::ParseError),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct Header {
-    original_key: String,
-    value: String,
 }
