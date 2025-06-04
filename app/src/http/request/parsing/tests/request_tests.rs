@@ -160,3 +160,21 @@ pub fn parse_should_treat_headers_case_insensitive() {
         .expect("User-Agent was not found (because of case-sensitivity?)");
     assert_eq!("value", ua_header);
 }
+
+#[test]
+pub fn parse_should_reject_message_with_mismatched_host_and_request_target() {
+    // Arrange
+    let raw_request = concat!(
+        "GET www.google.com/ HTTP/1.1\r\n",
+        "Host:localhost\r\n",
+        "\r\n",
+    );
+    let raw_request = raw_request.as_bytes();
+    let listener = setup_listener();
+    // Act
+    let stream = write_bytes_to_target(&listener, raw_request);
+    let err = Request::parse(stream)
+        .expect_err("Mismatched request target and Host was parsed without error!");
+    // Assert
+    assert_eq!(ParseError::Header, err);
+}

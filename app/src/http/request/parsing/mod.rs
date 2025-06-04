@@ -171,6 +171,7 @@ impl From<super::BadRequestError> for ParseError {
     fn from(err: super::BadRequestError) -> Self {
         match err {
             super::BadRequestError::NoHostHeader => ParseError::Header,
+            super::BadRequestError::MismatchedTargetHost => ParseError::Header,
             super::BadRequestError::FailedTargetParse(_) => ParseError::RequestLine,
         }
     }

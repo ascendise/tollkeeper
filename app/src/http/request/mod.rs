@@ -8,6 +8,7 @@ use super::*;
 
 type Body = io::BufReader<net::TcpStream>;
 
+#[derive(Debug)]
 pub struct Request {
     method: Method,
     request_target: String,
@@ -16,33 +17,6 @@ pub struct Request {
     body: Option<Body>,
 }
 impl Request {
-    fn create(
-        method: Method,
-        request_target: String,
-        headers: RequestHeaders,
-        body: Option<Body>,
-    ) -> Result<Self, BadRequestError> {
-        let absolute_target = match url::Url::parse(&request_target) {
-            Ok(v) => v,
-            Err(_) => {
-                let protocol = String::from("http://");
-                let base_url = protocol + headers.host();
-                let mut url =
-                    url::Url::parse(&base_url).map_err(BadRequestError::FailedTargetParse)?;
-                url.set_path(&request_target);
-                url
-            }
-        };
-        let request = Self {
-            method,
-            request_target,
-            absolute_target,
-            headers,
-            body,
-        };
-        Ok(request)
-    }
-
     pub fn new(
         method: Method,
         request_target: impl Into<String>,
@@ -58,6 +32,51 @@ impl Request {
         body: Body,
     ) -> Result<Self, BadRequestError> {
         Self::create(method, request_target.into(), headers, Some(body))
+    }
+
+    fn create(
+        method: Method,
+        request_target: String,
+        headers: RequestHeaders,
+        body: Option<Body>,
+    ) -> Result<Self, BadRequestError> {
+        let absolute_target = Self::resolve_absolute_target(&request_target, &headers)?;
+        let request = Self {
+            method,
+            request_target,
+            absolute_target,
+            headers,
+            body,
+        };
+        Ok(request)
+    }
+
+    fn resolve_absolute_target(
+        request_target: &str,
+        headers: &RequestHeaders,
+    ) -> Result<url::Url, BadRequestError> {
+        let protocol = String::from("http://");
+        let host_url = protocol.clone() + headers.host();
+        let mut host_url =
+            url::Url::parse(&host_url).map_err(BadRequestError::FailedTargetParse)?;
+        let absolute_target = if Self::is_relative(request_target) {
+            host_url.set_path(request_target);
+            Ok(host_url)
+        } else {
+            let target_url = protocol + request_target;
+            let absolute_target =
+                url::Url::parse(&target_url).map_err(BadRequestError::FailedTargetParse)?;
+            if absolute_target.host() != host_url.host() {
+                Err(BadRequestError::MismatchedTargetHost)
+            } else {
+                Ok(absolute_target)
+            }
+        }?;
+        Ok(absolute_target)
+    }
+
+    fn is_relative(request_target: &str) -> bool {
+        request_target.starts_with("/")
     }
 
     /// HTTP Protocol version
@@ -253,5 +272,6 @@ impl Display for RequestHeaders {
 #[derive(Debug, PartialEq, Eq)]
 pub enum BadRequestError {
     NoHostHeader,
+    MismatchedTargetHost,
     FailedTargetParse(url::ParseError),
 }
