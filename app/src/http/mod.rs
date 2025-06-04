@@ -5,8 +5,9 @@ use indexmap::IndexMap;
 #[cfg(test)]
 mod tests;
 
-mod request;
-mod response;
+pub mod request;
+pub mod response;
+pub mod server;
 
 /// Key-Value collection with case-insensitve access
 #[derive(Debug, PartialEq, Eq)]
@@ -32,6 +33,12 @@ impl Headers {
                 )
             })
             .collect()
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            headers: IndexMap::new(),
+        }
     }
 
     pub fn get(&self, key: &str) -> Option<&String> {

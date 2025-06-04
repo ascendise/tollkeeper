@@ -11,10 +11,10 @@ pub fn from_str_should_create_http_format_response() {
     let headers = Headers::new(headers);
     let headers = ResponseHeaders(headers);
     let body = b"Hello, World\r\n";
-    let sut = Response::new(
+    let sut = Response::with_reason_phrase(
         "HTTP/1.1",
         StatusCode::OK,
-        Some("No-Error".into()),
+        "No-Error",
         headers,
         body.to_vec(),
     );

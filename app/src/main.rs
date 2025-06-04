@@ -1,35 +1,50 @@
 use std::{
-    io::{self, Read, Write},
+    io::{self, Read},
     net,
-    sync::Arc,
 };
+
+use http::{request::*, response::*, server::*, Headers};
 
 #[allow(dead_code)]
 mod http;
 
 fn main() -> Result<(), io::Error> {
     let listener = net::TcpListener::bind("127.0.0.1:9000")?;
-    for stream in listener.incoming() {
-        let stream = stream.expect("Failure during connection establishment");
-        let shared = Arc::new(stream);
-        let request = Request(shared.clone());
-        let stream = &mut &*shared;
-        request.print_body()?;
-        stream.write_all("HTTP/1.1 204 No Content\r\n\r\n".as_bytes())?;
-    }
+    let echo_handler = Box::new(EchoHandler {});
+    let panic_handler = Box::new(PanicHandler {});
+    let endpoints = vec![
+        Endpoint::new(Method::Post, "/echo", echo_handler),
+        Endpoint::new(Method::Post, "/panic", panic_handler),
+    ];
+    let mut server = Server::new(listener, endpoints);
+    let (_, receiver) = cancellation_token::create_cancellation_token();
+    server.start_listening(receiver).unwrap();
     Ok(())
 }
 
-struct Request(Arc<net::TcpStream>);
-impl Request {
-    fn print_body(&self) -> Result<(), io::Error> {
-        let mut buffer = [0u8; 1024];
-        let stream = &mut &*self.0;
-        let amount = stream.read(&mut buffer)?;
-        println!(
-            "Length: {amount}\r\nRequest: \r\n{}",
-            String::from_utf8(Vec::from(buffer)).expect("Could not parse message!")
-        );
-        Ok(())
+struct EchoHandler;
+impl Serve for EchoHandler {
+    fn serve(&self, request: &mut Request) -> Response {
+        let headers = Headers::new(indexmap::IndexMap::new());
+        let headers = ResponseHeaders::new(headers);
+        let body = match &mut request.body() {
+            Some(s) => {
+                let mut body = String::new();
+                match s.read_to_string(&mut body) {
+                    Ok(_) => {}
+                    Err(e) => println!("{e}"),
+                };
+                body
+            }
+            None => String::new(),
+        };
+        Response::with_reason_phrase("HTTP/1.1", StatusCode::OK, "OK", headers, body.into_bytes())
+    }
+}
+
+struct PanicHandler;
+impl Serve for PanicHandler {
+    fn serve(&self, _: &mut Request) -> Response {
+        panic!("Called wrong handler!")
     }
 }

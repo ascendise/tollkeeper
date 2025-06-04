@@ -1,4 +1,5 @@
 mod parsing;
+pub use parsing::*;
 
 use std::io;
 use std::net::{self};
@@ -102,9 +103,17 @@ impl Request {
     pub fn body(&mut self) -> &mut Option<Body> {
         &mut self.body
     }
+
+    pub fn matches_path(&self, path: &str) -> bool {
+        self.absolute_target().path() == path
+    }
+
+    pub fn matches_method(&self, method: &Method) -> bool {
+        self.method() == method
+    }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Method {
     Options,
     Get,

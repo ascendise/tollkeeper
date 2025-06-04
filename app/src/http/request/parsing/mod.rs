@@ -22,22 +22,21 @@ impl Parse<io::BufReader<net::TcpStream>> for Request {
     fn parse(mut stream: io::BufReader<net::TcpStream>) -> Result<Request, ParseError> {
         let request_line = RequestLine::parse(&mut stream)?;
         let headers = RequestHeaders::parse(&mut stream)?;
-        let peek_body = stream.fill_buf().or(Err(ParseError::Body))?;
-        let request = if peek_body == *b"\r\n00" {
-            Request::new(
-                request_line.method,
-                request_line.request_target,
-                request_line.http_version,
-                headers,
-            )
-        } else {
-            stream.consume(2);
+        let request = if headers.content_length().is_some() {
+            stream.consume(2); //Consume additional newline for body
             Request::with_body(
                 request_line.method,
                 request_line.request_target,
                 request_line.http_version,
                 headers,
                 stream,
+            )
+        } else {
+            Request::new(
+                request_line.method,
+                request_line.request_target,
+                request_line.http_version,
+                headers,
             )
         }?;
         Ok(request)

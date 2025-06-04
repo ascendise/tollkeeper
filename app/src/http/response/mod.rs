@@ -16,14 +16,29 @@ impl Response {
     pub fn new(
         http_version: impl Into<String>,
         status_code: StatusCode,
-        reason_phrase: Option<String>,
         headers: ResponseHeaders,
         body: Vec<u8>,
     ) -> Self {
         Self {
             http_version: http_version.into(),
             status_code,
-            reason_phrase,
+            reason_phrase: None,
+            headers,
+            body,
+        }
+    }
+
+    pub fn with_reason_phrase(
+        http_version: impl Into<String>,
+        status_code: StatusCode,
+        reason_phrase: impl Into<String>,
+        headers: ResponseHeaders,
+        body: Vec<u8>,
+    ) -> Self {
+        Self {
+            http_version: http_version.into(),
+            status_code,
+            reason_phrase: Some(reason_phrase.into()),
             headers,
             body,
         }
@@ -67,6 +82,46 @@ impl Response {
         let mut raw_data = Vec::from(http_message.as_bytes());
         raw_data.extend(body);
         raw_data
+    }
+
+    pub fn not_found() -> Self {
+        Self::with_reason_phrase(
+            "HTTP/1.1",
+            StatusCode::NotFound,
+            "Not Found",
+            ResponseHeaders::empty(),
+            vec![],
+        )
+    }
+
+    pub fn method_not_allowed() -> Self {
+        Self::with_reason_phrase(
+            "HTTP/1.1",
+            StatusCode::MethodNotAllowed,
+            "Method Not Allowed",
+            ResponseHeaders::empty(),
+            vec![],
+        )
+    }
+
+    pub fn internal_server_error() -> Self {
+        Self::with_reason_phrase(
+            "HTTP/1.1",
+            StatusCode::InternalServerError,
+            "Internal Server Error",
+            ResponseHeaders::empty(),
+            vec![],
+        )
+    }
+
+    pub fn bad_request() -> Self {
+        Self::with_reason_phrase(
+            "HTTP/1.1",
+            StatusCode::BadRequest,
+            "Bad Request",
+            ResponseHeaders::empty(),
+            vec![],
+        )
     }
 }
 
@@ -121,6 +176,12 @@ pub enum StatusCode {
 #[derive(Debug, PartialEq, Eq)]
 pub struct ResponseHeaders(Headers);
 impl ResponseHeaders {
+    pub fn new(headers: Headers) -> Self {
+        Self(headers)
+    }
+    pub fn empty() -> Self {
+        Self(Headers::empty())
+    }
     pub fn extension(&self, key: &str) -> Option<&String> {
         self.0.get(key)
     }

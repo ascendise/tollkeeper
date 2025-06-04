@@ -14,7 +14,7 @@ fn write_bytes_to_target(listener: &net::TcpListener, bytes: &[u8]) -> BufReader
     let address = listener.local_addr().unwrap();
     let mut stream = net::TcpStream::connect(address).expect("Failed to write bytes for test");
     let mut incoming = listener.incoming();
-    stream.write(bytes).expect("Failed to write to stream");
+    stream.write_all(bytes).expect("Failed to write to stream");
     let stream = incoming
         .next()
         .unwrap()
