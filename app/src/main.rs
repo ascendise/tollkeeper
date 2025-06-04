@@ -38,7 +38,7 @@ impl Serve for EchoHandler {
             }
             None => String::new(),
         };
-        Response::with_reason_phrase("HTTP/1.1", StatusCode::OK, "OK", headers, body.into_bytes())
+        Response::with_reason_phrase(StatusCode::OK, "OK", headers, body.into_bytes())
     }
 }
 

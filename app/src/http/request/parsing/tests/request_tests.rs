@@ -94,6 +94,7 @@ pub fn parse_should_read_http_request_with_body() {
 #[test_case(String::from(" / HTTP/1.1\r\n") ; "Missing method")]
 #[test_case(String::from("GET HTTP/1.1\r\n") ; "Missing request target")]
 #[test_case(String::from("GET /\r\n") ; "Missing HTTP version")]
+#[test_case(String::from("GET / HTTP/3.1\r\n") ; "wrong HTTP version")]
 pub fn parse_should_reject_status_line_with_invalid_format(request_line: String) {
     // Arrange
     let raw_request = request_line + "Host:localhost\r\n\r\n";

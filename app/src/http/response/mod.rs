@@ -6,21 +6,14 @@ use std::fmt::Display;
 use super::Headers;
 
 pub struct Response {
-    http_version: String,
     status_code: StatusCode,
     reason_phrase: Option<String>,
     headers: ResponseHeaders,
     body: Vec<u8>,
 }
 impl Response {
-    pub fn new(
-        http_version: impl Into<String>,
-        status_code: StatusCode,
-        headers: ResponseHeaders,
-        body: Vec<u8>,
-    ) -> Self {
+    pub fn new(status_code: StatusCode, headers: ResponseHeaders, body: Vec<u8>) -> Self {
         Self {
-            http_version: http_version.into(),
             status_code,
             reason_phrase: None,
             headers,
@@ -29,14 +22,12 @@ impl Response {
     }
 
     pub fn with_reason_phrase(
-        http_version: impl Into<String>,
         status_code: StatusCode,
         reason_phrase: impl Into<String>,
         headers: ResponseHeaders,
         body: Vec<u8>,
     ) -> Self {
         Self {
-            http_version: http_version.into(),
             status_code,
             reason_phrase: Some(reason_phrase.into()),
             headers,
@@ -45,7 +36,7 @@ impl Response {
     }
 
     pub fn http_version(&self) -> &str {
-        &self.http_version
+        "HTTP/1.1"
     }
 
     pub fn status_code(&self) -> StatusCode {
@@ -67,7 +58,7 @@ impl Response {
     /// Turns [Response] into an HTTP representation
     /// Consumes [self] to avoid having two copies of the body
     pub fn into_bytes(self) -> Vec<u8> {
-        let http_version = &self.http_version;
+        let http_version = self.http_version();
         let status_code: isize = self.status_code as isize;
         let reason_phrase = match &self.reason_phrase {
             Some(v) => v,
@@ -86,7 +77,6 @@ impl Response {
 
     pub fn not_found() -> Self {
         Self::with_reason_phrase(
-            "HTTP/1.1",
             StatusCode::NotFound,
             "Not Found",
             ResponseHeaders::empty(),
@@ -96,7 +86,6 @@ impl Response {
 
     pub fn method_not_allowed() -> Self {
         Self::with_reason_phrase(
-            "HTTP/1.1",
             StatusCode::MethodNotAllowed,
             "Method Not Allowed",
             ResponseHeaders::empty(),
@@ -106,7 +95,6 @@ impl Response {
 
     pub fn internal_server_error() -> Self {
         Self::with_reason_phrase(
-            "HTTP/1.1",
             StatusCode::InternalServerError,
             "Internal Server Error",
             ResponseHeaders::empty(),
@@ -116,7 +104,6 @@ impl Response {
 
     pub fn bad_request() -> Self {
         Self::with_reason_phrase(
-            "HTTP/1.1",
             StatusCode::BadRequest,
             "Bad Request",
             ResponseHeaders::empty(),

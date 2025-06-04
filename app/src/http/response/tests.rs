@@ -11,13 +11,7 @@ pub fn from_str_should_create_http_format_response() {
     let headers = Headers::new(headers);
     let headers = ResponseHeaders(headers);
     let body = b"Hello, World\r\n";
-    let sut = Response::with_reason_phrase(
-        "HTTP/1.1",
-        StatusCode::OK,
-        "No-Error",
-        headers,
-        body.to_vec(),
-    );
+    let sut = Response::with_reason_phrase(StatusCode::OK, "No-Error", headers, body.to_vec());
     // Act
     let raw_data: Vec<u8> = sut.into_bytes();
     let response_str = String::from_utf8(raw_data).expect("Failed to parse raw data");

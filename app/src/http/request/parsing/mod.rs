@@ -27,17 +27,11 @@ impl Parse<io::BufReader<net::TcpStream>> for Request {
             Request::with_body(
                 request_line.method,
                 request_line.request_target,
-                request_line.http_version,
                 headers,
                 stream,
             )
         } else {
-            Request::new(
-                request_line.method,
-                request_line.request_target,
-                request_line.http_version,
-                headers,
-            )
+            Request::new(request_line.method, request_line.request_target, headers)
         }?;
         Ok(request)
     }
@@ -91,14 +85,17 @@ impl RequestLine {
         request_target: String,
         http_version: String,
     ) -> Result<Self, ParseError> {
+        if http_version != "HTTP/1.1" {
+            return Err(ParseError::RequestLine);
+        }
         let request_line = Self {
             method,
-            request_target: Self::check_field(request_target)?,
-            http_version: Self::check_field(http_version)?,
+            request_target: Self::check_field_format(request_target)?,
+            http_version: Self::check_field_format(http_version)?,
         };
         Ok(request_line)
     }
-    fn check_field(str: String) -> Result<String, ParseError> {
+    fn check_field_format(str: String) -> Result<String, ParseError> {
         let bytes = str.as_bytes();
         if bytes.is_empty() {
             return Err(ParseError::RequestLine);

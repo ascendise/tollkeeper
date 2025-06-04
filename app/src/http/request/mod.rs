@@ -12,7 +12,6 @@ pub struct Request {
     method: Method,
     request_target: String,
     absolute_target: url::Url,
-    http_version: String,
     headers: RequestHeaders,
     body: Option<Body>,
 }
@@ -20,7 +19,6 @@ impl Request {
     fn create(
         method: Method,
         request_target: String,
-        http_version: String,
         headers: RequestHeaders,
         body: Option<Body>,
     ) -> Result<Self, BadRequestError> {
@@ -39,7 +37,6 @@ impl Request {
             method,
             request_target,
             absolute_target,
-            http_version,
             headers,
             body,
         };
@@ -49,37 +46,23 @@ impl Request {
     pub fn new(
         method: Method,
         request_target: impl Into<String>,
-        http_version: impl Into<String>,
         headers: RequestHeaders,
     ) -> Result<Self, BadRequestError> {
-        Self::create(
-            method,
-            request_target.into(),
-            http_version.into(),
-            headers,
-            None,
-        )
+        Self::create(method, request_target.into(), headers, None)
     }
 
     pub fn with_body(
         method: Method,
         request_target: impl Into<String>,
-        http_version: impl Into<String>,
         headers: RequestHeaders,
         body: Body,
     ) -> Result<Self, BadRequestError> {
-        Self::create(
-            method,
-            request_target.into(),
-            http_version.into(),
-            headers,
-            Some(body),
-        )
+        Self::create(method, request_target.into(), headers, Some(body))
     }
 
     /// HTTP Protocol version
     pub fn http_version(&self) -> &str {
-        &self.http_version
+        "HTTP/1.1"
     }
 
     /// Location of the resource. Can be relative or absolute

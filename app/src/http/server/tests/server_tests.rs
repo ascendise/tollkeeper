@@ -194,7 +194,7 @@ impl Serve for HelloHandler {
         headers.insert("Content-Length".into(), "8".into());
         let headers = Headers::new(indexmap::IndexMap::new());
         let headers = ResponseHeaders::new(headers);
-        Response::with_reason_phrase("HTTP/1.1", StatusCode::OK, "OK", headers, self.body.clone())
+        Response::with_reason_phrase(StatusCode::OK, "OK", headers, self.body.clone())
     }
 }
 
