@@ -7,6 +7,7 @@ use http::{request::*, response::*, server::*, Headers};
 
 #[allow(dead_code)]
 mod http;
+mod proxy;
 
 fn main() -> Result<(), io::Error> {
     let listener = net::TcpListener::bind("127.0.0.1:9000")?;
