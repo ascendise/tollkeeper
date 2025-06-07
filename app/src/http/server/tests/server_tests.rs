@@ -188,7 +188,7 @@ pub fn server_should_return_a_bad_request_on_parsing_error() {
 struct HelloHandler {
     body: Vec<u8>,
 }
-impl Serve for HelloHandler {
+impl HttpServe for HelloHandler {
     fn serve(&self, _: &mut Request) -> Response {
         let mut headers = indexmap::IndexMap::<String, String>::new();
         headers.insert("Content-Length".into(), "8".into());
@@ -199,7 +199,7 @@ impl Serve for HelloHandler {
 }
 
 struct PanicHandler;
-impl Serve for PanicHandler {
+impl HttpServe for PanicHandler {
     fn serve(&self, _: &mut Request) -> Response {
         panic!("AAAAAAAAAAAAAA");
     }

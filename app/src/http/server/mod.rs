@@ -20,13 +20,14 @@ use std::{net, sync::Arc};
 
 pub struct Server {
     listener: net::TcpListener,
-    endpoints: Arc<Mutex<Vec<Endpoint>>>,
+    handler: Arc<Mutex<Box<dyn TcpServe + Send + Sync>>>,
 }
 impl Server {
     pub fn new(listener: net::TcpListener, endpoints: Vec<Endpoint>) -> Self {
+        let handler = HttpEndpointsServe::new(Arc::new(Mutex::new(endpoints)));
         Self {
             listener,
-            endpoints: Arc::new(Mutex::new(endpoints)),
+            handler: Arc::new(Mutex::new(Box::new(handler))),
         }
     }
 
@@ -43,23 +44,37 @@ impl Server {
                     Ok(result) => result.0,
                     Err(_) => continue,
                 };
-                let endpoints = self.endpoints.clone();
+                let handler = self.handler.clone();
                 s.spawn(move || {
-                    let result = panic::catch_unwind(|| {
-                        match Self::handle_incoming_request(endpoints, stream.try_clone().unwrap())
-                        {
-                            Ok(_) => (),
-                            Err(_) => Self::send_request(&stream, Response::bad_request()),
-                        }
-                    });
-                    match result {
-                        Ok(_) => (),
-                        Err(_) => Self::send_request(&stream, Response::internal_server_error()),
-                    }
+                    handler.lock().unwrap().serve(stream);
                 });
             }
         });
         Ok(())
+    }
+}
+
+pub struct HttpEndpointsServe {
+    endpoints: Arc<Mutex<Vec<Endpoint>>>,
+}
+impl TcpServe for HttpEndpointsServe {
+    fn serve(&self, stream: net::TcpStream) {
+        let endpoints = self.endpoints.clone();
+        let result = panic::catch_unwind(|| {
+            match Self::handle_incoming_request(endpoints, stream.try_clone().unwrap()) {
+                Ok(_) => (),
+                Err(_) => Self::send_request(&stream, Response::bad_request()),
+            }
+        });
+        match result {
+            Ok(_) => (),
+            Err(_) => Self::send_request(&stream, Response::internal_server_error()),
+        }
+    }
+}
+impl HttpEndpointsServe {
+    pub fn new(endpoints: Arc<Mutex<Vec<Endpoint>>>) -> Self {
+        Self { endpoints }
     }
 
     fn handle_incoming_request(
@@ -76,7 +91,7 @@ impl Server {
             .peekable();
         let response = if endpoints.peek().is_some() {
             match endpoints.find(|e| request.matches_method(&e.method)) {
-                Some(e) => Self::serve(e, &mut request),
+                Some(e) => e.serve(&mut request),
                 None => Response::method_not_allowed(),
             }
         } else {
@@ -84,10 +99,6 @@ impl Server {
         };
         write_stream.write_all(&response.into_bytes()).unwrap();
         Ok(())
-    }
-
-    fn serve(endpoint: &mut Endpoint, request: &mut Request) -> Response {
-        endpoint.serve(request)
     }
 
     fn send_request(mut stream: &net::TcpStream, response: Response) {
@@ -98,14 +109,14 @@ impl Server {
 pub struct Endpoint {
     method: Method,
     path: String,
-    handler: Box<dyn Serve + Sync + Send>,
+    handler: Box<dyn HttpServe + Sync + Send>,
 }
 
 impl Endpoint {
     pub fn new(
         method: Method,
         path: impl Into<String>,
-        handler: Box<dyn Serve + Sync + Send>,
+        handler: Box<dyn HttpServe + Sync + Send>,
     ) -> Self {
         Self {
             method,
@@ -119,8 +130,12 @@ impl Endpoint {
     }
 }
 
-pub trait Serve {
+pub trait HttpServe {
     fn serve(&self, request: &mut Request) -> Response;
+}
+
+pub trait TcpServe {
+    fn serve(&self, stream: net::TcpStream);
 }
 
 #[derive(Debug, PartialEq, Eq)]

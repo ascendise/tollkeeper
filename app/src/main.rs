@@ -23,7 +23,7 @@ fn main() -> Result<(), io::Error> {
 }
 
 struct EchoHandler;
-impl Serve for EchoHandler {
+impl HttpServe for EchoHandler {
     fn serve(&self, request: &mut Request) -> Response {
         let headers = Headers::new(indexmap::IndexMap::new());
         let headers = ResponseHeaders::new(headers);
@@ -43,7 +43,7 @@ impl Serve for EchoHandler {
 }
 
 struct PanicHandler;
-impl Serve for PanicHandler {
+impl HttpServe for PanicHandler {
     fn serve(&self, _: &mut Request) -> Response {
         panic!("Called wrong handler!")
     }
