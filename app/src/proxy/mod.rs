@@ -5,6 +5,7 @@ use std::net;
 
 use crate::http::request::Parse;
 use crate::http::request::Request;
+use crate::http::response::Response;
 
 use super::http::server::*;
 
@@ -17,8 +18,13 @@ impl ProxyServe {}
 impl TcpServe for ProxyServe {
     fn serve(&self, mut stream: std::net::TcpStream) {
         let reader = BufReader::new(stream.try_clone().unwrap());
-        let request = Request::parse(reader).unwrap(); //TODO: Return 400 Bad Request
-                                                       //TODO: Do stuff
+        let request = match Request::parse(reader) {
+            Ok(v) => v,
+            Err(_) => {
+                send_response(stream, Response::bad_request());
+                return;
+            }
+        };
         let addr = get_host(request);
         let mut conn = net::TcpStream::connect(addr).unwrap();
         //TODO:
@@ -35,4 +41,9 @@ fn get_host(request: Request) -> String {
     let port = target.port().unwrap();
     let addr = format!("{host}:{port}");
     addr
+}
+
+fn send_response(mut stream: net::TcpStream, response: Response) {
+    let response = response.into_bytes();
+    stream.write_all(&response).unwrap()
 }

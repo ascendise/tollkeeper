@@ -61,3 +61,29 @@ pub fn serve_should_return_response_of_target() {
     let expected_response = "Hello, my friend!";
     assert_eq!(expected_response, response);
 }
+
+#[test]
+pub fn serve_should_return_bad_request_if_not_parseable() {
+    // Arrange
+    let (sut, server_listener) = setup();
+    let server_addr = server_listener
+        .local_addr()
+        .expect("Failed to retrieve address of test socket");
+    let (proxy, _) = setup_proxy("Hello, my friend!".into());
+    // Act
+    let request =
+        String::from("In the grim dark future of the year 40000, there is only war.\r\n\r\n");
+    let mut client_conn = send_request(server_addr, request.into());
+    let (server_conn, _) = server_listener
+        .accept()
+        .expect("Failed to retrieve connection");
+    sut.serve(server_conn);
+    proxy.join().unwrap();
+    // Assert
+    let mut response = String::new();
+    client_conn
+        .read_to_string(&mut response)
+        .expect("Failed to get server response");
+    let expected_response = "HTTP/1.1 400 Bad Request\r\n\r\n";
+    assert_eq!(expected_response, response);
+}
