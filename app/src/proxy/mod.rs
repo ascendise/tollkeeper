@@ -1,4 +1,3 @@
-use std::io;
 use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
@@ -20,10 +19,7 @@ impl TcpServe for ProxyServe {
         let reader = BufReader::new(stream.try_clone().unwrap());
         let request = Request::parse(reader).unwrap(); //TODO: Return 400 Bad Request
                                                        //TODO: Do stuff
-        let target = request.absolute_target();
-        let host = target.host_str().unwrap();
-        let port = target.port().unwrap();
-        let addr = format!("{host}:{port}");
+        let addr = get_host(request);
         let mut conn = net::TcpStream::connect(addr).unwrap();
         //TODO:
         // Return error indicating error from other server
@@ -31,4 +27,12 @@ impl TcpServe for ProxyServe {
         conn.read_to_string(&mut response).unwrap();
         stream.write_all(response.as_bytes()).unwrap();
     }
+}
+
+fn get_host(request: Request) -> String {
+    let target = request.absolute_target();
+    let host = target.host_str().unwrap();
+    let port = target.port().unwrap();
+    let addr = format!("{host}:{port}");
+    addr
 }

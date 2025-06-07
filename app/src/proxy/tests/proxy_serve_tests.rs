@@ -1,5 +1,4 @@
-use std::io::BufReader;
-use std::{io, thread};
+use std::thread;
 use std::{
     io::{Read, Write},
     net,
@@ -13,14 +12,26 @@ fn setup() -> (ProxyServe, net::TcpListener) {
     (sut, listener)
 }
 
-fn setup_proxy(listener: net::TcpListener, response: Vec<u8>) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
+fn setup_proxy(response: Vec<u8>) -> (thread::JoinHandle<()>, net::SocketAddr) {
+    let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let local_addr = listener.local_addr().unwrap().clone();
+    let thread = thread::spawn(move || {
         for conn in listener.incoming() {
             let mut conn = conn.unwrap();
             conn.write_all(&response).unwrap();
             return;
         }
-    })
+    });
+    (thread, local_addr)
+}
+
+fn send_request(server_addr: net::SocketAddr, request: Vec<u8>) -> net::TcpStream {
+    let mut client_conn =
+        net::TcpStream::connect(server_addr).expect("Failed to connect to test socket");
+    client_conn
+        .write_all(&request)
+        .expect("Failed to send test request");
+    client_conn
 }
 
 #[test]
@@ -30,19 +41,13 @@ pub fn serve_should_return_response_of_target() {
     let server_addr = server_listener
         .local_addr()
         .expect("Failed to retrieve address of test socket");
-    let proxy_listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let proxy_addr = proxy_listener.local_addr().unwrap();
-    let proxy = setup_proxy(proxy_listener, b"Hello, my friend!".into());
-    let mut client_conn =
-        net::TcpStream::connect(server_addr).expect("Failed to connect to test socket");
+    let (proxy, proxy_addr) = setup_proxy("Hello, my friend!".into());
     // Act
     let request = format!(
         "GET / HTTP/1.1\r\nHost:127.0.0.1:{}\r\n\r\nHello, Server!\r\n",
         proxy_addr.port()
     );
-    client_conn
-        .write_all(request.as_bytes())
-        .expect("Failed to send test request");
+    let mut client_conn = send_request(server_addr, request.into());
     let (server_conn, _) = server_listener
         .accept()
         .expect("Failed to retrieve connection");
