@@ -16,7 +16,7 @@ fn main() -> Result<(), io::Error> {
         Endpoint::new(Method::Post, "/echo", echo_handler),
         Endpoint::new(Method::Post, "/panic", panic_handler),
     ];
-    let mut server = Server::new(listener, endpoints);
+    let mut server = Server::create_http_endpoints(listener, endpoints);
     let (_, receiver) = cancellation_token::create_cancellation_token();
     server.start_listening(receiver).unwrap();
     Ok(())

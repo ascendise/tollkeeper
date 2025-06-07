@@ -15,7 +15,10 @@ fn setup(endpoints: Vec<Endpoint>) -> (Server, net::SocketAddr) {
     let local_addr = listener
         .local_addr()
         .expect("Failed to retrieve address of test socket");
-    (Server::new(listener, endpoints), local_addr)
+    (
+        Server::create_http_endpoints(listener, endpoints),
+        local_addr,
+    )
 }
 
 fn send_request(addr: net::SocketAddr, request: &[u8]) -> String {

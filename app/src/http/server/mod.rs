@@ -23,7 +23,8 @@ pub struct Server {
     handler: Arc<Mutex<Box<dyn TcpServe + Send + Sync>>>,
 }
 impl Server {
-    pub fn new(listener: net::TcpListener, endpoints: Vec<Endpoint>) -> Self {
+    /// Creates a new HTTP [Server] with multiple [endpoints](Endpoint)
+    pub fn create_http_endpoints(listener: net::TcpListener, endpoints: Vec<Endpoint>) -> Self {
         let handler = HttpEndpointsServe::new(Arc::new(Mutex::new(endpoints)));
         Self {
             listener,
@@ -54,6 +55,8 @@ impl Server {
     }
 }
 
+/// Serve implementation that handles HTTP [requests](Request) and returns HTTP
+/// [responses](Response)
 pub struct HttpEndpointsServe {
     endpoints: Arc<Mutex<Vec<Endpoint>>>,
 }
