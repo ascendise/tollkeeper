@@ -1,5 +1,7 @@
 use std::io;
 use std::io::BufReader;
+use std::io::Read;
+use std::io::Write;
 use std::net;
 
 use crate::http::request::Parse;
@@ -10,30 +12,23 @@ use super::http::server::*;
 #[cfg(test)]
 mod tests;
 
-pub struct ProxyServe {
-    client: Box<dyn ProxyClient>,
-}
+pub struct ProxyServe {}
 
-impl ProxyServe {
-    pub fn new(client: Box<dyn ProxyClient>) -> Self {
-        Self { client }
-    }
-}
+impl ProxyServe {}
 impl TcpServe for ProxyServe {
-    fn serve(&self, stream: std::net::TcpStream) {
+    fn serve(&self, mut stream: std::net::TcpStream) {
         let reader = BufReader::new(stream.try_clone().unwrap());
-        let mut request = Request::parse(reader).unwrap(); //TODO: Return 400 Bad Request
-        self.client.send(&mut request);
+        let request = Request::parse(reader).unwrap(); //TODO: Return 400 Bad Request
+                                                       //TODO: Do stuff
+        let target = request.absolute_target();
+        let host = target.host_str().unwrap();
+        let port = target.port().unwrap();
+        let addr = format!("{host}:{port}");
+        let mut conn = net::TcpStream::connect(addr).unwrap();
+        //TODO:
+        // Return error indicating error from other server
+        let mut response = String::new();
+        conn.read_to_string(&mut response).unwrap();
+        stream.write_all(response.as_bytes()).unwrap();
     }
-}
-
-pub struct ProxyClientImpl;
-impl ProxyClient for ProxyClientImpl {
-    fn send(&self, request: &mut Request) -> io::BufReader<net::TcpStream> {
-        todo!("Implement ProxyClient!");
-    }
-}
-
-pub trait ProxyClient {
-    fn send(&self, request: &mut Request) -> io::BufReader<net::TcpStream>;
 }
