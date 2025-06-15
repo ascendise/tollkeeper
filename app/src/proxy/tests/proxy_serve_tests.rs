@@ -69,7 +69,6 @@ pub fn serve_should_return_bad_request_if_not_parseable() {
     let server_addr = server_listener
         .local_addr()
         .expect("Failed to retrieve address of test socket");
-    let (proxy, _) = setup_proxy("Hello, my friend!".into());
     // Act
     let request =
         String::from("In the grim dark future of the year 40000, there is only war.\r\n\r\n");
@@ -78,7 +77,6 @@ pub fn serve_should_return_bad_request_if_not_parseable() {
         .accept()
         .expect("Failed to retrieve connection");
     sut.serve(server_conn);
-    proxy.join().unwrap();
     // Assert
     let mut response = String::new();
     client_conn
