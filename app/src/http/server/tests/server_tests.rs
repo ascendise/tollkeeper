@@ -1,13 +1,13 @@
+use crate::http::{
+    response::{ResponseHeaders, StatusCode},
+    server::*,
+    Headers, StreamBody,
+};
+use std::collections::VecDeque;
 use std::{
     io::{Read, Write},
     net::{self},
     thread,
-};
-
-use crate::http::{
-    response::{ResponseHeaders, StatusCode},
-    server::*,
-    Headers,
 };
 
 fn setup(endpoints: Vec<Endpoint>) -> (Server, net::SocketAddr) {
@@ -54,7 +54,7 @@ pub fn server_should_handle_request_through_defined_endpoint() {
     .as_bytes();
     let response = send_request(addr, request);
     // Assert
-    let expected_response = "HTTP/1.1 200 OK\r\n\r\nHello!\r\n";
+    let expected_response = "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nHello!\r\n";
     assert_eq!(expected_response, response);
     sender.send_shutdown().unwrap();
     server_thread.join().unwrap().unwrap();
@@ -87,7 +87,7 @@ pub fn server_should_handle_request_on_specific_path() {
     .as_bytes();
     let response = send_request(addr, request);
     // Assert
-    let expected_response = "HTTP/1.1 200 OK\r\n\r\nGood Morning!\r\n";
+    let expected_response = "HTTP/1.1 200 OK\r\nContent-Length: 15\r\n\r\nGood Morning!\r\n";
     assert_eq!(expected_response, response);
     sender.send_shutdown().unwrap();
     server_thread.join().unwrap().unwrap();
@@ -194,10 +194,11 @@ struct HelloHandler {
 impl HttpServe for HelloHandler {
     fn serve(&self, _: &mut Request) -> Response {
         let mut headers = indexmap::IndexMap::<String, String>::new();
-        headers.insert("Content-Length".into(), "8".into());
-        let headers = Headers::new(indexmap::IndexMap::new());
+        headers.insert("Content-Length".into(), self.body.len().to_string());
+        let headers = Headers::new(headers);
         let headers = ResponseHeaders::new(headers);
-        Response::with_reason_phrase(StatusCode::OK, "OK", headers, self.body.clone())
+        let body = Box::new(StreamBody::<VecDeque<u8>>::new(self.body.clone().into()));
+        Response::new(StatusCode::OK, Some("OK".into()), headers, Some(body))
     }
 }
 

@@ -1,36 +1,18 @@
+use crate::http::parsing::ParseError;
+use crate::http::request::RequestHeaders;
+use crate::http::request::{Method, Request};
+use crate::http::{Headers, Parse};
 use indexmap::IndexMap;
-use std::io::{BufReader, Read, Write};
-use std::net;
+use std::collections::VecDeque;
 use test_case::test_case;
-
-use crate::http::request::{parsing::*, Request};
-use crate::http::request::{Headers, RequestHeaders};
-
-fn setup_listener() -> net::TcpListener {
-    net::TcpListener::bind("127.0.0.1:0").expect("Failed to setup test socket")
-}
-
-fn write_bytes_to_target(listener: &net::TcpListener, bytes: &[u8]) -> BufReader<net::TcpStream> {
-    let address = listener.local_addr().unwrap();
-    let mut stream = net::TcpStream::connect(address).expect("Failed to write bytes for test");
-    let mut incoming = listener.incoming();
-    stream.write_all(bytes).expect("Failed to write to stream");
-    let stream = incoming
-        .next()
-        .unwrap()
-        .expect("Could not open server stream");
-    BufReader::new(stream)
-}
 
 #[test]
 pub fn parse_should_read_minimal_http_request() {
     // Arrange
     let raw_request = concat!("GET / HTTP/1.1\r\n", "Host:localhost\r\n\r\n");
     let raw_request = raw_request.as_bytes();
-    let listener = setup_listener();
     // Act
-    let stream = write_bytes_to_target(&listener, raw_request);
-    let request = Request::parse(stream).expect("Failed to parse perfectly valid request");
+    let request = Request::parse(raw_request).expect("Failed to parse perfectly valid request");
     // Assert
     assert_eq!(Method::Get, *request.method());
     assert_eq!("/", request.request_target());
@@ -54,11 +36,8 @@ pub fn parse_should_read_http_request_with_body() {
         "Hello, World!\r\n"
     );
     let raw_request = raw_request.as_bytes();
-    let listener = setup_listener();
     // Act
-    let incoming_stream = write_bytes_to_target(&listener, raw_request);
-    let mut request =
-        Request::parse(incoming_stream).expect("Failed to parse perfectly valid request");
+    let mut request = Request::parse(raw_request).expect("Failed to parse perfectly valid request");
     // Assert
     assert_eq!(&Method::Post, request.method());
     assert_eq!("/", request.request_target());
@@ -98,11 +77,9 @@ pub fn parse_should_read_http_request_with_body() {
 pub fn parse_should_reject_status_line_with_invalid_format(request_line: String) {
     // Arrange
     let raw_request = request_line + "Host:localhost\r\n\r\n";
-    let raw_request = raw_request.as_bytes();
-    let listener = setup_listener();
+    let raw_request: VecDeque<u8> = raw_request.into_bytes().into();
     // Act
-    let stream = write_bytes_to_target(&listener, raw_request);
-    let result = Request::parse(stream);
+    let result = Request::parse(raw_request);
     // Assert
     let error = match result {
         Ok(r) => panic!(
@@ -125,11 +102,9 @@ pub fn parse_should_reject_status_line_with_invalid_format(request_line: String)
 pub fn parse_should_reject_headers_with_invalid_format(headers: String) {
     // Arrange
     let raw_request = format!("GET / HTTP/1.1\r\n{headers}\r\n");
-    let raw_request = raw_request.as_bytes();
-    let listener = setup_listener();
+    let raw_request: VecDeque<u8> = raw_request.into_bytes().into();
     // Act
-    let stream = write_bytes_to_target(&listener, raw_request);
-    let result = Request::parse(stream);
+    let result = Request::parse(raw_request);
     // Assert
     let error = match result {
         Ok(r) => panic!("Invalid headers got accepted!: '{}'", r.headers()),
@@ -149,10 +124,8 @@ pub fn parse_should_treat_headers_case_insensitive() {
         "\r\n",
     );
     let raw_request = raw_request.as_bytes();
-    let listener = setup_listener();
     // Act
-    let stream = write_bytes_to_target(&listener, raw_request);
-    let request = Request::parse(stream).expect("Could not parse valid request");
+    let request = Request::parse(raw_request).expect("Could not parse valid request");
     // Assert
     let ua_header = request
         .headers()
@@ -170,11 +143,11 @@ pub fn parse_should_reject_message_with_mismatched_host_and_request_target() {
         "\r\n",
     );
     let raw_request = raw_request.as_bytes();
-    let listener = setup_listener();
     // Act
-    let stream = write_bytes_to_target(&listener, raw_request);
-    let err = Request::parse(stream)
-        .expect_err("Mismatched request target and Host was parsed without error!");
+    let err = match Request::parse(raw_request) {
+        Ok(_) => panic!("Mismatched request target and host were parsed without error!"),
+        Err(e) => e,
+    };
     // Assert
     assert_eq!(ParseError::Header, err);
 }

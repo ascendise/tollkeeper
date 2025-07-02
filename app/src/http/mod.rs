@@ -1,10 +1,11 @@
-use std::{fmt::Display, str::FromStr};
-
 use indexmap::IndexMap;
+use std::io::Read;
+use std::{fmt::Display, io, str::FromStr};
 
 #[cfg(test)]
 mod tests;
 
+mod parsing;
 pub mod request;
 pub mod response;
 pub mod server;
@@ -61,4 +62,37 @@ impl Display for Headers {
 struct Header {
     original_key: String,
     value: String,
+}
+
+pub trait Parse<T>: Sized {
+    type Err;
+    fn parse(stream: T) -> Result<Self, Self::Err>;
+}
+
+/// Body of an HTTP Message
+pub trait Body {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error>;
+    fn read_to_string(&mut self, buf: &mut String) -> Result<usize, io::Error>;
+    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()>;
+}
+
+pub struct StreamBody<T: Read> {
+    stream: io::BufReader<T>,
+}
+impl<T: Read> StreamBody<T> {
+    pub fn new(stream: T) -> Self {
+        let stream = io::BufReader::new(stream);
+        Self { stream }
+    }
+}
+impl<T: Read> Body for StreamBody<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+        self.stream.read(buf)
+    }
+    fn read_to_string(&mut self, buf: &mut String) -> Result<usize, io::Error> {
+        self.stream.read_to_string(buf)
+    }
+    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+        self.stream.read_exact(buf)
+    }
 }

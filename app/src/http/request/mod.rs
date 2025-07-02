@@ -1,20 +1,11 @@
-mod parsing;
-pub use parsing::*;
-
-use std::io;
-use std::net::{self};
-
 use super::*;
 
-type Body = io::BufReader<net::TcpStream>;
-
-#[derive(Debug)]
 pub struct Request {
     method: Method,
     request_target: String,
     absolute_target: url::Url,
     headers: RequestHeaders,
-    body: Option<Body>,
+    body: Option<Box<dyn Body>>,
 }
 impl Request {
     pub fn new(
@@ -29,7 +20,7 @@ impl Request {
         method: Method,
         request_target: impl Into<String>,
         headers: RequestHeaders,
-        body: Body,
+        body: Box<dyn Body>,
     ) -> Result<Self, BadRequestError> {
         Self::create(method, request_target.into(), headers, Some(body))
     }
@@ -38,7 +29,7 @@ impl Request {
         method: Method,
         request_target: String,
         headers: RequestHeaders,
-        body: Option<Body>,
+        body: Option<Box<dyn Body>>,
     ) -> Result<Self, BadRequestError> {
         let absolute_target = Self::resolve_absolute_target(&request_target, &headers)?;
         let request = Self {
@@ -102,7 +93,7 @@ impl Request {
         &self.headers
     }
 
-    pub fn body(&mut self) -> &mut Option<Body> {
+    pub fn body(&mut self) -> &mut Option<Box<dyn Body>> {
         &mut self.body
     }
 
@@ -112,6 +103,27 @@ impl Request {
 
     pub fn matches_method(&self, method: &Method) -> bool {
         self.method() == method
+    }
+
+    /// Turns [Request] into an HTTP representation
+    /// Consumes [self] to avoid having two copies of the body
+    pub fn into_bytes(self) -> Vec<u8> {
+        let method = self.method();
+        let request_target = self.request_target();
+        let http_version = self.http_version();
+        let headers = self.headers();
+        let http_message = format!(
+            "{} {} {}\r\n{}\r\n",
+            method, request_target, http_version, headers
+        );
+        let mut raw_data = Vec::from(http_message.as_bytes());
+        if self.body.is_some() {
+            let mut body = self.body.unwrap();
+            let mut data = String::new();
+            body.read_to_string(&mut data).unwrap();
+            raw_data.extend(data.as_bytes());
+        }
+        raw_data
     }
 }
 

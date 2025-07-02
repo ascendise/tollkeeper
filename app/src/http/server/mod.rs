@@ -5,8 +5,10 @@ mod tests;
 use cancellation_token::CancelReceiver;
 
 use super::{
-    request::{self, Method, Parse, Request},
+    parsing,
+    request::{Method, Request},
     response::Response,
+    Parse,
 };
 use std::{
     error::Error,
@@ -26,14 +28,17 @@ impl Server {
     /// Creates a new HTTP [Server] with multiple [endpoints](Endpoint)
     pub fn create_http_endpoints(listener: net::TcpListener, endpoints: Vec<Endpoint>) -> Self {
         let handler = HttpEndpointsServe::new(Arc::new(Mutex::new(endpoints)));
-        Self {
-            listener,
-            handler: Arc::new(Mutex::new(Box::new(handler))),
-        }
+        Self::new(listener, Box::new(handler))
+    }
+
+    /// Create low level TCP [Server]
+    pub fn new(listener: net::TcpListener, handler: Box<dyn TcpServe + Send + Sync>) -> Self {
+        let handler = Arc::new(Mutex::new(handler));
+        Self { listener, handler }
     }
 
     /// Blocks execution and starts listening for connections.
-    /// Connections get handled in independant threads
+    /// Connections get handled in independent threads
     pub fn start_listening(&mut self, cancel_receiver: CancelReceiver) -> Result<(), StartupError> {
         match self.listener.set_nonblocking(true) {
             Ok(_) => Ok(()),
@@ -83,7 +88,7 @@ impl HttpEndpointsServe {
     fn handle_incoming_request(
         endpoints: Arc<Mutex<Vec<Endpoint>>>,
         stream: net::TcpStream,
-    ) -> Result<(), request::ParseError> {
+    ) -> Result<(), parsing::ParseError> {
         let mut write_stream = stream.try_clone().unwrap();
         let reader = io::BufReader::new(stream);
         let mut request = Request::parse(reader)?;

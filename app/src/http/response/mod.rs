@@ -3,33 +3,24 @@ mod tests;
 
 use std::fmt::Display;
 
-use super::Headers;
+use super::{Body, Headers};
 
 pub struct Response {
     status_code: StatusCode,
     reason_phrase: Option<String>,
     headers: ResponseHeaders,
-    body: Vec<u8>,
+    body: Option<Box<dyn Body>>,
 }
 impl Response {
-    pub fn new(status_code: StatusCode, headers: ResponseHeaders, body: Vec<u8>) -> Self {
-        Self {
-            status_code,
-            reason_phrase: None,
-            headers,
-            body,
-        }
-    }
-
-    pub fn with_reason_phrase(
+    pub fn new(
         status_code: StatusCode,
-        reason_phrase: impl Into<String>,
+        reason_phrase: Option<String>,
         headers: ResponseHeaders,
-        body: Vec<u8>,
+        body: Option<Box<dyn Body>>,
     ) -> Self {
         Self {
             status_code,
-            reason_phrase: Some(reason_phrase.into()),
+            reason_phrase,
             headers,
             body,
         }
@@ -51,8 +42,8 @@ impl Response {
         &self.headers
     }
 
-    pub fn body(&self) -> &[u8] {
-        &self.body
+    pub fn body(&mut self) -> Option<&mut Box<dyn Body>> {
+        self.body.as_mut()
     }
 
     /// Turns [Response] into an HTTP representation
@@ -69,50 +60,54 @@ impl Response {
             "{} {} {}\r\n{}\r\n",
             http_version, status_code, reason_phrase, headers
         );
-        let body = self.body;
         let mut raw_data = Vec::from(http_message.as_bytes());
-        raw_data.extend(body);
+        if let Some(len) = self.headers.content_length() {
+            let mut buffer = vec![0; len];
+            let mut body = self.body.unwrap();
+            body.read_exact(&mut buffer).unwrap();
+            raw_data.extend(buffer);
+        };
         raw_data
     }
 
     pub fn not_found() -> Self {
-        Self::with_reason_phrase(
+        Self::new(
             StatusCode::NotFound,
-            "Not Found",
+            Some("Not Found".into()),
             ResponseHeaders::empty(),
-            vec![],
+            None,
         )
     }
 
     pub fn method_not_allowed() -> Self {
-        Self::with_reason_phrase(
+        Self::new(
             StatusCode::MethodNotAllowed,
-            "Method Not Allowed",
+            Some("Method Not Allowed".into()),
             ResponseHeaders::empty(),
-            vec![],
+            None,
         )
     }
 
     pub fn internal_server_error() -> Self {
-        Self::with_reason_phrase(
+        Self::new(
             StatusCode::InternalServerError,
-            "Internal Server Error",
+            Some("Internal Server Error".into()),
             ResponseHeaders::empty(),
-            vec![],
+            None,
         )
     }
 
     pub fn bad_request() -> Self {
-        Self::with_reason_phrase(
+        Self::new(
             StatusCode::BadRequest,
-            "Bad Request",
+            Some("Bad Request".into()),
             ResponseHeaders::empty(),
-            vec![],
+            None,
         )
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum StatusCode {
     Continue = 100,
     SwitchingProtocols = 101,
@@ -159,6 +154,58 @@ pub enum StatusCode {
     GatewayTimeout = 504,
     HttpVersionNotSupported = 505,
 }
+impl StatusCode {
+    pub fn from(value: &str) -> Option<Self> {
+        let status_code = match value {
+            "100" => StatusCode::Continue,
+            "101" => StatusCode::SwitchingProtocols,
+            "200" => StatusCode::OK,
+            "201" => StatusCode::Created,
+            "202" => StatusCode::Accepted,
+            "203" => StatusCode::NonAuthoritativeInformation,
+            "204" => StatusCode::NoContent,
+            "205" => StatusCode::ResetContent,
+            "206" => StatusCode::PartialContent,
+            "300" => StatusCode::MultipleChoices,
+            "301" => StatusCode::MovedPermanently,
+            "302" => StatusCode::Found,
+            "303" => StatusCode::SeeOther,
+            "304" => StatusCode::NotModified,
+            "305" => StatusCode::UseProxy,
+            "307" => StatusCode::TemporaryRedirect,
+            "308" => StatusCode::PermanentRedirect,
+            "400" => StatusCode::BadRequest,
+            "401" => StatusCode::Unauthorized,
+            "402" => StatusCode::PaymentRequired,
+            "403" => StatusCode::Forbidden,
+            "404" => StatusCode::NotFound,
+            "405" => StatusCode::MethodNotAllowed,
+            "406" => StatusCode::NotAcceptable,
+            "407" => StatusCode::ProxyAuthenticationRequired,
+            "408" => StatusCode::RequestTimeout,
+            "409" => StatusCode::Conflict,
+            "410" => StatusCode::Gone,
+            "411" => StatusCode::LengthRequired,
+            "412" => StatusCode::PreconditionFailed,
+            "413" => StatusCode::ContentTooLarge,
+            "414" => StatusCode::URITooLong,
+            "415" => StatusCode::UnsupportedMediaType,
+            "416" => StatusCode::RangeNotSatisfiable,
+            "417" => StatusCode::ExpectationFailed,
+            "421" => StatusCode::MisdirectedRequest,
+            "422" => StatusCode::UnprocessableContent,
+            "426" => StatusCode::UpgradeRequired,
+            "500" => StatusCode::InternalServerError,
+            "501" => StatusCode::NotImplemented,
+            "502" => StatusCode::BadGateway,
+            "503" => StatusCode::ServiceUnavailable,
+            "504" => StatusCode::GatewayTimeout,
+            "505" => StatusCode::HttpVersionNotSupported,
+            _ => return None,
+        };
+        Some(status_code)
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ResponseHeaders(Headers);
@@ -168,6 +215,9 @@ impl ResponseHeaders {
     }
     pub fn empty() -> Self {
         Self(Headers::empty())
+    }
+    pub fn content_length(&self) -> Option<usize> {
+        self.0.get("Content-Length").map(|v| v.parse().unwrap())
     }
     pub fn extension(&self, key: &str) -> Option<&String> {
         self.0.get(key)
