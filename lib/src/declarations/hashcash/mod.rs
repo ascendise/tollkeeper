@@ -6,7 +6,7 @@ use std::{collections::HashSet, mem::size_of, str::FromStr};
 use chrono::TimeZone;
 use sha1::Digest;
 
-use crate::tollkeeper::util::DateTimeProvider;
+use crate::util::DateTimeProvider;
 
 use super::*;
 

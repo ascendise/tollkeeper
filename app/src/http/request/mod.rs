@@ -1,17 +1,18 @@
 use super::*;
+use crate::http;
 
 pub struct Request {
     method: Method,
     request_target: String,
     absolute_target: url::Url,
-    headers: RequestHeaders,
+    headers: Headers,
     body: Option<Box<dyn Body>>,
 }
 impl Request {
     pub fn new(
         method: Method,
         request_target: impl Into<String>,
-        headers: RequestHeaders,
+        headers: Headers,
     ) -> Result<Self, BadRequestError> {
         Self::create(method, request_target.into(), headers, None)
     }
@@ -19,7 +20,7 @@ impl Request {
     pub fn with_body(
         method: Method,
         request_target: impl Into<String>,
-        headers: RequestHeaders,
+        headers: Headers,
         body: Box<dyn Body>,
     ) -> Result<Self, BadRequestError> {
         Self::create(method, request_target.into(), headers, Some(body))
@@ -28,7 +29,7 @@ impl Request {
     fn create(
         method: Method,
         request_target: String,
-        headers: RequestHeaders,
+        headers: Headers,
         body: Option<Box<dyn Body>>,
     ) -> Result<Self, BadRequestError> {
         let absolute_target = Self::resolve_absolute_target(&request_target, &headers)?;
@@ -44,7 +45,7 @@ impl Request {
 
     fn resolve_absolute_target(
         request_target: &str,
-        headers: &RequestHeaders,
+        headers: &Headers,
     ) -> Result<url::Url, BadRequestError> {
         let protocol = String::from("http://");
         let host_url = protocol.clone() + headers.host();
@@ -89,7 +90,7 @@ impl Request {
     }
 
     /// Request headers
-    pub fn headers(&self) -> &RequestHeaders {
+    pub fn headers(&self) -> &Headers {
         &self.headers
     }
 
@@ -179,11 +180,11 @@ impl FromStr for Method {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct RequestHeaders {
-    headers: Headers,
+pub struct Headers {
+    headers: http::Headers,
 }
-impl RequestHeaders {
-    pub fn new(headers: Headers) -> Result<Self, BadRequestError> {
+impl Headers {
+    pub fn new(headers: http::Headers) -> Result<Self, BadRequestError> {
         if headers.get("host").is_none() {
             Err(BadRequestError::NoHostHeader)
         } else {
@@ -275,7 +276,7 @@ impl RequestHeaders {
         self.headers.get(name)
     }
 }
-impl Display for RequestHeaders {
+impl Display for Headers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.headers.fmt(f)
     }

@@ -4,23 +4,25 @@ use std::{
 };
 
 use super::{util, ParseError};
-use crate::http::request::BadRequestError;
-use crate::http::request::*;
-use crate::http::{Headers, Parse, StreamBody};
+use crate::http::Parse;
+use crate::http::{
+    self,
+    request::{self, BadRequestError, *},
+};
 
 impl<T: Read + 'static> Parse<T> for Request {
     type Err = ParseError;
     fn parse(stream: T) -> Result<Request, ParseError> {
         let mut stream = io::BufReader::new(stream);
         let request_line = RequestLine::parse(&mut stream)?;
-        let headers = RequestHeaders::parse(&mut stream)?;
+        let headers = request::Headers::parse(&mut stream)?;
         let request = if headers.content_length().is_some() {
             stream.consume(2); //Consume additional newline for body
             Request::with_body(
                 request_line.method,
                 request_line.request_target,
                 headers,
-                Box::new(StreamBody::new(stream)),
+                Box::new(http::StreamBody::new(stream)),
             )
         } else {
             Request::new(request_line.method, request_line.request_target, headers)
@@ -98,12 +100,12 @@ impl<T: Read> Parse<&mut io::BufReader<T>> for RequestLine {
     }
 }
 
-impl<T: Read> Parse<&mut io::BufReader<T>> for RequestHeaders {
+impl<T: Read> Parse<&mut io::BufReader<T>> for Headers {
     type Err = ParseError;
 
     fn parse(reader: &mut io::BufReader<T>) -> Result<Self, Self::Err> {
-        let headers = Headers::parse(reader);
-        Ok(RequestHeaders::new(headers?)?)
+        let headers = http::Headers::parse(reader);
+        Ok(Headers::new(headers?)?)
     }
 }
 

@@ -45,7 +45,7 @@ jobs:
           path: ${{ matrix.module }}/target
           key: build-output
       - name: Run cargo clippy
-        run: cargo clippy -- -D warning
+        run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Cache build output
         id: build-cache 
         uses: actions/cache/save@v4

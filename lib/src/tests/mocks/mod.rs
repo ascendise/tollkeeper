@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::tollkeeper::{declarations::InvalidPaymentError, *};
+use crate::{declarations::InvalidPaymentError, *};
 
 pub struct StubDescription {
     matches: bool,
@@ -49,23 +49,5 @@ impl Declaration for StubDeclaration {
             let error = InvalidPaymentError::new(Box::new(payment.clone()), Box::new(new_toll));
             Result::Err(error)
         }
-    }
-}
-
-pub struct SpyRequest {
-    accessed: bool,
-}
-
-impl SpyRequest {
-    pub fn new() -> Self {
-        Self { accessed: false }
-    }
-
-    pub fn access(&mut self) {
-        self.accessed = true;
-    }
-
-    pub fn accessed(&self) -> bool {
-        self.accessed
     }
 }

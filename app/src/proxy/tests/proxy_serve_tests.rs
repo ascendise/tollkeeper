@@ -1,87 +1,88 @@
-use std::thread;
-use std::{
-    io::{Read, Write},
-    net,
-};
+use std::collections::HashMap;
+use std::net;
 
-use crate::{http::server::TcpServe, proxy::ProxyServe};
+use crate::http::request::Method;
+use crate::http::response::{self, StatusCode};
+use crate::http::server::HttpServe;
+use crate::http::{self, request, Headers, Request, StreamBody};
+use crate::proxy::{OrderId, ProxyServe};
+use crate::proxy::{PaymentRequiredError, Recipient, Toll};
 
-fn setup() -> (ProxyServe, net::TcpListener) {
-    let listener = net::TcpListener::bind("127.0.0.1:0").expect("Failed to open test socket");
-    let sut = ProxyServe {};
-    (sut, listener)
+use super::StubProxyService;
+
+fn setup() -> ProxyServe {
+    fn create_response() -> Result<http::Response, PaymentRequiredError> {
+        let response = http::Response::new(
+            StatusCode::OK,
+            Some("OK".into()),
+            response::Headers::empty(),
+            None,
+        );
+        Ok(response)
+    }
+    let create_response = Box::new(create_response);
+    let stub_proxy_service = StubProxyService::new(create_response);
+    ProxyServe::new(Box::new(stub_proxy_service))
 }
 
-fn setup_proxy(response: Vec<u8>) -> (thread::JoinHandle<()>, net::SocketAddr) {
-    let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let local_addr = listener.local_addr().unwrap();
-    let thread = thread::spawn(move || {
-        for conn in listener.incoming() {
-            let mut conn = conn.unwrap();
-            conn.write_all(&response).unwrap();
-            return;
-        }
-    });
-    (thread, local_addr)
+fn setup_with_failing_stub() -> ProxyServe {
+    fn create_error() -> Result<http::Response, PaymentRequiredError> {
+        let toll = Toll {
+            recipient: Recipient {
+                client_ip: "192.1.2.3".into(),
+                user_agent: "Bot".into(),
+                destination: "127.0.0.1".into(),
+            },
+            order_id: OrderId {
+                gate_id: "12".into(),
+                order_id: "13".into(),
+            },
+            challenge: HashMap::new(),
+        };
+        Err(PaymentRequiredError(Box::new(toll)))
+    }
+    let create_error = Box::new(create_error);
+    let stub_proxy_service = StubProxyService::new(create_error);
+    let stub_proxy_service = Box::new(stub_proxy_service);
+    ProxyServe::new(stub_proxy_service)
 }
 
-fn send_request(server_addr: net::SocketAddr, request: Vec<u8>) -> net::TcpStream {
-    let mut client_conn =
-        net::TcpStream::connect(server_addr).expect("Failed to connect to test socket");
-    client_conn
-        .write_all(&request)
-        .expect("Failed to send test request");
-    client_conn
+const fn client_addr() -> net::SocketAddr {
+    let v4_addr = net::Ipv4Addr::new(127, 0, 0, 1);
+    let v4_addr = net::SocketAddrV4::new(v4_addr, 5501);
+    net::SocketAddr::V4(v4_addr)
 }
 
 #[test]
 pub fn serve_should_return_response_of_target() {
     // Arrange
-    let (sut, server_listener) = setup();
-    let server_addr = server_listener
-        .local_addr()
-        .expect("Failed to retrieve address of test socket");
-    let (proxy, proxy_addr) = setup_proxy("HTTP/1.1 200 OK\r\n\r\n".into());
+    let sut = setup();
     // Act
-    let request = format!(
-        "GET / HTTP/1.1\r\nHost:127.0.0.1:{}\r\n\r\nHello, Server!\r\n",
-        proxy_addr.port()
-    );
-    let mut client_conn = send_request(server_addr, request.into());
-    let (server_conn, _) = server_listener
-        .accept()
-        .expect("Failed to retrieve connection");
-    sut.serve(server_conn);
-    proxy.join().unwrap();
+    let mut headers = Headers::empty();
+    headers.insert("Host", "127.0.0.1:65000");
+    let headers = request::Headers::new(headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers).unwrap();
+    let response = sut.serve_http(&client_addr(), request);
     // Assert
-    let mut response = String::new();
-    client_conn
-        .read_to_string(&mut response)
-        .expect("Failed to get server response");
-    let expected_response = "HTTP/1.1 200 OK\r\n\r\n";
-    assert_eq!(expected_response, response);
+    assert!(response.is_ok());
+    let response = response.unwrap();
+    assert_eq!(StatusCode::OK, response.status_code());
 }
 
 #[test]
-pub fn serve_should_return_bad_request_if_not_parseable() {
+pub fn serve_should_return_payment_required_if_access_is_denied() {
     // Arrange
-    let (sut, server_listener) = setup();
-    let server_addr = server_listener
-        .local_addr()
-        .expect("Failed to retrieve address of test socket");
+    let sut = setup_with_failing_stub();
     // Act
-    let request =
-        String::from("In the grim dark future of the year 40000, there is only war.\r\n\r\n");
-    let mut client_conn = send_request(server_addr, request.into());
-    let (server_conn, _) = server_listener
-        .accept()
-        .expect("Failed to retrieve connection");
-    sut.serve(server_conn);
+    let mut headers = Headers::empty();
+    headers.insert("Host", "127.0.0.1:65000");
+    headers.insert("Content-Length", "16");
+    let headers = request::Headers::new(headers).unwrap();
+    let body = StreamBody::new("Hello, Server!\r\n".as_bytes());
+    let request = Request::with_body(Method::Get, "/", headers, Box::new(body)).unwrap();
+    let response = sut.serve_http(&client_addr(), request);
     // Assert
-    let mut response = String::new();
-    client_conn
-        .read_to_string(&mut response)
-        .expect("Failed to get server response");
-    let expected_response = "HTTP/1.1 400 Bad Request\r\n\r\n";
-    assert_eq!(expected_response, response);
+    assert!(response.is_ok());
+    let response = response.unwrap();
+    assert_eq!(StatusCode::PaymentRequired, response.status_code());
 }

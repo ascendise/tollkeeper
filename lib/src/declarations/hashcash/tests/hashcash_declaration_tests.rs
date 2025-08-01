@@ -1,9 +1,11 @@
-use crate::tollkeeper::declarations::*;
-use crate::tollkeeper::{
+use crate::declarations::*;
+use crate::{
     declarations::{
         hashcash::{DoubleSpentDatabaseImpl, HashcashDeclaration},
         Declaration, Payment,
-    }, descriptions::Destination, util::FakeDateTimeProvider
+    },
+    descriptions::Destination,
+    util::FakeDateTimeProvider,
 };
 use chrono::TimeZone;
 
@@ -56,7 +58,7 @@ pub fn declare_should_return_new_toll_for_suspect() {
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
-        Destination::new_with_details("example.com", 8888, "/hello"),
+        Destination::new("example.com", 8888, "/hello"),
     );
     let order_id = OrderIdentifier::new("gate", "order");
     let toll = sut.declare(suspect.clone(), order_id.clone());
@@ -78,7 +80,7 @@ pub fn pay_with_valid_payment_should_return_visa() {
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
-        Destination::new_with_details("example.com", 8888, "/hello"),
+        Destination::new("example.com", 8888, "/hello"),
     );
     // Act
     let order_id = OrderIdentifier::new("gate", "order");
@@ -101,7 +103,7 @@ pub fn pay_with_invalid_stamp_should_return_error() {
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
-        Destination::new_with_details("example.com", 8888, "/hello"),
+        Destination::new("example.com", 8888, "/hello"),
     );
     // Act
     let order_id = OrderIdentifier::new("gate", "order");
@@ -129,7 +131,7 @@ pub fn pay_with_expired_stamp_should_return_error() {
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
-        Destination::new_with_details("example.com", 8888, "/hello"),
+        Destination::new("example.com", 8888, "/hello"),
     );
     let order_id = OrderIdentifier::new("gate", "order");
     let toll = sut.declare(suspect.clone(), order_id.clone());
@@ -153,7 +155,7 @@ pub fn pay_with_stamp_from_the_future_should_return_error() {
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
-        Destination::new_with_details("example.com", 8888, "/hello"),
+        Destination::new("example.com", 8888, "/hello"),
     );
     let order_id = OrderIdentifier::new("gate", "order");
     let toll = sut.declare(suspect.clone(), order_id.clone());
@@ -176,7 +178,7 @@ pub fn pay_with_duplicate_stamp_should_return_error() {
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
-        Destination::new_with_details("example.com", 8888, "/hello"),
+        Destination::new("example.com", 8888, "/hello"),
     );
     let order_id = OrderIdentifier::new("gate", "order");
     let toll = sut.declare(suspect.clone(), order_id.clone());

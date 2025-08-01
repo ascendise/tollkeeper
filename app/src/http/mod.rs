@@ -9,6 +9,8 @@ mod parsing;
 pub mod request;
 pub mod response;
 pub mod server;
+pub use request::Request;
+pub use response::Response;
 
 /// Key-Value collection with case-insensitve access
 #[derive(Debug, PartialEq, Eq)]
@@ -48,6 +50,17 @@ impl Headers {
             Some(v) => Some(&v.value),
             None => None,
         }
+    }
+
+    pub fn insert(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        let original_key = key.into();
+        let key = &original_key.to_ascii_lowercase();
+        let value = value.into();
+        let header = Header {
+            original_key,
+            value,
+        };
+        self.headers.insert(key.into(), header);
     }
 }
 impl Display for Headers {

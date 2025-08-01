@@ -1,37 +1,72 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::tollkeeper::*;
+use crate::*;
 use test_case::test_case;
 
-fn setup() -> (TollkeeperImpl, OrderIdentifier) {
+fn setup() -> (Tollkeeper, OrderIdentifier) {
     let require_payment_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new()),
     );
     let order_id = require_payment_order.id.clone();
-    let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
+    let gate = Gate::new(
+        Destination::new_base("localhost"),
+        vec![require_payment_order],
+    )
+    .unwrap();
     let order_id = OrderIdentifier::new(gate.id.clone(), order_id);
-    (TollkeeperImpl::new(vec![gate]).unwrap(), order_id)
+    (Tollkeeper::new(vec![gate]).unwrap(), order_id)
 }
 
-fn setup_with_payment() -> (TollkeeperImpl, OrderIdentifier) {
+fn setup_with_payment() -> (Tollkeeper, OrderIdentifier) {
     let require_payment_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
         AccessPolicy::Blacklist,
         Box::new(StubDeclaration::new_payment_stub()),
     );
     let order_id = require_payment_order.id.clone();
-    let gate = Gate::new(Destination::new("localhost"), vec![require_payment_order]).unwrap();
+    let gate = Gate::new(
+        Destination::new_base("localhost"),
+        vec![require_payment_order],
+    )
+    .unwrap();
     let order_id = OrderIdentifier::new(gate.id.clone(), order_id);
-    (TollkeeperImpl::new(vec![gate]).unwrap(), order_id)
+    (Tollkeeper::new(vec![gate]).unwrap(), order_id)
 }
+
+fn assert_is_allowed(access_result: &Result<(), AccessError>) {
+    match access_result {
+        Ok(_) => (),
+        Err(e) => match e {
+            AccessError::AccessDeniedError(_) => {
+                panic!("Expected access allowed but got a toll!")
+            }
+            AccessError::DestinationNotFound(destination) => {
+                panic!("Expected access allowed but could not find destination!: {destination}")
+            }
+        },
+    }
+}
+
+fn assert_is_denied(access_result: &Result<(), AccessError>) -> &Toll {
+    match access_result {
+        Ok(_) => panic!("Expected a toll but was allowed access!"),
+        Err(e) => match e {
+            AccessError::AccessDeniedError(e) => e,
+            AccessError::DestinationNotFound(destination) => {
+                panic!("Expected access allowed but could not find destination!: {destination}")
+            }
+        },
+    }
+}
+
 #[test]
 pub fn creating_new_toolkeeper_with_no_gates_should_fail() {
     // Arrange
     // Act
-    let result = TollkeeperImpl::new(vec![]);
+    let result = Tollkeeper::new(vec![]);
     // Assert
     assert!(
         result.is_err(),
@@ -46,30 +81,24 @@ pub fn should_require_no_toll_if_not_matching_toll_requirements(
     matches_description: bool,
 ) {
     // Arrange
-    let suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
-    let description: Box<dyn Description> = Box::new(StubDescription::new(matches_description));
+    let suspect = Suspect::new(
+        "1.2.3.4",
+        "FriendlyCrawler",
+        Destination::new_base("localhost"),
+    );
+    let description: Box<dyn Description + Send + Sync> =
+        Box::new(StubDescription::new(matches_description));
     let order = Order::new(
         vec![description],
         access_policy,
         Box::new(StubDeclaration::new()),
     );
-    let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
-    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
+    let gate = Gate::new(Destination::new_base("localhost"), vec![order]).unwrap();
+    let sut = Tollkeeper::new(vec![gate]).unwrap();
     // Act
-    let mut request = SpyRequest::new();
-    let result = sut.guarded_access::<SpyRequest>(&suspect, &Option::None, &mut request, |req| {
-        req.access();
-    });
+    let access_result = sut.check_access(&suspect, &Option::None);
     // Assert
-    assert_eq!(
-        Option::None,
-        result,
-        "Requires toll even though access should be granted!"
-    );
-    assert!(
-        request.accessed(),
-        "Destination was not accessed despite allowed!"
-    );
+    assert_is_allowed(&access_result);
 }
 
 #[test_case(AccessPolicy::Blacklist, true ; "accessing a gate with a matching blacklist order description")]
@@ -79,36 +108,30 @@ pub fn should_require_toll_if_matching_toll_requirement(
     matches_description: bool,
 ) {
     // Arrange
-    let suspect = Suspect::new("1.2.3.4", "BadCrawler", Destination::new("localhost"));
-    let description: Box<dyn Description> = Box::new(StubDescription::new(matches_description));
+    let suspect = Suspect::new("1.2.3.4", "BadCrawler", Destination::new_base("localhost"));
+    let description: Box<dyn Description + Send + Sync> =
+        Box::new(StubDescription::new(matches_description));
     let order = Order::new(
         vec![description],
         access_policy,
         Box::new(StubDeclaration::new()),
     );
-    let gate = Gate::new(Destination::new("localhost"), vec![order]).unwrap();
-    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
+    let gate = Gate::new(Destination::new_base("localhost"), vec![order]).unwrap();
+    let sut = Tollkeeper::new(vec![gate]).unwrap();
     // Act
-    let mut request = SpyRequest::new();
-    let result = sut.guarded_access::<SpyRequest>(&suspect, &Option::None, &mut request, |req| {
-        req.access();
-    });
+    let access_result = sut.check_access(&suspect, &Option::None);
     // Assert
-    assert!(
-        result.is_some(),
-        "Required no toll despite suspect not matching whitelist order description",
-    );
-    assert!(
-        !request.accessed(),
-        "Destination was accessed despite no toll was paid!"
-    );
+    assert_is_denied(&access_result);
 }
 
 #[test]
 pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll() {
     // Arrange
-    let malicious_suspect =
-        Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
+    let malicious_suspect = Suspect::new(
+        "1.2.3.4",
+        "FriendlyCrawler",
+        Destination::new_base("localhost"),
+    );
     let first_order = Order::new(
         vec![Box::new(StubDescription::new(false))],
         AccessPolicy::Blacklist,
@@ -125,32 +148,25 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
         Box::new(StubDeclaration::new()),
     );
     let gate = Gate::new(
-        Destination::new("localhost"),
+        Destination::new_base("localhost"),
         vec![first_order, matching_order, last_order],
     )
     .unwrap();
-    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
+    let sut = Tollkeeper::new(vec![gate]).unwrap();
     // Act
-    let mut request = SpyRequest::new();
-    let result =
-        sut.guarded_access::<SpyRequest>(&malicious_suspect, &Option::None, &mut request, |req| {
-            req.access();
-        });
+    let access_result = sut.check_access(&malicious_suspect, &Option::None);
     // Assert
-    assert!(
-        result.is_some(),
-        "Required no toll despite first matching order being a blacklist"
-    );
-    assert!(
-        !request.accessed(),
-        "Destination was not accessed despite allowed!"
-    );
+    assert_is_denied(&access_result);
 }
 
 #[test]
 pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_access() {
     // Arrange
-    let benign_suspect = Suspect::new("1.2.3.4", "FriendlyCrawler", Destination::new("localhost"));
+    let benign_suspect = Suspect::new(
+        "1.2.3.4",
+        "FriendlyCrawler",
+        Destination::new_base("localhost"),
+    );
     let first_order = Order::new(
         vec![Box::new(StubDescription::new(false))],
         AccessPolicy::Blacklist,
@@ -167,27 +183,15 @@ pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_acces
         Box::new(StubDeclaration::new()),
     );
     let gate = Gate::new(
-        Destination::new("localhost"),
+        Destination::new_base("localhost"),
         vec![first_order, matching_order, last_order],
     )
     .unwrap();
-    let sut = TollkeeperImpl::new(vec![gate]).unwrap();
+    let sut = Tollkeeper::new(vec![gate]).unwrap();
     // Act
-    let mut request = SpyRequest::new();
-    let result =
-        sut.guarded_access::<SpyRequest>(&benign_suspect, &Option::None, &mut request, |req| {
-            req.access();
-        });
+    let access_result = sut.check_access(&benign_suspect, &Option::None);
     // Assert
-    assert_eq!(
-        Option::None,
-        result,
-        "Required a toll despite first matching order being a whitelist"
-    );
-    assert!(
-        request.accessed(),
-        "Destination was not accessed despite allowed!"
-    );
+    assert_is_allowed(&access_result);
 }
 
 #[test]
@@ -195,16 +199,11 @@ pub fn passing_gate_with_valid_visa_should_allow_access() {
     // Arrange
     let (sut, order_id) = setup();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost"));
+    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new_base("localhost"));
     let visa = Visa::new(order_id, suspect.clone());
-    let mut request = SpyRequest::new();
-    let result =
-        sut.guarded_access::<SpyRequest>(&suspect, &Option::Some(visa), &mut request, |req| {
-            req.access();
-        });
+    let access_result = sut.check_access(&suspect, &Option::Some(visa));
     // Assert
-    assert_eq!(Option::None, result, "Required a toll despite having visa!");
-    assert!(request.accessed(), "No access despite having visa");
+    assert_is_allowed(&access_result);
 }
 
 #[test]
@@ -212,22 +211,14 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     // Arrange
     let (sut, order_id) = setup();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost"));
+    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new_base("localhost"));
     let visa = Visa::new(
         OrderIdentifier::new(order_id.gate_id(), "not_an_order_id"),
         suspect.clone(),
     );
-    let mut request = SpyRequest::new();
-    let result =
-        sut.guarded_access::<SpyRequest>(&suspect, &Option::Some(visa), &mut request, |req| {
-            req.access();
-        });
+    let access_result = sut.check_access(&suspect, &Option::Some(visa));
     // Assert
-    assert!(
-        result.is_some(),
-        "Did not return new toll despite suspect being a different one!"
-    );
-    assert!(!request.accessed(), "Was accessed despite not having visa!");
+    assert_is_denied(&access_result);
 }
 
 #[test]
@@ -235,20 +226,15 @@ pub fn passing_gate_with_visa_for_different_suspect_should_return_new_toll_for_c
     // Arrange
     let (sut, order_id) = setup();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let visa = Visa::new(
         order_id,
-        Suspect::new("4.3.2.1", "Alice", Destination::new("localhost")),
+        Suspect::new("4.3.2.1", "Alice", Destination::new_base("localhost")),
     );
-    let mut request = SpyRequest::new();
-    let result =
-        sut.guarded_access::<SpyRequest>(&suspect, &Option::Some(visa), &mut request, |req| {
-            req.access();
-        });
+    let access_result = sut.check_access(&suspect, &Option::Some(visa));
     // Assert
-    assert!(result.is_some());
-    assert!(result.unwrap().recipient() == &suspect);
-    assert!(!request.accessed(), "Was accessed despite not having visa!");
+    let toll = assert_is_denied(&access_result);
+    assert!(toll.recipient() == &suspect);
 }
 
 #[test]
@@ -256,7 +242,7 @@ pub fn buying_visa_for_valid_order_with_valid_payment_should_return_visa() {
     // Arrange
     let (mut sut, order_id) = setup_with_payment();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(suspect.clone(), order_id, HashMap::new());
     let payment = Payment::new(toll, "legal tender");
     let result = sut.buy_visa(&suspect, payment);
@@ -271,7 +257,7 @@ pub fn buying_visa_for_valid_order_with_invalid_payment_should_return_visa() {
     // Arrange
     let (mut sut, order_id) = setup();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(suspect.clone(), order_id, HashMap::new());
     let payment = Payment::new(toll, "legal tender");
     let result = sut.buy_visa(&suspect, payment);
@@ -286,8 +272,8 @@ pub fn buying_visa_for_different_suspect_should_return_new_toll_for_current_susp
     // Arrange
     let (mut sut, order_id) = setup_with_payment();
     // Act
-    let suspect_alice = Suspect::new("1.2.3.4", "Alice", Destination::new("localhost"));
-    let suspect_bob = Suspect::new("90.1.2.6", "Bob", Destination::new("localhost"));
+    let suspect_alice = Suspect::new("1.2.3.4", "Alice", Destination::new_base("localhost"));
+    let suspect_bob = Suspect::new("90.1.2.6", "Bob", Destination::new_base("localhost"));
     let bobs_toll = Toll::new(suspect_bob.clone(), order_id, HashMap::new());
     let payment = Payment::new(bobs_toll, "legal tender");
     let result = sut.buy_visa(&suspect_alice, payment); // Alice pays with bobs toll!
@@ -309,7 +295,7 @@ pub fn buying_visa_for_unknown_gate_should_return_error() {
     // Arrange
     let (mut sut, order_id) = setup_with_payment();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(
         suspect.clone(),
         OrderIdentifier::new("gate?", order_id.order_id()),
@@ -327,7 +313,7 @@ pub fn buying_visa_for_unknown_order_should_return_error() {
     // Arrange
     let (mut sut, order_id) = setup_with_payment();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new("localhost"));
+    let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(
         suspect.clone(),
         OrderIdentifier::new(order_id.gate_id(), "order?"),

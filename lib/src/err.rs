@@ -1,27 +1,30 @@
 use super::{declarations::InvalidPaymentError, *};
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum AccessError {
+    AccessDeniedError(Box<Toll>),
+    DestinationNotFound(Box<Destination>),
+}
+impl Error for AccessError {}
+impl Display for AccessError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AccessError::AccessDeniedError(_) => {
+                write!(f, "Access denied; Pay the toll and acquire a visa to enter")
+            }
+            AccessError::DestinationNotFound(destination) => {
+                write!(f, "Destination not found: {destination}")
+            }
+        }
+    }
+}
+
 /// Return this error when [Suspect] is required to pay [Toll]
 #[derive(Debug, PartialEq, Eq)]
 pub struct AccessDeniedError {
     toll: Box<Toll>,
 }
 
-impl AccessDeniedError {
-    pub fn new(toll: Box<Toll>) -> Self {
-        Self { toll }
-    }
-
-    pub fn toll(&self) -> &Toll {
-        &self.toll
-    }
-}
-
-impl Error for AccessDeniedError {}
-impl Display for AccessDeniedError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Access denied; Pay the toll and acquire a visa to enter")
-    }
-}
 /// Return this error when there was a problem during a [Suspect] passing a [Gate].
 ///
 /// E.g. a [Destination] with no matching [Gate]

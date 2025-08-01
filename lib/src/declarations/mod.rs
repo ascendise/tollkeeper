@@ -10,20 +10,18 @@ pub trait Declaration {
     fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, InvalidPaymentError>;
 }
 
+pub type Challenge = HashMap<String, String>;
+
 /// A Proof-of-Work challenge to be solved before being granted access
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Toll {
     recipient: Suspect,
     order_id: OrderIdentifier,
-    challenge: HashMap<String, String>,
+    challenge: Challenge,
 }
 
 impl Toll {
-    pub fn new(
-        recipient: Suspect,
-        order_id: OrderIdentifier,
-        challenge: HashMap<String, String>,
-    ) -> Self {
+    pub fn new(recipient: Suspect, order_id: OrderIdentifier, challenge: Challenge) -> Self {
         Self {
             recipient,
             order_id,
@@ -42,7 +40,7 @@ impl Toll {
     }
 
     /// All values required to solve the challenge, like seed values, algorithms, etc.
-    pub fn challenge(&self) -> &HashMap<String, String> {
+    pub fn challenge(&self) -> &Challenge {
         &self.challenge
     }
 }
@@ -52,7 +50,6 @@ pub struct OrderIdentifier {
     gate_id: String,
     order_id: String,
 }
-
 impl OrderIdentifier {
     pub fn new(gate_id: impl Into<String>, order_id: impl Into<String>) -> Self {
         Self {

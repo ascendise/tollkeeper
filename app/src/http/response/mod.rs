@@ -3,19 +3,21 @@ mod tests;
 
 use std::fmt::Display;
 
-use super::{Body, Headers};
+use crate::http;
+
+use super::Body;
 
 pub struct Response {
     status_code: StatusCode,
     reason_phrase: Option<String>,
-    headers: ResponseHeaders,
+    headers: Headers,
     body: Option<Box<dyn Body>>,
 }
 impl Response {
     pub fn new(
         status_code: StatusCode,
         reason_phrase: Option<String>,
-        headers: ResponseHeaders,
+        headers: Headers,
         body: Option<Box<dyn Body>>,
     ) -> Self {
         Self {
@@ -38,7 +40,7 @@ impl Response {
         self.reason_phrase.as_ref()
     }
 
-    pub fn headers(&self) -> &ResponseHeaders {
+    pub fn headers(&self) -> &Headers {
         &self.headers
     }
 
@@ -74,7 +76,7 @@ impl Response {
         Self::new(
             StatusCode::NotFound,
             Some("Not Found".into()),
-            ResponseHeaders::empty(),
+            Headers::empty(),
             None,
         )
     }
@@ -83,7 +85,7 @@ impl Response {
         Self::new(
             StatusCode::MethodNotAllowed,
             Some("Method Not Allowed".into()),
-            ResponseHeaders::empty(),
+            Headers::empty(),
             None,
         )
     }
@@ -92,7 +94,7 @@ impl Response {
         Self::new(
             StatusCode::InternalServerError,
             Some("Internal Server Error".into()),
-            ResponseHeaders::empty(),
+            Headers::empty(),
             None,
         )
     }
@@ -101,7 +103,16 @@ impl Response {
         Self::new(
             StatusCode::BadRequest,
             Some("Bad Request".into()),
-            ResponseHeaders::empty(),
+            Headers::empty(),
+            None,
+        )
+    }
+
+    pub fn payment_required() -> Self {
+        Self::new(
+            StatusCode::PaymentRequired,
+            Some("Payment Required".into()),
+            Headers::empty(),
             None,
         )
     }
@@ -206,15 +217,20 @@ impl StatusCode {
         Some(status_code)
     }
 }
+impl Display for StatusCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ResponseHeaders(Headers);
-impl ResponseHeaders {
-    pub fn new(headers: Headers) -> Self {
+pub struct Headers(http::Headers);
+impl Headers {
+    pub fn new(headers: http::Headers) -> Self {
         Self(headers)
     }
     pub fn empty() -> Self {
-        Self(Headers::empty())
+        Self(http::Headers::empty())
     }
     pub fn content_length(&self) -> Option<usize> {
         self.0.get("Content-Length").map(|v| v.parse().unwrap())
@@ -223,7 +239,7 @@ impl ResponseHeaders {
         self.0.get(key)
     }
 }
-impl Display for ResponseHeaders {
+impl Display for Headers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }

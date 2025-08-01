@@ -1,10 +1,10 @@
 use test_case::test_case;
 
 use super::RegexDescription;
-use crate::tollkeeper::descriptions::*;
+use crate::descriptions::*;
 
 fn test_suspect() -> Suspect {
-    let destination = Destination::new_with_details("https://example.com", 1443, "/api");
+    let destination = Destination::new("https://example.com", 1443, "/api");
     Suspect::new("1.2.3.4", "Netscape 9.1", destination)
 }
 

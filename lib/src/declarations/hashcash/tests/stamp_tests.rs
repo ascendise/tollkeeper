@@ -1,6 +1,6 @@
 use chrono::TimeZone;
 
-use crate::tollkeeper::declarations::hashcash::*;
+use crate::declarations::hashcash::*;
 
 #[test]
 pub fn to_string_should_return_hashcash_v1_format_string() {

@@ -1,6 +1,6 @@
 use http::server::*;
-use proxy::ProxyServe;
-use std::{io, net};
+use proxy::{ProxyServe, ProxyServiceImpl};
+use std::{collections::HashMap, io, net};
 
 #[allow(dead_code)]
 mod http;
@@ -8,9 +8,58 @@ mod proxy;
 
 fn main() -> Result<(), io::Error> {
     let listener = net::TcpListener::bind("127.0.0.1:9000")?;
-    let proxy_handler = ProxyServe::new();
+    let tollkeeper = create_tollkeeper(true);
+    let proxy_service = ProxyServiceImpl::new(tollkeeper);
+    let proxy_handler = ProxyServe::new(Box::new(proxy_service));
     let mut server = Server::new(listener, Box::new(proxy_handler));
     let (_, receiver) = cancellation_token::create_cancellation_token();
     server.start_listening(receiver).unwrap();
     Ok(())
+}
+
+fn create_tollkeeper(requires_challenge: bool) -> tollkeeper::Tollkeeper {
+    let destination = tollkeeper::descriptions::Destination::new("wtfismyip.com", 80, "/json");
+    let description = StubDescription {
+        is_match: requires_challenge,
+    };
+    let order = tollkeeper::Order::with_id(
+        "order",
+        vec![Box::new(description)],
+        tollkeeper::AccessPolicy::Blacklist,
+        Box::new(StubTollDeclaration),
+    );
+    println!("Order: {}", order.id());
+    let orders = vec![order];
+    let gate = tollkeeper::Gate::with_id("gate", destination, orders).unwrap();
+    println!("Gate: {}", gate.id());
+    let gates = vec![gate];
+    tollkeeper::Tollkeeper::new(gates).unwrap()
+}
+
+struct StubDescription {
+    is_match: bool,
+}
+impl tollkeeper::Description for StubDescription {
+    fn matches(&self, _: &tollkeeper::descriptions::Suspect) -> bool {
+        self.is_match
+    }
+}
+
+struct StubTollDeclaration;
+impl tollkeeper::Declaration for StubTollDeclaration {
+    fn declare(
+        &self,
+        suspect: tollkeeper::descriptions::Suspect,
+        order_id: tollkeeper::declarations::OrderIdentifier,
+    ) -> tollkeeper::declarations::Toll {
+        tollkeeper::declarations::Toll::new(suspect, order_id, HashMap::new())
+    }
+
+    fn pay(
+        &mut self,
+        _: tollkeeper::declarations::Payment,
+        _: &tollkeeper::descriptions::Suspect,
+    ) -> Result<tollkeeper::declarations::Visa, tollkeeper::declarations::InvalidPaymentError> {
+        todo!()
+    }
 }

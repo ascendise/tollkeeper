@@ -61,7 +61,7 @@ pub struct Destination {
     path: String,
 }
 impl Destination {
-    pub fn new(base_url: impl Into<String>) -> Self {
+    pub fn new_base(base_url: impl Into<String>) -> Self {
         Self {
             base_url: base_url.into(),
             port: 80,
@@ -69,11 +69,7 @@ impl Destination {
         }
     }
 
-    pub fn new_with_details(
-        base_url: impl Into<String>,
-        port: u16,
-        path: impl Into<String>,
-    ) -> Self {
+    pub fn new(base_url: impl Into<String>, port: u16, path: impl Into<String>) -> Self {
         Self {
             base_url: base_url.into(),
             port,

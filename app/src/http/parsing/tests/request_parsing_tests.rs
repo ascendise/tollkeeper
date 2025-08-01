@@ -1,7 +1,6 @@
 use crate::http::parsing::ParseError;
-use crate::http::request::RequestHeaders;
-use crate::http::request::{Method, Request};
-use crate::http::{Headers, Parse};
+use crate::http::request::{Headers, Method, Request};
+use crate::http::{self, Parse};
 use indexmap::IndexMap;
 use std::collections::VecDeque;
 use test_case::test_case;
@@ -19,8 +18,8 @@ pub fn parse_should_read_minimal_http_request() {
     assert_eq!("HTTP/1.1", request.http_version());
     let mut headers = IndexMap::<String, String>::new();
     headers.insert("Host".into(), "localhost".into());
-    let expected_headers = Headers::new(headers);
-    let expected_headers = RequestHeaders::new(expected_headers).unwrap();
+    let expected_headers = http::Headers::new(headers);
+    let expected_headers = Headers::new(expected_headers).unwrap();
     assert_eq!(expected_headers, *request.headers());
 }
 
@@ -46,8 +45,8 @@ pub fn parse_should_read_http_request_with_body() {
     expected_headers.insert("Host".into(), "localhost".into());
     expected_headers.insert("Content-Type".into(), "text/raw; charset=utf8".into());
     expected_headers.insert("Content-Length".into(), "15".into());
-    let expected_headers = Headers::new(expected_headers);
-    let expected_headers = RequestHeaders::new(expected_headers).unwrap();
+    let expected_headers = http::Headers::new(expected_headers);
+    let expected_headers = Headers::new(expected_headers).unwrap();
     assert_eq!(&expected_headers, request.headers());
     let mut content = String::new();
     match request.body() {

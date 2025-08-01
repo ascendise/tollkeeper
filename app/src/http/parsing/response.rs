@@ -1,5 +1,5 @@
-use crate::http::response::{Response, ResponseHeaders, StatusCode};
-use crate::http::{Headers, Parse, StreamBody};
+use crate::http::response::{self, Response, StatusCode};
+use crate::http::{self, Parse, StreamBody};
 use std::io::{self};
 use std::io::{BufRead, BufReader};
 
@@ -11,7 +11,7 @@ impl<T: io::Read + 'static> Parse<T> for Response {
     fn parse(stream: T) -> Result<Self, Self::Err> {
         let mut stream = BufReader::new(stream);
         let status_line = StatusLine::parse(&mut stream)?;
-        let headers = ResponseHeaders::parse(&mut stream)?;
+        let headers = response::Headers::parse(&mut stream)?;
         let response = if headers.content_length().is_some() {
             stream.consume(2); //Consume additional newline for body
             let body = Box::new(StreamBody::new(stream));
@@ -72,11 +72,11 @@ impl<T: io::Read> Parse<&mut io::BufReader<T>> for StatusLine {
     }
 }
 
-impl<T: io::Read> Parse<&mut io::BufReader<T>> for ResponseHeaders {
+impl<T: io::Read> Parse<&mut io::BufReader<T>> for response::Headers {
     type Err = ParseError;
 
     fn parse(stream: &mut io::BufReader<T>) -> Result<Self, Self::Err> {
-        let headers = Headers::parse(stream)?;
-        Ok(ResponseHeaders::new(headers))
+        let headers = http::Headers::parse(stream)?;
+        Ok(response::Headers::new(headers))
     }
 }

@@ -10,30 +10,27 @@ use super::{
     response::Response,
     Parse,
 };
+use std::net;
 use std::{
     error::Error,
     fmt::Display,
     io::{self, Write},
-    panic,
-    sync::Mutex,
-    thread,
+    panic, thread,
 };
-use std::{net, sync::Arc};
 
 pub struct Server {
     listener: net::TcpListener,
-    handler: Arc<Mutex<Box<dyn TcpServe + Send + Sync>>>,
+    handler: Box<dyn TcpServe + Send + Sync>,
 }
 impl Server {
     /// Creates a new HTTP [Server] with multiple [endpoints](Endpoint)
     pub fn create_http_endpoints(listener: net::TcpListener, endpoints: Vec<Endpoint>) -> Self {
-        let handler = HttpEndpointsServe::new(Arc::new(Mutex::new(endpoints)));
+        let handler = HttpEndpointsServe::new(endpoints);
         Self::new(listener, Box::new(handler))
     }
 
     /// Create low level TCP [Server]
     pub fn new(listener: net::TcpListener, handler: Box<dyn TcpServe + Send + Sync>) -> Self {
-        let handler = Arc::new(Mutex::new(handler));
         Self { listener, handler }
     }
 
@@ -50,100 +47,15 @@ impl Server {
                     Ok(result) => result.0,
                     Err(_) => continue,
                 };
-                let handler = self.handler.clone();
-                s.spawn(move || {
-                    handler.lock().unwrap().serve(stream);
+                s.spawn(|| {
+                    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                        self.handler.serve_tcp(stream);
+                    })); // Keep server alive when a request crashes handler
                 });
             }
         });
         Ok(())
     }
-}
-
-/// Serve implementation that handles HTTP [requests](Request) and returns HTTP
-/// [responses](Response)
-pub struct HttpEndpointsServe {
-    endpoints: Arc<Mutex<Vec<Endpoint>>>,
-}
-impl TcpServe for HttpEndpointsServe {
-    fn serve(&self, stream: net::TcpStream) {
-        let endpoints = self.endpoints.clone();
-        let result = panic::catch_unwind(|| {
-            match Self::handle_incoming_request(endpoints, stream.try_clone().unwrap()) {
-                Ok(_) => (),
-                Err(_) => Self::send_request(&stream, Response::bad_request()),
-            }
-        });
-        match result {
-            Ok(_) => (),
-            Err(_) => Self::send_request(&stream, Response::internal_server_error()),
-        }
-    }
-}
-impl HttpEndpointsServe {
-    pub fn new(endpoints: Arc<Mutex<Vec<Endpoint>>>) -> Self {
-        Self { endpoints }
-    }
-
-    fn handle_incoming_request(
-        endpoints: Arc<Mutex<Vec<Endpoint>>>,
-        stream: net::TcpStream,
-    ) -> Result<(), parsing::ParseError> {
-        let mut write_stream = stream.try_clone().unwrap();
-        let reader = io::BufReader::new(stream);
-        let mut request = Request::parse(reader)?;
-        let mut endpoints = endpoints.lock().unwrap();
-        let mut endpoints = endpoints
-            .iter_mut()
-            .filter(|e| request.matches_path(&e.path))
-            .peekable();
-        let response = if endpoints.peek().is_some() {
-            match endpoints.find(|e| request.matches_method(&e.method)) {
-                Some(e) => e.serve(&mut request),
-                None => Response::method_not_allowed(),
-            }
-        } else {
-            Response::not_found()
-        };
-        write_stream.write_all(&response.into_bytes()).unwrap();
-        Ok(())
-    }
-
-    fn send_request(mut stream: &net::TcpStream, response: Response) {
-        stream.write_all(&response.into_bytes()).unwrap();
-    }
-}
-
-pub struct Endpoint {
-    method: Method,
-    path: String,
-    handler: Box<dyn HttpServe + Sync + Send>,
-}
-
-impl Endpoint {
-    pub fn new(
-        method: Method,
-        path: impl Into<String>,
-        handler: Box<dyn HttpServe + Sync + Send>,
-    ) -> Self {
-        Self {
-            method,
-            path: path.into(),
-            handler,
-        }
-    }
-
-    pub fn serve(&mut self, request: &mut Request) -> Response {
-        self.handler.serve(request)
-    }
-}
-
-pub trait HttpServe {
-    fn serve(&self, request: &mut Request) -> Response;
-}
-
-pub trait TcpServe {
-    fn serve(&self, stream: net::TcpStream);
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -159,5 +71,116 @@ impl Display for StartupError {
 impl StartupError {
     pub fn new(msg: String) -> Self {
         Self { msg }
+    }
+}
+
+/// Serve implementation that handles HTTP [requests](Request) and returns HTTP
+/// [responses](Response)
+pub struct HttpEndpointsServe {
+    endpoints: Vec<Endpoint>,
+}
+impl HttpEndpointsServe {
+    pub fn new(endpoints: Vec<Endpoint>) -> Self {
+        Self { endpoints }
+    }
+}
+impl HttpServe for HttpEndpointsServe {
+    fn serve_http(
+        &self,
+        client_addr: &net::SocketAddr,
+        request: Request,
+    ) -> Result<Response, InternalServerError> {
+        let mut endpoints = self
+            .endpoints
+            .iter()
+            .filter(|e| request.matches_path(&e.path))
+            .peekable();
+
+        if endpoints.peek().is_some() {
+            match endpoints.find(|e| request.matches_method(&e.method)) {
+                Some(e) => e.serve(client_addr, request),
+                None => Ok(Response::method_not_allowed()),
+            }
+        } else {
+            Ok(Response::not_found())
+        }
+    }
+}
+
+pub struct Endpoint {
+    method: Method,
+    path: String,
+    handler: Box<dyn HttpServe + Sync + Send>,
+}
+impl Endpoint {
+    pub fn new(
+        method: Method,
+        path: impl Into<String>,
+        handler: Box<dyn HttpServe + Sync + Send>,
+    ) -> Self {
+        Self {
+            method,
+            path: path.into(),
+            handler,
+        }
+    }
+
+    pub fn serve(
+        &self,
+        client_addr: &net::SocketAddr,
+        request: Request,
+    ) -> Result<Response, InternalServerError> {
+        self.handler.serve_http(client_addr, request)
+    }
+}
+
+pub trait TcpServe {
+    fn serve_tcp(&self, stream: net::TcpStream);
+}
+pub trait HttpServe {
+    fn serve_http(
+        &self,
+        client_addr: &net::SocketAddr,
+        request: Request,
+    ) -> Result<Response, InternalServerError>;
+}
+impl<T: HttpServe> TcpServe for T {
+    fn serve_tcp(&self, stream: net::TcpStream) {
+        match self::handle_incoming_request(self, stream.try_clone().unwrap()) {
+            Ok(_) => (),
+            Err(_) => send_request(&stream, Response::bad_request()),
+        }
+    }
+}
+fn handle_incoming_request(
+    http_serve: &impl HttpServe,
+    stream: net::TcpStream,
+) -> Result<(), parsing::ParseError> {
+    let mut write_stream = stream.try_clone().unwrap();
+    let reader = io::BufReader::new(stream);
+    let request = Request::parse(reader)?;
+    let response = match http_serve.serve_http(&write_stream.peer_addr().unwrap(), request) {
+        Ok(res) => res,
+        Err(_) => Response::internal_server_error(),
+    };
+    write_stream.write_all(&response.into_bytes()).unwrap();
+    Ok(())
+}
+fn send_request(mut stream: &net::TcpStream, response: Response) {
+    stream.write_all(&response.into_bytes()).unwrap();
+}
+
+/// Return this error in case an unrecoverable error happened
+#[derive(Debug, PartialEq, Eq)]
+pub struct InternalServerError {}
+impl InternalServerError {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+impl Error for InternalServerError {}
+impl Display for InternalServerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Unrecoverable error happened while processing request",)
     }
 }
