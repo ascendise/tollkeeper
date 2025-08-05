@@ -52,3 +52,15 @@ jobs:
         with:
           path: ./target
           key: build-output
+  cargo-fmt:
+    runs-on: ubuntu-latest
+    container: 
+      image: docker.ascendise.ch/ascendise/cargo-runner:1.0.2
+      credentials:
+        username: ${{ secrets.DOCKER_USER }}
+        password: ${{ secrets.DOCKER_PASS }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v3
+      - name: Run cargo fmt
+        run: cargo fmt --all --check

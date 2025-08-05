@@ -94,7 +94,7 @@ impl ProxyServiceImpl {
         let addr = Self::get_host(&req);
         let mut target_conn = net::TcpStream::connect(&addr).unwrap();
         target_conn.write_all(&req.into_bytes()).unwrap();
-        
+
         Response::parse(target_conn.try_clone().unwrap()).unwrap()
     }
 }

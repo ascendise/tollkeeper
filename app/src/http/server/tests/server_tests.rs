@@ -1,7 +1,7 @@
 use crate::http::server::{
-        tests::{HelloHandler, PanicHandler},
-        *,
-    };
+    tests::{HelloHandler, PanicHandler},
+    *,
+};
 use std::{
     io::{Read, Write},
     net::{self},
