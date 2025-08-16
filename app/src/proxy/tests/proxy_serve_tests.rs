@@ -38,6 +38,7 @@ fn setup_with_failing_stub() -> ProxyServe {
                 order_id: "13".into(),
             },
             challenge: HashMap::new(),
+            signature: "do-not-modify".into(),
         };
         Err(PaymentRequiredError(Box::new(toll)))
     }

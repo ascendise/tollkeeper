@@ -1,8 +1,8 @@
-use super::{declarations::InvalidPaymentError, *};
+use super::*;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AccessError {
-    AccessDeniedError(Box<Toll>),
+    AccessDeniedError(Box<Signed<Toll>>),
     DestinationNotFound(Box<Destination>),
 }
 impl Error for AccessError {}
@@ -116,6 +116,7 @@ impl Display for MissingOrderError {
 pub enum PaymentDeniedError {
     InvalidPayment(InvalidPaymentError),
     MismatchedSuspect(MismatchedSuspectError),
+    InvalidSignature,
 }
 
 impl Error for PaymentDeniedError {}
@@ -124,6 +125,10 @@ impl Display for PaymentDeniedError {
         match self {
             Self::InvalidPayment(e) => e.fmt(f),
             Self::MismatchedSuspect(e) => e.fmt(f),
+            Self::InvalidSignature => write!(
+                f,
+                "Toll signature does not match content! Cannot process payment!"
+            ),
         }
     }
 }
@@ -137,15 +142,50 @@ impl From<MismatchedSuspectError> for PaymentDeniedError {
         PaymentDeniedError::MismatchedSuspect(value)
     }
 }
+impl From<signatures::InvalidSignatureError> for PaymentDeniedError {
+    fn from(_: signatures::InvalidSignatureError) -> Self {
+        PaymentDeniedError::InvalidSignature
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidPaymentError {
+    payment: Box<Payment>,
+    new_toll: Box<Signed<Toll>>,
+}
+
+impl InvalidPaymentError {
+    pub fn new(payment: Box<Payment>, new_toll: Box<Signed<Toll>>) -> Self {
+        Self { payment, new_toll }
+    }
+
+    pub fn payment(&self) -> &Payment {
+        &self.payment
+    }
+
+    pub fn new_toll(&self) -> &Signed<Toll> {
+        &self.new_toll
+    }
+}
+
+impl Error for InvalidPaymentError {}
+impl Display for InvalidPaymentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Value '{}' does not match criteria! A new toll was issued",
+            self.payment.value()
+        )
+    }
+}
 /// Return this error when [Payment] was issued for different [Suspect]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MismatchedSuspectError {
     expected: Box<Suspect>,
-    new_toll: Box<Toll>,
+    new_toll: Box<Signed<Toll>>,
 }
 
 impl MismatchedSuspectError {
-    pub fn new(expected: Box<Suspect>, new_toll: Box<Toll>) -> Self {
+    pub fn new(expected: Box<Suspect>, new_toll: Box<Signed<Toll>>) -> Self {
         Self { expected, new_toll }
     }
 
@@ -154,10 +194,11 @@ impl MismatchedSuspectError {
     }
 
     pub fn actual(&self) -> &Suspect {
-        self.new_toll().recipient()
+        let (_, toll) = self.new_toll().deconstruct();
+        toll.recipient()
     }
 
-    pub fn new_toll(&self) -> &Toll {
+    pub fn new_toll(&self) -> &Signed<Toll> {
         &self.new_toll
     }
 }

@@ -8,6 +8,7 @@ use std::str::FromStr;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use tollkeeper::declarations::Visa;
+use tollkeeper::signatures::Signed;
 use tollkeeper::Tollkeeper;
 
 use crate::http::request::Request;
@@ -75,9 +76,10 @@ impl ProxyServiceImpl {
             destination,
         )
     }
-    fn extract_visa(headers: &http::request::Headers) -> Option<Visa> {
+    fn extract_visa(headers: &http::request::Headers) -> Option<Signed<Visa>> {
         let visa_header = headers.extension("X-Keeper-Visa")?;
-        let visa_json = BASE64_STANDARD.decode(visa_header).ok()?;
+        let (visa, signature) = visa_header.split_once('.')?;
+        let visa_json = BASE64_STANDARD.decode(visa).ok()?;
         let visa_json: serde_json::Value = serde_json::from_slice(visa_json.as_slice()).ok()?;
         let order_id = visa_json["order_id"].as_str()?;
         let order_id = OrderId::from_str(order_id).ok()?;
@@ -88,6 +90,13 @@ impl ProxyServiceImpl {
             destination: recipient["dest"].as_str()?.into(),
         };
         let visa = Visa::new(order_id.into(), recipient.into());
+        let signature = BASE64_STANDARD.decode(signature).ok()?;
+        let visa = Signed::new(visa, signature);
+        let result = visa.verify(b"Secret key");
+        match result {
+            Ok(_) => println!("Valid signature"),
+            Err(_) => println!("Invalid signature"),
+        };
         Some(visa)
     }
     fn send_request_to_proxy(req: Request) -> Response {
@@ -110,7 +119,7 @@ impl ProxyService for ProxyServiceImpl {
             Ok(()) => Ok(Self::send_request_to_proxy(req)),
             Err(access_err) => match access_err {
                 tollkeeper::err::AccessError::AccessDeniedError(toll) => {
-                    let toll: Toll = toll.into();
+                    let toll: Toll = toll.as_ref().into();
                     Err(PaymentRequiredError(Box::new(toll)))
                 }
                 tollkeeper::err::AccessError::DestinationNotFound(_) => {
@@ -141,13 +150,16 @@ pub struct Toll {
     recipient: Recipient,
     order_id: OrderId,
     challenge: HashMap<String, String>,
+    signature: String,
 }
-impl From<Box<tollkeeper::declarations::Toll>> for Toll {
-    fn from(val: Box<tollkeeper::declarations::Toll>) -> Self {
+impl From<&Signed<tollkeeper::declarations::Toll>> for Toll {
+    fn from(val: &Signed<tollkeeper::declarations::Toll>) -> Self {
+        let (signature, toll) = val.deconstruct();
         Toll {
-            recipient: val.recipient().into(),
-            order_id: val.order_id().into(),
-            challenge: val.challenge().clone(),
+            recipient: toll.recipient().into(),
+            order_id: toll.order_id().into(),
+            challenge: toll.challenge().clone(),
+            signature: signature.base64(),
         }
     }
 }

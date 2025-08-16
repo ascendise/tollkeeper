@@ -3,6 +3,7 @@ pub mod declarations;
 pub use descriptions::Description;
 pub mod descriptions;
 pub mod err;
+pub mod signatures;
 pub mod util;
 
 #[cfg(test)]
@@ -13,22 +14,32 @@ use std::{error::Error, fmt::Display};
 use declarations::*;
 use descriptions::*;
 use err::*;
+use signatures::Signed;
 use uuid::Uuid;
+
+use signatures::SecretKeyProvider;
 
 /// Guards actions against spam by requiring a PoW [challenge](Toll) to be solved before proceeding.
 pub struct Tollkeeper {
     gates: Vec<Gate>,
+    secret_key_provider: Box<dyn SecretKeyProvider + Send + Sync>,
 }
 
 impl Tollkeeper {
-    pub fn new(gates: Vec<Gate>) -> Result<Self, ConfigError> {
+    pub fn new(
+        gates: Vec<Gate>,
+        secret_key_provider: Box<dyn SecretKeyProvider + Send + Sync>,
+    ) -> Result<Self, ConfigError> {
         if gates.is_empty() {
-            Result::Err(ConfigError::new(
+            Err(ConfigError::new(
                 String::from("gates"),
                 String::from("No gates defined. Tollkeeper has nothing to protect!"),
             ))
         } else {
-            Result::Ok(Self { gates })
+            Ok(Self {
+                gates,
+                secret_key_provider,
+            })
         }
     }
 
@@ -45,11 +56,20 @@ impl Tollkeeper {
     ///
     /// Returns [Option::None] and calls ```on_access``` if [Suspect] is permitted, or [Toll]
     /// to be paid before being able to try again.
-    pub fn check_access(&self, suspect: &Suspect, visa: &Option<Visa>) -> Result<(), AccessError> {
+    pub fn check_access(
+        &self,
+        suspect: &Suspect,
+        visa: &Option<Signed<Visa>>,
+    ) -> Result<(), AccessError> {
         let gate = self.find_gate(suspect)?;
-        let result = gate.pass(suspect, visa);
+        let secret_key = self.secret_key_provider.read_secret_key();
+        let result = gate.pass(suspect, visa, secret_key);
         match result {
-            Some(g) => Err(AccessError::AccessDeniedError(Box::new(g))),
+            Some(toll) => {
+                let secret_key = self.secret_key_provider.read_secret_key();
+                let toll = Signed::sign(toll, secret_key);
+                Err(AccessError::AccessDeniedError(Box::new(toll)))
+            }
             None => Ok(()),
         }
     }
@@ -62,34 +82,42 @@ impl Tollkeeper {
     pub fn buy_visa(
         &mut self,
         suspect: &Suspect,
-        payment: Payment,
-    ) -> Result<Result<Visa, PaymentDeniedError>, GatewayError> {
+        payment: SignedPayment,
+    ) -> Result<Result<Signed<Visa>, PaymentDeniedError>, GatewayError> {
+        let secret_key = self.secret_key_provider.read_secret_key();
+        let payment = match payment.verify(secret_key) {
+            Ok(p) => p,
+            Err(e) => return Ok(Err(e.into())),
+        };
+        let toll = payment.toll();
+        let order_id = toll.order_id();
         let gate = self
             .gates
             .iter_mut()
-            .find(|g| g.id == payment.order_id().gate_id())
-            .ok_or(MissingGateError::new(payment.order_id().gate_id()))?;
+            .find(|g| g.id == order_id.gate_id())
+            .ok_or(MissingGateError::new(order_id.gate_id()))?;
         let order = gate
             .orders
             .iter_mut()
-            .find(|o| o.id == payment.order_id().order_id())
+            .find(|o| o.id == order_id.order_id())
             .ok_or(MissingOrderError::new(
-                payment.order_id().gate_id(),
-                payment.order_id().order_id(),
+                order_id.gate_id(),
+                order_id.order_id(),
             ))?;
-        if suspect != payment.toll().recipient() {
+        if suspect != toll.recipient() {
             let new_toll = order
                 .toll_declaration
                 .declare(suspect.clone(), OrderIdentifier::new(&gate.id, &order.id));
+            let new_toll = Signed::sign(new_toll, secret_key);
             let error = MismatchedSuspectError::new(Box::new(suspect.clone()), Box::new(new_toll));
             let error = PaymentDeniedError::MismatchedSuspect(error);
-            Result::Ok(Result::Err(error))
+            Ok(Err(error))
         } else {
             let payment_result = match order.toll_declaration.pay(payment.clone(), suspect) {
-                Result::Ok(visa) => Result::Ok(visa),
-                Result::Err(err) => Result::Err(PaymentDeniedError::InvalidPayment(err)),
+                Ok(visa) => Ok(Signed::sign(visa, secret_key)),
+                Err(err) => Err(PaymentDeniedError::InvalidPayment(err.into(secret_key))),
             };
-            Result::Ok(payment_result)
+            Ok(payment_result)
         }
     }
 }
@@ -113,12 +141,12 @@ impl Gate {
         orders: Vec<Order>,
     ) -> Result<Self, ConfigError> {
         if orders.is_empty() {
-            Result::Err(ConfigError::new(
+            Err(ConfigError::new(
                 "orders",
                 "You need to define at least one order for the gate!",
             ))
         } else {
-            Result::Ok(Self {
+            Ok(Self {
                 id: id.into(),
                 destination,
                 orders,
@@ -144,9 +172,14 @@ impl Gate {
     }
 
     /// Examine [Suspect] and check if it has to pay a [Toll]
-    fn pass(&self, suspect: &Suspect, visa: &Option<Visa>) -> Option<Toll> {
+    fn pass(
+        &self,
+        suspect: &Suspect,
+        visa: &Option<Signed<Visa>>,
+        secret_key: &[u8],
+    ) -> Option<Toll> {
         for order in &self.orders {
-            let exam = order.examine(suspect, visa, &self.id);
+            let exam = order.examine(suspect, visa, secret_key, &self.id);
             if exam.access_granted {
                 return Option::None;
             }
@@ -198,11 +231,17 @@ impl Order {
         }
     }
 
-    fn examine(&self, suspect: &Suspect, visa: &Option<Visa>, gate_id: &str) -> Examination {
+    fn examine(
+        &self,
+        suspect: &Suspect,
+        visa: &Option<Signed<Visa>>,
+        secret_key: &[u8],
+        gate_id: &str,
+    ) -> Examination {
         let matches_description = self.is_match(suspect);
         let require_toll = (matches_description && self.access_policy == AccessPolicy::Blacklist)
             || (!matches_description && self.access_policy == AccessPolicy::Whitelist);
-        let toll = if require_toll && !self.has_valid_visa(suspect, visa) {
+        let toll = if require_toll && !self.has_valid_visa(suspect, visa, secret_key) {
             Option::Some(self.toll_declaration.declare(
                 suspect.clone(),
                 OrderIdentifier::new(gate_id, self.id.clone()),
@@ -218,9 +257,17 @@ impl Order {
         self.descriptions.iter().any(|d| d.matches(suspect))
     }
 
-    fn has_valid_visa(&self, suspect: &Suspect, visa: &Option<Visa>) -> bool {
+    fn has_valid_visa(
+        &self,
+        suspect: &Suspect,
+        visa: &Option<Signed<Visa>>,
+        secret_key: &[u8],
+    ) -> bool {
         match visa {
-            Option::Some(v) => v.order_id().order_id() == self.id && v.suspect() == suspect,
+            Option::Some(v) => match v.verify(secret_key) {
+                Ok(v) => v.order_id().order_id() == self.id && v.suspect() == suspect,
+                Err(_) => false,
+            },
             Option::None => false,
         }
     }
@@ -241,5 +288,25 @@ impl Examination {
             toll,
             access_granted,
         }
+    }
+}
+
+pub struct SignedPayment {
+    toll: Signed<Toll>,
+    value: String,
+}
+
+impl SignedPayment {
+    pub fn new(toll: Signed<Toll>, value: impl Into<String>) -> Self {
+        Self {
+            toll,
+            value: value.into(),
+        }
+    }
+
+    pub fn verify(&self, secret_key: &[u8]) -> Result<Payment, signatures::InvalidSignatureError> {
+        let toll = self.toll.verify(secret_key)?;
+        let payment = Payment::new(toll.clone(), self.value.clone());
+        Ok(payment)
     }
 }

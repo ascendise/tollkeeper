@@ -2,12 +2,17 @@ pub mod hashcash;
 
 use std::{collections::HashMap, error::Error, fmt::Display};
 
+use crate::{
+    err::InvalidPaymentError,
+    signatures::{AsBytes, Signed},
+};
+
 use super::descriptions::Suspect;
 
 /// Creates and verifies [tolls](Toll)
 pub trait Declaration {
     fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll;
-    fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, InvalidPaymentError>;
+    fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError>;
 }
 
 pub type Challenge = HashMap<String, String>;
@@ -44,6 +49,18 @@ impl Toll {
         &self.challenge
     }
 }
+impl AsBytes for Toll {
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.append(&mut self.recipient.as_bytes());
+        data.append(&mut self.order_id.as_bytes());
+        for kv in &self.challenge {
+            data.append(&mut AsBytes::as_bytes(kv.0));
+            data.append(&mut AsBytes::as_bytes(kv.1));
+        }
+        data
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct OrderIdentifier {
@@ -64,6 +81,14 @@ impl OrderIdentifier {
 
     pub fn order_id(&self) -> &str {
         &self.order_id
+    }
+}
+impl AsBytes for OrderIdentifier {
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.append(&mut AsBytes::as_bytes(&self.gate_id));
+        data.append(&mut AsBytes::as_bytes(&self.order_id));
+        data
     }
 }
 
@@ -87,10 +112,6 @@ impl Payment {
         &self.toll
     }
 
-    pub fn order_id(&self) -> &OrderIdentifier {
-        &self.toll.order_id
-    }
-
     pub fn value(&self) -> &str {
         &self.value
     }
@@ -102,7 +123,6 @@ pub struct Visa {
     order_id: OrderIdentifier,
     suspect: Suspect,
 }
-
 impl Visa {
     pub fn new(order_id: OrderIdentifier, suspect: Suspect) -> Self {
         Self { order_id, suspect }
@@ -118,15 +138,23 @@ impl Visa {
         &self.suspect
     }
 }
+impl AsBytes for Visa {
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.append(&mut self.order_id.as_bytes());
+        data.append(&mut self.suspect.as_bytes());
+        data
+    }
+}
 
 /// Return this error when [Payment::value()] is invalid
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InvalidPaymentError {
+pub struct PaymentError {
     payment: Box<Payment>,
     new_toll: Box<Toll>,
 }
 
-impl InvalidPaymentError {
+impl PaymentError {
     pub fn new(payment: Box<Payment>, new_toll: Box<Toll>) -> Self {
         Self { payment, new_toll }
     }
@@ -138,10 +166,15 @@ impl InvalidPaymentError {
     pub fn new_toll(&self) -> &Toll {
         &self.new_toll
     }
+
+    pub fn into(self, secret_key: &[u8]) -> InvalidPaymentError {
+        let toll = Signed::sign(*self.new_toll, secret_key);
+        InvalidPaymentError::new(self.payment, Box::new(toll))
+    }
 }
 
-impl Error for InvalidPaymentError {}
-impl Display for InvalidPaymentError {
+impl Error for PaymentError {}
+impl Display for PaymentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

@@ -25,7 +25,7 @@ impl Declaration for HashcashDeclaration {
         Toll::new(suspect, order_id, challenge)
     }
 
-    fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, InvalidPaymentError> {
+    fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError> {
         let error =
             |decl: &HashcashDeclaration, p: Payment| decl.invalid_payment_error(suspect.clone(), p);
         let stamp = payment.value();
@@ -39,7 +39,8 @@ impl Declaration for HashcashDeclaration {
         let expiry_date = self.date_provider.now() - self.expiry;
         let is_expired = stamp.date().0 < expiry_date || stamp.date().0 > self.date_provider.now();
         if !is_expired && stamp.is_valid() {
-            let visa = Visa::new(payment.order_id().clone(), suspect.clone());
+            let order_id = payment.toll.order_id().clone();
+            let visa = Visa::new(order_id, suspect.clone());
             match self.double_spent_db.insert(payment.value().into()) {
                 Ok(()) => Ok(visa),
                 Err(_) => error(self, payment),
@@ -81,9 +82,10 @@ impl HashcashDeclaration {
         &self,
         suspect: Suspect,
         payment: Payment,
-    ) -> Result<Visa, InvalidPaymentError> {
-        let toll = self.declare(suspect, payment.order_id().clone());
-        let error = InvalidPaymentError::new(Box::new(payment), Box::new(toll));
+    ) -> Result<Visa, PaymentError> {
+        let order_id = payment.toll.order_id().clone();
+        let toll = self.declare(suspect, order_id);
+        let error = PaymentError::new(Box::new(payment), Box::new(toll));
         Err(error)
     }
 }

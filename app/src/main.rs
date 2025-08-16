@@ -33,7 +33,10 @@ fn create_tollkeeper(requires_challenge: bool) -> tollkeeper::Tollkeeper {
     let gate = tollkeeper::Gate::with_id("gate", destination, orders).unwrap();
     println!("Gate: {}", gate.id());
     let gates = vec![gate];
-    tollkeeper::Tollkeeper::new(gates).unwrap()
+    let secret_key_provider =
+        tollkeeper::signatures::InMemorySecretKeyProvider::new(b"Secret key".into());
+    let secret_key_provider = Box::new(secret_key_provider);
+    tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap()
 }
 
 struct StubDescription {
@@ -59,7 +62,7 @@ impl tollkeeper::Declaration for StubTollDeclaration {
         &mut self,
         _: tollkeeper::declarations::Payment,
         _: &tollkeeper::descriptions::Suspect,
-    ) -> Result<tollkeeper::declarations::Visa, tollkeeper::declarations::InvalidPaymentError> {
+    ) -> Result<tollkeeper::declarations::Visa, tollkeeper::declarations::PaymentError> {
         todo!()
     }
 }

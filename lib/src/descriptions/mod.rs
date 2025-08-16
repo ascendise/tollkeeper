@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
+use crate::signatures::AsBytes;
+
 pub mod regex;
 
 /// Examines [Suspect] for a defined condition like matching IP/User-Agent/...
@@ -53,6 +55,15 @@ impl From<&Suspect> for HashMap<String, String> {
         map
     }
 }
+impl AsBytes for Suspect {
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.append(&mut AsBytes::as_bytes(&self.client_ip));
+        data.append(&mut AsBytes::as_bytes(&self.user_agent));
+        data.append(&mut self.destination().as_bytes());
+        data
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Destination {
@@ -92,5 +103,14 @@ impl Destination {
 impl Display for Destination {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}{}", self.base_url, self.port, self.path)
+    }
+}
+impl AsBytes for Destination {
+    fn as_bytes(&self) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.append(&mut AsBytes::as_bytes(&self.base_url));
+        data.append(&mut AsBytes::as_bytes(&self.port.to_be_bytes()));
+        data.append(&mut AsBytes::as_bytes(&self.path));
+        data
     }
 }

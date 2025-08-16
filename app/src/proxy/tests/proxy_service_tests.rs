@@ -4,6 +4,7 @@ use base64::prelude::*;
 use tollkeeper::{
     declarations::{self},
     descriptions::{self},
+    signatures::InMemorySecretKeyProvider,
 };
 
 use crate::{
@@ -33,7 +34,9 @@ fn setup_and_get_id(
     let order_id = orders[0].id().to_string();
     let gates = vec![tollkeeper::Gate::new(destination, orders).unwrap()];
     let gate_id = gates[0].id().to_string();
-    let tollkeeper = tollkeeper::Tollkeeper::new(gates).unwrap();
+    let secret_key_provider = InMemorySecretKeyProvider::new("Secret key".into());
+    let secret_key_provider = Box::new(secret_key_provider);
+    let tollkeeper = tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap();
     let order_id = OrderId { gate_id, order_id };
     (order_id, ProxyServiceImpl::new(tollkeeper))
 }
@@ -105,6 +108,7 @@ pub fn proxy_request_should_return_error_when_payment_is_required() {
         },
         order_id,
         challenge: HashMap::new(),
+        signature: toll.signature.clone(),
     };
     assert_eq!(expected_toll, *toll);
 }
@@ -150,8 +154,19 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
             }}
         }}"#
     );
+    let signature = tollkeeper::declarations::Visa::new(
+        tollkeeper::declarations::OrderIdentifier::new(order_id.gate_id, order_id.order_id),
+        tollkeeper::descriptions::Suspect::new(
+            "127.0.0.1",
+            "Yo Mama",
+            tollkeeper::descriptions::Destination::new("127.0.0.1", proxy_addr.port(), "/"),
+        ),
+    );
+    let signature = tollkeeper::signatures::Signed::sign(signature, b"Secret key");
     let visa = BASE64_STANDARD.encode(visa);
-    headers.insert("X-Keeper-Visa", visa);
+    let signature = BASE64_STANDARD.encode(signature.signature().raw());
+    let token = format!("{}.{}", visa, signature);
+    headers.insert("X-Keeper-Visa", token);
     headers.insert("User-Agent", "Yo Mama");
     let headers = request::Headers::new(headers).unwrap();
     let request = Request::new(Method::Get, "/", headers).unwrap();
@@ -186,7 +201,7 @@ impl tollkeeper::Declaration for StubTollDeclaration {
         &mut self,
         _: declarations::Payment,
         _: &descriptions::Suspect,
-    ) -> Result<declarations::Visa, tollkeeper::declarations::InvalidPaymentError> {
+    ) -> Result<declarations::Visa, tollkeeper::declarations::PaymentError> {
         todo!()
     }
 }

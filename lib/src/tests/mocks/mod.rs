@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{declarations::InvalidPaymentError, *};
+use crate::*;
 
 pub struct StubDescription {
     matches: bool,
@@ -40,13 +40,14 @@ impl Declaration for StubDeclaration {
         Toll::new(suspect, order_id, HashMap::new())
     }
 
-    fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, InvalidPaymentError> {
+    fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError> {
+        let order_id = payment.toll().order_id();
         if self.accept_payment {
-            let visa = Visa::new(payment.order_id().clone(), suspect.clone());
+            let visa = Visa::new(order_id.clone(), suspect.clone());
             Result::Ok(visa)
         } else {
-            let new_toll = self.declare(suspect.clone(), payment.order_id().clone());
-            let error = InvalidPaymentError::new(Box::new(payment.clone()), Box::new(new_toll));
+            let new_toll = self.declare(suspect.clone(), order_id.clone());
+            let error = PaymentError::new(Box::new(payment.clone()), Box::new(new_toll));
             Result::Err(error)
         }
     }
