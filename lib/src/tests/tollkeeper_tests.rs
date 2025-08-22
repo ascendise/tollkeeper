@@ -280,7 +280,7 @@ pub fn passing_gate_with_visa_with_invalid_signature_should_reject_with_new_toll
 }
 
 #[test]
-pub fn buying_visa_for_valid_order_with_valid_payment_should_return_visa() {
+pub fn paying_toll_for_valid_order_with_valid_payment_should_return_visa() {
     // Arrange
     let (mut sut, order_id) = setup_with_payment();
     // Act
@@ -288,7 +288,7 @@ pub fn buying_visa_for_valid_order_with_valid_payment_should_return_visa() {
     let toll = Toll::new(suspect.clone(), order_id, HashMap::new());
     let toll = Signed::sign(toll, b"Secret key");
     let payment = SignedPayment::new(toll, "legal tender");
-    let result = sut.buy_visa(&suspect, payment);
+    let result = sut.pay_toll(&suspect, payment);
     // Assert
     let visa = match result {
         Ok(r) => match r {
@@ -304,7 +304,7 @@ pub fn buying_visa_for_valid_order_with_valid_payment_should_return_visa() {
 }
 
 #[test]
-pub fn buying_visa_for_valid_order_with_invalid_payment_should_return_error() {
+pub fn paying_toll_for_valid_order_with_invalid_payment_should_return_error() {
     // Arrange
     let (mut sut, order_id) = setup();
     // Act
@@ -312,7 +312,7 @@ pub fn buying_visa_for_valid_order_with_invalid_payment_should_return_error() {
     let toll = Toll::new(suspect.clone(), order_id, HashMap::new());
     let toll = Signed::sign(toll, b"Secret key");
     let payment = SignedPayment::new(toll, "legal tender");
-    let result = sut.buy_visa(&suspect, payment);
+    let result = sut.pay_toll(&suspect, payment);
     // Assert
     assert!(result.is_ok(), "Unexpected gateway error");
     let result = result.ok().unwrap();
@@ -336,7 +336,7 @@ pub fn buying_visa_for_valid_order_with_invalid_payment_should_return_error() {
 }
 
 #[test]
-pub fn buying_visa_for_different_suspect_should_return_new_toll_for_current_suspect() {
+pub fn paying_toll_for_different_suspect_should_return_new_toll_for_current_suspect() {
     // Arrange
     let (mut sut, order_id) = setup_with_payment();
     // Act
@@ -345,7 +345,7 @@ pub fn buying_visa_for_different_suspect_should_return_new_toll_for_current_susp
     let bobs_toll = Toll::new(suspect_bob.clone(), order_id, HashMap::new());
     let bobs_toll = Signed::sign(bobs_toll, b"Secret key");
     let payment = SignedPayment::new(bobs_toll, "legal tender");
-    let result = sut.buy_visa(&suspect_alice, payment); // Alice pays with bobs toll!
+    let result = sut.pay_toll(&suspect_alice, payment); // Alice pays with bobs toll!
     let err = match result.unwrap() {
         Result::Ok(_) => panic!("Returned visa despite different suspect paying!"),
         Result::Err(e) => e,
@@ -360,7 +360,7 @@ pub fn buying_visa_for_different_suspect_should_return_new_toll_for_current_susp
 }
 
 #[test]
-pub fn buying_visa_for_unknown_gate_should_return_error() {
+pub fn paying_toll_for_unknown_gate_should_return_error() {
     // Arrange
     let (mut sut, order_id) = setup_with_payment();
     // Act
@@ -372,7 +372,7 @@ pub fn buying_visa_for_unknown_gate_should_return_error() {
     );
     let toll = Signed::sign(toll, b"Secret key");
     let payment = SignedPayment::new(toll, "legal tender");
-    let result = sut.buy_visa(&suspect, payment);
+    let result = sut.pay_toll(&suspect, payment);
     // Assert
     let expected: Result<Result<Signed<Visa>, PaymentDeniedError>, GatewayError> =
         Result::Err(MissingGateError::new("gate?").into());
@@ -380,7 +380,7 @@ pub fn buying_visa_for_unknown_gate_should_return_error() {
 }
 
 #[test]
-pub fn buying_visa_for_unknown_order_should_return_error() {
+pub fn paying_toll_for_unknown_order_should_return_error() {
     // Arrange
     let (mut sut, order_id) = setup_with_payment();
     // Act
@@ -392,7 +392,7 @@ pub fn buying_visa_for_unknown_order_should_return_error() {
     );
     let toll = Signed::sign(toll, b"Secret key");
     let payment = SignedPayment::new(toll, "legal tender");
-    let result = sut.buy_visa(&suspect, payment);
+    let result = sut.pay_toll(&suspect, payment);
     // Assert
     let expected: Result<Result<Signed<Visa>, PaymentDeniedError>, GatewayError> =
         Result::Err(MissingOrderError::new(order_id.gate_id(), "order?").into());
@@ -400,7 +400,7 @@ pub fn buying_visa_for_unknown_order_should_return_error() {
 }
 
 #[test]
-pub fn buying_visa_with_forged_toll_should_return_error_without_new_toll() {
+pub fn paying_toll_with_forged_toll_should_return_error_without_new_toll() {
     // Arrange
     let (mut sut, order_id) = setup_with_payment();
     // Act
@@ -420,7 +420,7 @@ pub fn buying_visa_with_forged_toll_should_return_error_without_new_toll() {
     let signature = real_toll.signature().raw().to_vec();
     let forged_toll = Signed::new(forged_toll, signature);
     let payment = SignedPayment::new(forged_toll, "legal tender");
-    let result = sut.buy_visa(&forged_suspect, payment);
+    let result = sut.pay_toll(&forged_suspect, payment);
     // Assert
     let expected: Result<Result<Signed<Visa>, PaymentDeniedError>, GatewayError> =
         Ok(Err(PaymentDeniedError::InvalidSignature));

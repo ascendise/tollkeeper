@@ -79,7 +79,7 @@ impl Tollkeeper {
     ///
     /// Returns new [Toll] if [Payment] is invalid
     /// Returns a [GatewayError] if there was a problem processing the [Payment]
-    pub fn buy_visa(
+    pub fn pay_toll(
         &mut self,
         suspect: &Suspect,
         payment: SignedPayment,
