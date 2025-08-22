@@ -6,6 +6,7 @@ mod config;
 mod data_formats;
 #[allow(dead_code)]
 mod http;
+mod payment;
 mod proxy;
 
 fn main() -> Result<(), io::Error> {
