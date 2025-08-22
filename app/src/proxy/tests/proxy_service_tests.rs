@@ -147,11 +147,9 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
     let visa = format!(
         r#"{{
             "order_id":"{order_id}",
-            "recipient": {{
-                "ip": "127.0.0.1",
-                "ua": "Yo Mama",
-                "dest": "{host}/"
-            }}
+            "ip": "127.0.0.1",
+            "ua": "Yo Mama",
+            "dest": "{host}/"
         }}"#
     );
     let signature = tollkeeper::declarations::Visa::new(
@@ -166,7 +164,7 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
     let visa = BASE64_STANDARD.encode(visa);
     let signature = BASE64_STANDARD.encode(signature.signature().raw());
     let token = format!("{}.{}", visa, signature);
-    headers.insert("X-Keeper-Visa", token);
+    headers.insert("X-Keeper-Token", token);
     headers.insert("User-Agent", "Yo Mama");
     let headers = request::Headers::new(headers).unwrap();
     let request = Request::new(Method::Get, "/", headers).unwrap();

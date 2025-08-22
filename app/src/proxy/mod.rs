@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::fmt::Display;
 use std::io::Write;
@@ -7,13 +7,14 @@ use std::str::FromStr;
 
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use tollkeeper::declarations::Visa;
 use tollkeeper::signatures::Signed;
 use tollkeeper::Tollkeeper;
 
+use crate::config;
+use crate::data_formats::{self, AsHalJson, AsHttpHeader, FromHttpHeader};
 use crate::http::request::Request;
 use crate::http::response::Response;
-use crate::http::{self, Parse};
+use crate::http::{self, Body, Parse};
 
 use super::http::server::*;
 
@@ -21,12 +22,19 @@ use super::http::server::*;
 mod tests;
 
 pub struct ProxyServe {
+    config: config::ServerConfig,
     proxy_service: Box<dyn ProxyService + Send + Sync>,
 }
 
 impl ProxyServe {
-    pub fn new(proxy_service: Box<dyn ProxyService + Send + Sync>) -> Self {
-        Self { proxy_service }
+    pub fn new(
+        config: config::ServerConfig,
+        proxy_service: Box<dyn ProxyService + Send + Sync>,
+    ) -> Self {
+        Self {
+            config,
+            proxy_service,
+        }
     }
 }
 impl HttpServe for ProxyServe {
@@ -38,7 +46,19 @@ impl HttpServe for ProxyServe {
         let response = self.proxy_service.proxy_request(client_addr, request);
         let response = match response {
             Ok(res) => res,
-            Err(_) => Response::payment_required(),
+            Err(err) => {
+                let toll = err.0;
+                let json = toll.as_hal_json(self.config.base_url());
+                let data: VecDeque<u8> = json.to_string().into_bytes().into();
+                let content_length = data.len().to_string();
+                let body = http::StreamBody::new(data);
+                let body = Box::new(body) as Box<dyn Body>;
+                let mut headers = http::Headers::empty();
+                headers.insert("Content-Type", "application/hal+json");
+                headers.insert("Content-Length", content_length);
+                let headers = http::response::Headers::new(headers);
+                Response::payment_required(headers, Some(body))
+            }
         };
         Ok(response)
     }
@@ -76,27 +96,9 @@ impl ProxyServiceImpl {
             destination,
         )
     }
-    fn extract_visa(headers: &http::request::Headers) -> Option<Signed<Visa>> {
-        let visa_header = headers.extension("X-Keeper-Visa")?;
-        let (visa, signature) = visa_header.split_once('.')?;
-        let visa_json = BASE64_STANDARD.decode(visa).ok()?;
-        let visa_json: serde_json::Value = serde_json::from_slice(visa_json.as_slice()).ok()?;
-        let order_id = visa_json["order_id"].as_str()?;
-        let order_id = OrderId::from_str(order_id).ok()?;
-        let recipient = &visa_json["recipient"];
-        let recipient = Recipient {
-            client_ip: recipient["ip"].as_str()?.into(),
-            user_agent: recipient["ua"].as_str()?.into(),
-            destination: recipient["dest"].as_str()?.into(),
-        };
-        let visa = Visa::new(order_id.into(), recipient.into());
-        let signature = BASE64_STANDARD.decode(signature).ok()?;
-        let visa = Signed::new(visa, signature);
-        let result = visa.verify(b"Secret key");
-        match result {
-            Ok(_) => println!("Valid signature"),
-            Err(_) => println!("Invalid signature"),
-        };
+    fn extract_visa(headers: &http::request::Headers) -> Option<Visa> {
+        let visa_header = headers.extension("X-Keeper-Token")?;
+        let visa = Visa::from_http_header(visa_header).ok()?;
         Some(visa)
     }
     fn send_request_to_proxy(req: Request) -> Response {
@@ -115,6 +117,7 @@ impl ProxyService for ProxyServiceImpl {
     ) -> Result<http::Response, PaymentRequiredError> {
         let suspect = Self::create_suspect(client_addr, &req);
         let visa = Self::extract_visa(req.headers());
+        let visa = visa.map(|v| v.into());
         match self.tollkeeper.check_access(&suspect, &visa) {
             Ok(()) => Ok(Self::send_request_to_proxy(req)),
             Err(access_err) => match access_err {
@@ -145,7 +148,8 @@ impl Display for PaymentRequiredError {
         write!(f, "No payment found for accessing url!")
     }
 }
-#[derive(Debug, PartialEq, Eq)]
+
+#[derive(serde::Serialize, Debug, PartialEq, Eq)]
 pub struct Toll {
     recipient: Recipient,
     order_id: OrderId,
@@ -163,6 +167,17 @@ impl From<&Signed<tollkeeper::declarations::Toll>> for Toll {
         }
     }
 }
+impl data_formats::AsHalJson for Toll {
+    fn as_hal_json(&self, base_url: &url::Url) -> serde_json::Value {
+        serde_json::json!({
+            "toll": self,
+            "_links": {
+                "pay": format!("{base_url}api/pay/")
+            }
+        })
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct OrderId {
     gate_id: String,
@@ -198,7 +213,15 @@ impl Display for OrderId {
         write!(f, "{}#{}", self.gate_id, self.order_id)
     }
 }
-#[derive(Debug, PartialEq, Eq)]
+impl serde::Serialize for OrderId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+#[derive(serde::Serialize, Debug, PartialEq, Eq)]
 pub struct Recipient {
     client_ip: String,
     user_agent: String,
@@ -223,5 +246,74 @@ impl From<Recipient> for tollkeeper::descriptions::Suspect {
             url.path(),
         );
         Self::new(recipient.client_ip, recipient.user_agent, destination)
+    }
+}
+
+#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+pub struct Visa {
+    order_id: OrderId,
+    recipient: Recipient,
+    signature: Vec<u8>,
+}
+impl Visa {
+    pub fn new(order_id: OrderId, recipient: Recipient, signature: Vec<u8>) -> Self {
+        Self {
+            order_id,
+            recipient,
+            signature,
+        }
+    }
+
+    pub fn order_id(&self) -> &OrderId {
+        &self.order_id
+    }
+
+    pub fn recipient(&self) -> &Recipient {
+        &self.recipient
+    }
+
+    pub fn signature(&self) -> &[u8] {
+        &self.signature
+    }
+}
+impl AsHttpHeader for Visa {
+    fn as_http_header(&self) -> (String, String) {
+        let visa_json = serde_json::json!({
+            "ip": self.recipient.client_ip,
+            "ua": self.recipient.user_agent,
+            "dest": self.recipient.destination,
+            "order_id": self.order_id
+        })
+        .to_string();
+        let visa_base64 = BASE64_STANDARD.encode(visa_json);
+        let signature_base64 = BASE64_STANDARD.encode(&self.signature);
+        let header = format!("{visa_base64}.{signature_base64}");
+        ("X-Keeper-Token".into(), header)
+    }
+}
+impl FromHttpHeader for Visa {
+    type Err = ();
+    fn from_http_header(value: &str) -> Result<Visa, ()> {
+        let (visa, signature) = value.split_once('.').ok_or(())?;
+        let visa_json = BASE64_STANDARD.decode(visa).or(Err(()))?;
+        let visa_json: serde_json::Value =
+            serde_json::from_slice(visa_json.as_slice()).or(Err(()))?;
+        let order_id = visa_json["order_id"].as_str().ok_or(())?;
+        let order_id = OrderId::from_str(order_id).or(Err(()))?;
+        let recipient = Recipient {
+            client_ip: visa_json["ip"].as_str().ok_or(())?.into(),
+            user_agent: visa_json["ua"].as_str().ok_or(())?.into(),
+            destination: visa_json["dest"].as_str().ok_or(())?.into(),
+        };
+        let signature = BASE64_STANDARD.decode(signature).or(Err(()))?;
+        let visa = Visa::new(order_id, recipient, signature);
+        Ok(visa)
+    }
+}
+impl From<Visa> for Signed<tollkeeper::declarations::Visa> {
+    fn from(value: Visa) -> Self {
+        let visa =
+            tollkeeper::declarations::Visa::new(value.order_id.into(), value.recipient.into());
+        Signed::new(visa, value.signature)
     }
 }

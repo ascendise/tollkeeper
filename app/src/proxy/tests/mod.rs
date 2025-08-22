@@ -4,6 +4,8 @@ use crate::http;
 
 use super::{PaymentRequiredError, ProxyService};
 
+mod header_tests;
+mod json_tests;
 mod proxy_serve_tests;
 mod proxy_service_tests;
 

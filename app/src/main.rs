@@ -2,6 +2,8 @@ use http::server::*;
 use proxy::{ProxyServe, ProxyServiceImpl};
 use std::{collections::HashMap, io, net};
 
+mod config;
+mod data_formats;
 #[allow(dead_code)]
 mod http;
 mod proxy;
@@ -10,7 +12,9 @@ fn main() -> Result<(), io::Error> {
     let listener = net::TcpListener::bind("127.0.0.1:9000")?;
     let tollkeeper = create_tollkeeper(true);
     let proxy_service = ProxyServiceImpl::new(tollkeeper);
-    let proxy_handler = ProxyServe::new(Box::new(proxy_service));
+    let base_url = url::Url::parse("http://localhost:9100/").unwrap();
+    let server_config = config::ServerConfig::new(base_url);
+    let proxy_handler = ProxyServe::new(server_config, Box::new(proxy_service));
     let mut server = Server::new(listener, Box::new(proxy_handler));
     let (_, receiver) = cancellation_token::create_cancellation_token();
     server.start_listening(receiver).unwrap();

@@ -17,7 +17,7 @@ pub fn parse_should_return_response_for_valid_message() {
         Err(e) => panic!("Expected Response, got error: {e}"),
         Ok(r) => {
             assert_eq!(r.status_code(), StatusCode::OK);
-            assert_eq!(r.reason_phrase(), Some(&String::from("OK")));
+            assert_eq!(r.reason_phrase(), Some("OK"));
         }
     };
 }

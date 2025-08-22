@@ -192,87 +192,87 @@ impl Headers {
         }
     }
 
-    pub fn accept(&self) -> Option<&String> {
+    pub fn accept(&self) -> Option<&str> {
         self.headers.get("accept")
     }
 
-    pub fn accept_charset(&self) -> Option<&String> {
+    pub fn accept_charset(&self) -> Option<&str> {
         self.headers.get("accept-charset")
     }
 
-    pub fn accept_encoding(&self) -> Option<&String> {
+    pub fn accept_encoding(&self) -> Option<&str> {
         self.headers.get("accept-encoding")
     }
 
-    pub fn accept_language(&self) -> Option<&String> {
+    pub fn accept_language(&self) -> Option<&str> {
         self.headers.get("accept-language")
     }
 
-    pub fn authorization(&self) -> Option<&String> {
+    pub fn authorization(&self) -> Option<&str> {
         self.headers.get("authorization")
     }
 
-    pub fn expect(&self) -> Option<&String> {
+    pub fn expect(&self) -> Option<&str> {
         self.headers.get("expect")
     }
 
-    pub fn from(&self) -> Option<&String> {
+    pub fn from(&self) -> Option<&str> {
         self.headers.get("from")
     }
 
-    pub fn host(&self) -> &String {
+    pub fn host(&self) -> &str {
         self.headers.get("host").unwrap()
     }
 
-    pub fn if_match(&self) -> Option<&String> {
+    pub fn if_match(&self) -> Option<&str> {
         self.headers.get("if-match")
     }
 
-    pub fn if_modified_since(&self) -> Option<&String> {
+    pub fn if_modified_since(&self) -> Option<&str> {
         self.headers.get("if-modified-since")
     }
 
-    pub fn if_none_match(&self) -> Option<&String> {
+    pub fn if_none_match(&self) -> Option<&str> {
         self.headers.get("if-none-match")
     }
 
-    pub fn if_range(&self) -> Option<&String> {
+    pub fn if_range(&self) -> Option<&str> {
         self.headers.get("if-range")
     }
 
-    pub fn if_unmodified_since(&self) -> Option<&String> {
+    pub fn if_unmodified_since(&self) -> Option<&str> {
         self.headers.get("if-unmodified-since")
     }
 
-    pub fn max_forwards(&self) -> Option<&String> {
+    pub fn max_forwards(&self) -> Option<&str> {
         self.headers.get("max-forwards")
     }
 
-    pub fn proxy_authorization(&self) -> Option<&String> {
+    pub fn proxy_authorization(&self) -> Option<&str> {
         self.headers.get("proxy-authorization")
     }
 
-    pub fn range(&self) -> Option<&String> {
+    pub fn range(&self) -> Option<&str> {
         self.headers.get("range")
     }
 
-    pub fn referrer(&self) -> Option<&String> {
+    pub fn referrer(&self) -> Option<&str> {
         self.headers.get("referrer")
     }
 
-    pub fn te(&self) -> Option<&String> {
+    pub fn te(&self) -> Option<&str> {
         self.headers.get("te")
     }
 
-    pub fn user_agent(&self) -> Option<&String> {
+    pub fn user_agent(&self) -> Option<&str> {
         self.headers.get("user-agent")
     }
 
-    pub fn content_length(&self) -> Option<&String> {
+    pub fn content_length(&self) -> Option<&str> {
         self.headers.get("content-length")
     }
 
-    pub fn extension(&self, name: &str) -> Option<&String> {
+    pub fn extension(&self, name: &str) -> Option<&str> {
         self.headers.get(name)
     }
 }

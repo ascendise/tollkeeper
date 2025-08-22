@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::net;
 
+use crate::config;
 use crate::http::request::Method;
 use crate::http::response::{self, StatusCode};
 use crate::http::server::HttpServe;
@@ -22,7 +23,9 @@ fn setup() -> ProxyServe {
     }
     let create_response = Box::new(create_response);
     let stub_proxy_service = StubProxyService::new(create_response);
-    ProxyServe::new(Box::new(stub_proxy_service))
+    let server_config =
+        config::ServerConfig::new(url::Url::parse("http://guard.tollkeeper.ch/").unwrap());
+    ProxyServe::new(server_config, Box::new(stub_proxy_service))
 }
 
 fn setup_with_failing_stub() -> ProxyServe {
@@ -45,7 +48,9 @@ fn setup_with_failing_stub() -> ProxyServe {
     let create_error = Box::new(create_error);
     let stub_proxy_service = StubProxyService::new(create_error);
     let stub_proxy_service = Box::new(stub_proxy_service);
-    ProxyServe::new(stub_proxy_service)
+    let server_config =
+        config::ServerConfig::new(url::Url::parse("http://guard.tollkeeper.ch/").unwrap());
+    ProxyServe::new(server_config, stub_proxy_service)
 }
 
 const fn client_addr() -> net::SocketAddr {
@@ -84,6 +89,35 @@ pub fn serve_should_return_payment_required_if_access_is_denied() {
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(response.is_ok());
-    let response = response.unwrap();
+    let mut response = response.unwrap();
     assert_eq!(StatusCode::PaymentRequired, response.status_code());
+
+    assert_eq!(
+        Some("application/hal+json"),
+        response.headers().content_type()
+    );
+    assert!(response.headers().content_length().is_some());
+    let expected_toll = serde_json::json!({
+        "toll": {
+            "recipient": {
+                "client_ip": "192.1.2.3",
+                "user_agent": "Bot",
+                "destination": "127.0.0.1",
+            },
+            "order_id": "12#13",
+            "challenge": {},
+            "signature": "do-not-modify",
+        },
+        "_links": {
+            "pay": "http://guard.tollkeeper.ch/api/pay/"
+        }
+    });
+    let mut actual_toll = String::new();
+    response
+        .body()
+        .unwrap()
+        .read_to_string(&mut actual_toll)
+        .unwrap();
+    let actual_toll: serde_json::Value = serde_json::from_str(&actual_toll).unwrap();
+    assert_eq!(expected_toll, actual_toll);
 }

@@ -44,7 +44,7 @@ impl Headers {
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<&String> {
+    pub fn get(&self, key: &str) -> Option<&str> {
         let key = key.to_ascii_lowercase();
         match self.headers.get(&key) {
             Some(v) => Some(&v.value),

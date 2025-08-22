@@ -36,8 +36,8 @@ impl Response {
         self.status_code
     }
 
-    pub fn reason_phrase(&self) -> Option<&String> {
-        self.reason_phrase.as_ref()
+    pub fn reason_phrase(&self) -> Option<&str> {
+        self.reason_phrase.as_deref()
     }
 
     pub fn headers(&self) -> &Headers {
@@ -108,12 +108,12 @@ impl Response {
         )
     }
 
-    pub fn payment_required() -> Self {
+    pub fn payment_required(headers: Headers, body: Option<Box<dyn Body>>) -> Self {
         Self::new(
             StatusCode::PaymentRequired,
             Some("Payment Required".into()),
-            Headers::empty(),
-            None,
+            headers,
+            body,
         )
     }
 }
@@ -235,7 +235,10 @@ impl Headers {
     pub fn content_length(&self) -> Option<usize> {
         self.0.get("Content-Length").map(|v| v.parse().unwrap())
     }
-    pub fn extension(&self, key: &str) -> Option<&String> {
+    pub fn content_type(&self) -> Option<&str> {
+        self.0.get("Content-Type")
+    }
+    pub fn extension(&self, key: &str) -> Option<&str> {
         self.0.get(key)
     }
 }
