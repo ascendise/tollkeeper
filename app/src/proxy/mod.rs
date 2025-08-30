@@ -167,6 +167,16 @@ impl From<&Signed<tollkeeper::declarations::Toll>> for Toll {
         }
     }
 }
+impl From<Toll> for Signed<tollkeeper::declarations::Toll> {
+    fn from(value: Toll) -> Self {
+        let toll = tollkeeper::declarations::Toll::new(
+            value.recipient.into(),
+            value.order_id.into(),
+            value.challenge,
+        );
+        Signed::new(toll, value.signature.into_bytes())
+    }
+}
 impl data_formats::AsHalJson for Toll {
     fn as_hal_json(&self, base_url: &url::Url) -> serde_json::Value {
         serde_json::json!({

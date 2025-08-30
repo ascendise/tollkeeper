@@ -1,3 +1,5 @@
+use tollkeeper::signatures::Signed;
+
 use crate::{
     http::{self, server::HttpServe},
     proxy,
@@ -30,4 +32,10 @@ impl HttpServe for PayTollServe {
 struct Payment {
     toll: proxy::Toll,
     value: String,
+}
+impl From<Payment> for tollkeeper::SignedPayment {
+    fn from(payment: Payment) -> Self {
+        let toll: Signed<tollkeeper::declarations::Toll> = payment.toll.into();
+        Self::new(toll, payment.value)
+    }
 }
