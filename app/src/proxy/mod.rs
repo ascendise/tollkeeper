@@ -149,7 +149,7 @@ impl Display for PaymentRequiredError {
     }
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Toll {
     recipient: Recipient,
     order_id: OrderId,
@@ -178,7 +178,7 @@ impl data_formats::AsHalJson for Toll {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct OrderId {
     gate_id: String,
     order_id: String,
@@ -221,7 +221,7 @@ impl serde::Serialize for OrderId {
         serializer.serialize_str(&self.to_string())
     }
 }
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Recipient {
     client_ip: String,
     user_agent: String,

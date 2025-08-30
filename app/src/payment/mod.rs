@@ -1,4 +1,7 @@
-use crate::http::{self, server::HttpServe};
+use crate::{
+    http::{self, server::HttpServe},
+    proxy,
+};
 
 pub fn create_pay_toll_endpoint(path: &str) -> http::server::Endpoint {
     let method = http::request::Method::Post;
@@ -23,3 +26,8 @@ impl HttpServe for PayTollServe {
     }
 }
 
+#[derive(serde::Serialize, Debug, Eq, PartialEq, Clone)]
+struct Payment {
+    toll: proxy::Toll,
+    value: String,
+}
