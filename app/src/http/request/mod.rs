@@ -1,5 +1,6 @@
 use super::*;
 use crate::http;
+pub mod body_utils;
 
 pub struct Request {
     method: Method,

@@ -1,3 +1,5 @@
+use crate::http;
+
 pub trait AsHalJson {
     fn as_hal_json(&self, base_url: &url::Url) -> serde_json::Value;
 }
