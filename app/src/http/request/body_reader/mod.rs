@@ -23,7 +23,7 @@ impl ReadJson for http::Request {
         let mut json = String::new();
         body.read_to_string(&mut json)
             .or(Err(ReadJsonError::Unknown))?;
-        let json = serde_json::from_str(&json).or(Err(ReadJsonError::Unknown))?;
+        let json = serde_json::from_str(&json).or(Err(ReadJsonError::FailedParsing))?;
         Ok(json)
     }
 }
@@ -31,6 +31,7 @@ impl ReadJson for http::Request {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ReadJsonError {
     MismatchedContentType(String),
+    FailedParsing,
     Unknown,
 }
 impl Error for ReadJsonError {}
