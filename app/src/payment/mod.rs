@@ -40,11 +40,35 @@ pub trait PaymentService {
         payment: Payment,
     ) -> Result<proxy::Visa, PaymentError>;
 }
+pub struct PaymentServiceImpl {
+    tollkeeper: tollkeeper::Tollkeeper,
+}
+
+impl PaymentServiceImpl {
+    pub fn new(tollkeeper: tollkeeper::Tollkeeper) -> Self {
+        Self { tollkeeper }
+    }
+}
+impl PaymentService for PaymentServiceImpl {
+    fn pay_toll(
+        &self,
+        recipient: proxy::Recipient,
+        payment: Payment,
+    ) -> Result<proxy::Visa, PaymentError> {
+        todo!()
+    }
+}
 
 #[derive(serde::Serialize, Debug, Eq, PartialEq, Clone)]
 pub struct Payment {
     toll: proxy::Toll,
     value: String,
+}
+
+impl Payment {
+    pub fn new(toll: proxy::Toll, value: String) -> Self {
+        Self { toll, value }
+    }
 }
 impl From<Payment> for tollkeeper::SignedPayment {
     fn from(payment: Payment) -> Self {

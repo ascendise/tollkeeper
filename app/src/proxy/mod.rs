@@ -156,6 +156,22 @@ pub struct Toll {
     challenge: HashMap<String, String>,
     signature: String,
 }
+
+impl Toll {
+    pub fn new(
+        recipient: Recipient,
+        order_id: OrderId,
+        challenge: HashMap<String, String>,
+        signature: impl Into<String>,
+    ) -> Self {
+        Self {
+            recipient,
+            order_id,
+            challenge,
+            signature: signature.into(),
+        }
+    }
+}
 impl From<&Signed<tollkeeper::declarations::Toll>> for Toll {
     fn from(val: &Signed<tollkeeper::declarations::Toll>) -> Self {
         let (signature, toll) = val.deconstruct();
@@ -165,6 +181,11 @@ impl From<&Signed<tollkeeper::declarations::Toll>> for Toll {
             challenge: toll.challenge().clone(),
             signature: signature.base64(),
         }
+    }
+}
+impl From<Signed<tollkeeper::declarations::Toll>> for Toll {
+    fn from(val: Signed<tollkeeper::declarations::Toll>) -> Self {
+        (&val).into()
     }
 }
 impl From<Toll> for Signed<tollkeeper::declarations::Toll> {
@@ -193,12 +214,34 @@ pub struct OrderId {
     gate_id: String,
     order_id: String,
 }
+
+impl OrderId {
+    pub fn new(gate_id: impl Into<String>, order_id: impl Into<String>) -> Self {
+        Self {
+            gate_id: gate_id.into(),
+            order_id: order_id.into(),
+        }
+    }
+
+    pub fn gate_id(&self) -> &str {
+        &self.gate_id
+    }
+
+    pub fn order_id(&self) -> &str {
+        &self.order_id
+    }
+}
 impl From<&tollkeeper::declarations::OrderIdentifier> for OrderId {
     fn from(val: &tollkeeper::declarations::OrderIdentifier) -> Self {
         OrderId {
             gate_id: val.gate_id().into(),
             order_id: val.order_id().into(),
         }
+    }
+}
+impl From<tollkeeper::declarations::OrderIdentifier> for OrderId {
+    fn from(val: tollkeeper::declarations::OrderIdentifier) -> Self {
+        (&val).into()
     }
 }
 impl From<OrderId> for tollkeeper::declarations::OrderIdentifier {
@@ -237,6 +280,20 @@ pub struct Recipient {
     user_agent: String,
     destination: String,
 }
+
+impl Recipient {
+    pub fn new(
+        client_ip: impl Into<String>,
+        user_agent: impl Into<String>,
+        destination: impl Into<String>,
+    ) -> Self {
+        Self {
+            client_ip: client_ip.into(),
+            user_agent: user_agent.into(),
+            destination: destination.into(),
+        }
+    }
+}
 impl From<&tollkeeper::descriptions::Suspect> for Recipient {
     fn from(val: &tollkeeper::descriptions::Suspect) -> Self {
         Recipient {
@@ -244,6 +301,11 @@ impl From<&tollkeeper::descriptions::Suspect> for Recipient {
             user_agent: val.user_agent().into(),
             destination: val.destination().to_string(),
         }
+    }
+}
+impl From<tollkeeper::descriptions::Suspect> for Recipient {
+    fn from(val: tollkeeper::descriptions::Suspect) -> Self {
+        (&val).into()
     }
 }
 impl From<Recipient> for tollkeeper::descriptions::Suspect {
