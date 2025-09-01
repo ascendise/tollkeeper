@@ -21,8 +21,8 @@ impl ReadJson for http::Request {
         let content_length = self.headers().content_length().unwrap_or("0");
         let content_length = usize::from_str_radix(content_length, 10).unwrap();
         let mut json = vec![0; content_length];
-        let body = self.body().as_mut().ok_or(ReadJsonError::Unknown)?;
-        body.read_exact(&mut json).or(Err(ReadJsonError::Unknown))?;
+        let body = self.body().as_mut().ok_or(ReadJsonError::NonJsonData)?;
+        body.read_exact(&mut json).or(Err(ReadJsonError::IoError))?;
         let json = serde_json::from_reader(json.as_slice()).or(Err(ReadJsonError::NonJsonData))?;
         Ok(json)
     }
@@ -32,7 +32,7 @@ impl ReadJson for http::Request {
 pub enum ReadJsonError {
     MismatchedContentType(String),
     NonJsonData,
-    Unknown,
+    IoError,
 }
 impl Error for ReadJsonError {}
 impl Display for ReadJsonError {

@@ -1,8 +1,13 @@
+#[cfg(test)]
+mod tests;
+
+use std::{error::Error, fmt::Display};
+
 use tollkeeper::signatures::Signed;
 
 use crate::{
     http::{self, server::HttpServe},
-    proxy,
+    proxy::{self, Recipient},
 };
 
 pub fn create_pay_toll_endpoint(path: &str) -> http::server::Endpoint {
@@ -28,8 +33,16 @@ impl HttpServe for PayTollServe {
     }
 }
 
+pub trait PaymentService {
+    fn pay_toll(
+        &self,
+        recipient: proxy::Recipient,
+        payment: Payment,
+    ) -> Result<proxy::Visa, PaymentError>;
+}
+
 #[derive(serde::Serialize, Debug, Eq, PartialEq, Clone)]
-struct Payment {
+pub struct Payment {
     toll: proxy::Toll,
     value: String,
 }
@@ -37,5 +50,19 @@ impl From<Payment> for tollkeeper::SignedPayment {
     fn from(payment: Payment) -> Self {
         let toll: Signed<tollkeeper::declarations::Toll> = payment.toll.into();
         Self::new(toll, payment.value)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PaymentError {
+    ChallengeFailed,
+    MismatchedRecipient,
+    InvalidSignature,
+    GatewayError,
+}
+impl Error for PaymentError {}
+impl Display for PaymentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Payment error") //TODO: Better error message
     }
 }

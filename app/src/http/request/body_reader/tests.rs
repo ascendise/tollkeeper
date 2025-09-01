@@ -11,6 +11,15 @@ fn setup(json: Vec<u8>) -> http::Request {
     setup_with_headers(json, headers)
 }
 
+fn setup_no_body() -> http::Request {
+    let mut headers = http::Headers::empty();
+    headers.insert("Content-Type", "application/json");
+    headers.insert("Content-Length", "0");
+    headers.insert("Host", "localhost:80");
+    let request = http::Request::new(Method::Post, "/", Headers::new(headers).unwrap());
+    request.unwrap()
+}
+
 fn setup_with_headers(json: Vec<u8>, mut headers: http::Headers) -> http::Request {
     let json: VecDeque<u8> = json.into();
     let body = StreamBody::new(json);
@@ -124,4 +133,33 @@ pub fn read_json_from_body_should_treat_no_content_length_as_no_body() {
     let result = request.read_json();
     // Assert
     assert_eq!(result, Err(ReadJsonError::NonJsonData));
+}
+
+#[test]
+pub fn read_json_from_body_should_treat_empty_body_as_non_json_data() {
+    // Arrange
+    let mut request = setup_no_body();
+    // Act
+    let result = request.read_json();
+    // Assert
+    assert_eq!(result, Err(ReadJsonError::NonJsonData));
+}
+
+#[test]
+pub fn read_json_from_body_should_return_io_error_when_missing_data() {
+    // Arrange
+    let json = serde_json::json!({
+        "key": "value"
+    });
+    let raw_json = json.to_string().into_bytes();
+    let mut headers = http::Headers::empty();
+    headers.insert("Content-Type", "application/json");
+    let content_length = raw_json.len() * 2; // We double the content length, which
+                                             // means there is more data coming
+    headers.insert("Content-Length", content_length.to_string());
+    let mut request = setup_with_headers(raw_json.clone(), headers);
+    // Act
+    let result = request.read_json();
+    // Assert
+    assert_eq!(result, Err(ReadJsonError::IoError));
 }
