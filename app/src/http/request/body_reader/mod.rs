@@ -18,7 +18,7 @@ impl ReadJson for http::Request {
             let err = ReadJsonError::MismatchedContentType(content_type.into());
             return Err(err);
         }
-        let content_length = self.headers().content_length().unwrap();
+        let content_length = self.headers().content_length().unwrap_or("0");
         let content_length = usize::from_str_radix(content_length, 10).unwrap();
         let mut json = vec![0; content_length];
         let body = self.body().as_mut().ok_or(ReadJsonError::Unknown)?;

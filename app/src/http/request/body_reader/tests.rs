@@ -108,3 +108,20 @@ pub fn read_json_from_body_should_read_only_defined_content_length() {
     // Assert
     assert_eq!(result, Err(ReadJsonError::NonJsonData));
 }
+
+#[test]
+pub fn read_json_from_body_should_treat_no_content_length_as_no_body() {
+    // Arrange
+    let json = serde_json::json!({
+        "key": "value"
+    });
+    let raw_json = json.to_string().into_bytes();
+    let mut headers = http::Headers::empty();
+    headers.insert("Content-Type", "application/json");
+    //// No Content Length
+    let mut request = setup_with_headers(raw_json.clone(), headers);
+    // Act
+    let result = request.read_json();
+    // Assert
+    assert_eq!(result, Err(ReadJsonError::NonJsonData));
+}
