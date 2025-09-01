@@ -87,5 +87,24 @@ pub fn read_json_from_body_should_return_error_if_not_able_to_parse_body() {
     // Act
     let result = request.read_json();
     // Assert
-    assert_eq!(result, Err(ReadJsonError::FailedParsing));
+    assert_eq!(result, Err(ReadJsonError::NonJsonData));
+}
+
+#[test]
+pub fn read_json_from_body_should_read_only_defined_content_length() {
+    // Arrange
+    let json = serde_json::json!({
+        "key": "value"
+    });
+    let raw_json = json.to_string().into_bytes();
+    let mut headers = http::Headers::empty();
+    headers.insert("Content-Type", "application/json");
+    let content_length = raw_json.len() / 2; // We half the content length to test if this causes
+                                             // a ReadJsonError::NonJsonData error
+    headers.insert("Content-Length", content_length.to_string());
+    let mut request = setup_with_headers(raw_json.clone(), headers);
+    // Act
+    let result = request.read_json();
+    // Assert
+    assert_eq!(result, Err(ReadJsonError::NonJsonData));
 }
