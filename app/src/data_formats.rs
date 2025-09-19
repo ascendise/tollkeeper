@@ -2,8 +2,8 @@ pub trait AsHalJson {
     fn as_hal_json(&self, base_url: &url::Url) -> serde_json::Value;
 }
 
-#[allow(dead_code)] //TODO: Remove after no longer unused
 pub trait AsHttpHeader {
+    /// Returns the header name and value
     fn as_http_header(&self) -> (String, String);
 }
 pub trait FromHttpHeader: Sized {

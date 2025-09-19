@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write, net, thread};
+use std::{io::Write, net, thread};
 
 use base64::prelude::*;
 use tollkeeper::{
@@ -14,7 +14,7 @@ use crate::{
         response::StatusCode,
         Request,
     },
-    proxy::{OrderId, ProxyService, ProxyServiceImpl, Recipient, Toll},
+    proxy::{Challenge, OrderId, ProxyService, ProxyServiceImpl, Recipient, Toll},
 };
 
 fn setup_and_get_id(
@@ -107,7 +107,7 @@ pub fn proxy_request_should_return_error_when_payment_is_required() {
             destination: "127.0.0.1:80/".to_string(),
         },
         order_id,
-        challenge: HashMap::new(),
+        challenge: Challenge::empty(),
         signature: toll.signature.clone(),
     };
     assert_eq!(expected_toll, *toll);
@@ -144,14 +144,13 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
     let mut headers = http::Headers::empty();
     let host = format!("127.0.0.1:{}", proxy_addr.port());
     headers.insert("Host", host.clone());
-    let visa = format!(
-        r#"{{
-            "order_id":"{order_id}",
-            "ip": "127.0.0.1",
-            "ua": "Yo Mama",
-            "dest": "{host}/"
-        }}"#
-    );
+    let visa = serde_json::json!({
+        "ip": "127.0.0.1",
+        "ua": "Yo Mama",
+        "dest": format!("{host}/"),
+        "order_id": order_id
+    })
+    .to_string();
     let signature = tollkeeper::declarations::Visa::new(
         tollkeeper::declarations::OrderIdentifier::new(order_id.gate_id, order_id.order_id),
         tollkeeper::descriptions::Suspect::new(
@@ -192,7 +191,11 @@ impl tollkeeper::Declaration for StubTollDeclaration {
         suspect: descriptions::Suspect,
         order_id: declarations::OrderIdentifier,
     ) -> declarations::Toll {
-        tollkeeper::declarations::Toll::new(suspect, order_id, HashMap::new())
+        tollkeeper::declarations::Toll::new(
+            suspect,
+            order_id,
+            tollkeeper::declarations::Challenge::new(),
+        )
     }
 
     fn pay(

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::net;
 
 use crate::config;
@@ -6,7 +5,7 @@ use crate::http::request::Method;
 use crate::http::response::{self, StatusCode};
 use crate::http::server::HttpServe;
 use crate::http::{self, request, Headers, Request, StreamBody};
-use crate::proxy::{OrderId, ProxyServe};
+use crate::proxy::{Challenge, OrderId, ProxyServe};
 use crate::proxy::{PaymentRequiredError, Recipient, Toll};
 
 use super::StubProxyService;
@@ -40,7 +39,7 @@ fn setup_with_failing_stub() -> ProxyServe {
                 gate_id: "12".into(),
                 order_id: "13".into(),
             },
-            challenge: HashMap::new(),
+            challenge: Challenge::new(Vec::new()),
             signature: "do-not-modify".into(),
         };
         Err(PaymentRequiredError(Box::new(toll)))

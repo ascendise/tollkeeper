@@ -1,6 +1,6 @@
 pub mod hashcash;
 
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{error::Error, fmt::Display};
 
 use crate::{
     err::InvalidPaymentError,
@@ -15,7 +15,7 @@ pub trait Declaration {
     fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError>;
 }
 
-pub type Challenge = HashMap<String, String>;
+pub type Challenge = indexmap::IndexMap<String, String>;
 
 /// A Proof-of-Work challenge to be solved before being granted access
 #[derive(Debug, Eq, PartialEq, Clone)]

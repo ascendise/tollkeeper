@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ServerConfig {
     base_url: url::Url,
 }

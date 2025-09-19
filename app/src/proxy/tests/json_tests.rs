@@ -1,19 +1,18 @@
 use serde_json::json;
-use tollkeeper::declarations::Challenge;
 
 use crate::{
     data_formats::AsHalJson,
-    proxy::{OrderId, Recipient, Toll},
+    proxy::{Challenge, OrderId, Recipient, Toll},
 };
 
 #[test]
 pub fn serializing_toll_should_return_expected_json() {
     // Arrange
-    let mut challenge = Challenge::new();
-    challenge.insert(
-        "question".into(),
-        "Why does the chicken cross the road?".into(),
-    );
+    let challenge = vec![(
+        String::from("question"),
+        String::from("Why does the chicken cross the road?"),
+    )];
+    let challenge = Challenge::new(challenge);
     let toll = Toll {
         recipient: Recipient {
             client_ip: "1.2.3.4".into(),

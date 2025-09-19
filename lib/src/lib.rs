@@ -43,7 +43,7 @@ impl Tollkeeper {
         }
     }
 
-    fn find_gate(&self, suspect: &Suspect) -> Result<&Gate, AccessError> {
+    fn find_matching_gate(&self, suspect: &Suspect) -> Result<&Gate, AccessError> {
         let destination = suspect.destination().clone();
         match self.gates.iter().find(|g| g.destination() == &destination) {
             Some(g) => Ok(g),
@@ -51,8 +51,8 @@ impl Tollkeeper {
         }
     }
 
-    /// Checks if [Suspect] [matches description](Description::matches) and has to [pay a toll](Toll) before proceeding with it's
-    /// action.
+    /// Checks if [Suspect] [matches description](Description::matches) and has to [pay a toll](Toll)
+    /// before proceeding with it's action.
     ///
     /// Returns [Option::None] and calls ```on_access``` if [Suspect] is permitted, or [Toll]
     /// to be paid before being able to try again.
@@ -61,7 +61,7 @@ impl Tollkeeper {
         suspect: &Suspect,
         visa: &Option<Signed<Visa>>,
     ) -> Result<(), AccessError> {
-        let gate = self.find_gate(suspect)?;
+        let gate = self.find_matching_gate(suspect)?;
         let secret_key = self.secret_key_provider.read_secret_key();
         let result = gate.pass(suspect, visa, secret_key);
         match result {
@@ -79,7 +79,7 @@ impl Tollkeeper {
     ///
     /// Returns new [Toll] if [Payment] is invalid
     /// Returns a [GatewayError] if there was a problem processing the [Payment]
-    pub fn buy_visa(
+    pub fn pay_toll(
         &mut self,
         suspect: &Suspect,
         payment: SignedPayment,
@@ -91,25 +91,15 @@ impl Tollkeeper {
         };
         let toll = payment.toll();
         let order_id = toll.order_id();
-        let gate = self
-            .gates
-            .iter_mut()
-            .find(|g| g.id == order_id.gate_id())
-            .ok_or(MissingGateError::new(order_id.gate_id()))?;
-        let order = gate
-            .orders
-            .iter_mut()
-            .find(|o| o.id == order_id.order_id())
-            .ok_or(MissingOrderError::new(
-                order_id.gate_id(),
-                order_id.order_id(),
-            ))?;
+        let gate = Self::find_gate_by_id(self.gates.iter_mut(), order_id)?;
+        let order = Self::find_order_by_id(gate.orders.iter_mut(), order_id)?;
         if suspect != toll.recipient() {
             let new_toll = order
                 .toll_declaration
                 .declare(suspect.clone(), OrderIdentifier::new(&gate.id, &order.id));
             let new_toll = Signed::sign(new_toll, secret_key);
-            let error = MismatchedSuspectError::new(Box::new(suspect.clone()), Box::new(new_toll));
+            let error =
+                MismatchedSuspectError::new(Box::new(toll.recipient().clone()), Box::new(new_toll));
             let error = PaymentDeniedError::MismatchedSuspect(error);
             Ok(Err(error))
         } else {
@@ -119,6 +109,29 @@ impl Tollkeeper {
             };
             Ok(payment_result)
         }
+    }
+
+    fn find_gate_by_id<'a>(
+        mut gates: std::slice::IterMut<'a, Gate>,
+        order_id: &OrderIdentifier,
+    ) -> Result<&'a mut Gate, GatewayError> {
+        let gate = gates
+            .find(|g| g.id == order_id.gate_id())
+            .ok_or(MissingGateError::new(order_id.gate_id()))?;
+        Ok(gate)
+    }
+
+    fn find_order_by_id<'a>(
+        mut orders: std::slice::IterMut<'a, Order>,
+        order_id: &OrderIdentifier,
+    ) -> Result<&'a mut Order, GatewayError> {
+        let order = orders
+            .find(|o| o.id == order_id.order_id())
+            .ok_or(MissingOrderError::new(
+                order_id.gate_id(),
+                order_id.order_id(),
+            ))?;
+        Ok(order)
     }
 }
 

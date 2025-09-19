@@ -1,5 +1,6 @@
 use super::*;
 use crate::http;
+pub mod body_reader;
 
 pub struct Request {
     method: Method,
@@ -268,8 +269,13 @@ impl Headers {
         self.headers.get("user-agent")
     }
 
-    pub fn content_length(&self) -> Option<&str> {
-        self.headers.get("content-length")
+    pub fn content_length(&self) -> Option<usize> {
+        let content_length = self.headers.get("content-length")?;
+        usize::from_str(content_length).ok()
+    }
+
+    pub fn content_type(&self) -> Option<&str> {
+        self.headers.get("content-type")
     }
 
     pub fn extension(&self, name: &str) -> Option<&str> {

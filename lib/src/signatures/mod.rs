@@ -25,7 +25,8 @@ impl<T: AsBytes> Signed<T> {
 
     /// Create a new [Signed] using a secret key
     pub fn sign(value: T, secret_key: &[u8]) -> Self {
-        let signature = Signature::sign(value.as_bytes(), secret_key);
+        let bytes = value.as_bytes();
+        let signature = Signature::sign(bytes, secret_key);
         Self { value, signature }
     }
 

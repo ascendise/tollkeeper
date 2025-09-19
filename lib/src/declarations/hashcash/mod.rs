@@ -16,8 +16,8 @@ use super::*;
 pub struct HashcashDeclaration {
     difficulty: u8,
     expiry: chrono::Duration,
-    date_provider: Box<dyn DateTimeProvider>,
-    double_spent_db: Box<dyn DoubleSpentDatabase>,
+    date_provider: Box<dyn DateTimeProvider + Send + Sync>,
+    double_spent_db: Box<dyn DoubleSpentDatabase + Send + Sync>,
 }
 impl Declaration for HashcashDeclaration {
     fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll {
@@ -54,8 +54,8 @@ impl HashcashDeclaration {
     pub fn new(
         difficulty: u8,
         expiry: chrono::Duration,
-        date_provider: Box<dyn DateTimeProvider>,
-        double_spent_db: Box<dyn DoubleSpentDatabase>,
+        date_provider: Box<dyn DateTimeProvider + Send + Sync>,
+        double_spent_db: Box<dyn DoubleSpentDatabase + Send + Sync>,
     ) -> Self {
         Self {
             difficulty,
@@ -65,8 +65,8 @@ impl HashcashDeclaration {
         }
     }
 
-    fn generate_challenge(&self, suspect: &Suspect) -> HashMap<String, String> {
-        let mut challenge = HashMap::<String, String>::new();
+    fn generate_challenge(&self, suspect: &Suspect) -> Challenge {
+        let mut challenge = Challenge::new();
         challenge.insert("ver".into(), "1".into());
         challenge.insert("bits".into(), self.difficulty.to_string());
         let dest = suspect.destination();

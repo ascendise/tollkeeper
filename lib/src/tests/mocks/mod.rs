@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::*;
 
 pub struct StubDescription {
@@ -37,7 +35,7 @@ impl StubDeclaration {
 
 impl Declaration for StubDeclaration {
     fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll {
-        Toll::new(suspect, order_id, HashMap::new())
+        Toll::new(suspect, order_id, Challenge::new())
     }
 
     fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError> {

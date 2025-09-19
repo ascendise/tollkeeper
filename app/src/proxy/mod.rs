@@ -1,20 +1,21 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::io::Write;
 use std::net;
 use std::str::FromStr;
 
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use serde::ser::SerializeMap;
 use tollkeeper::signatures::Signed;
 use tollkeeper::Tollkeeper;
 
-use crate::config;
-use crate::data_formats::{self, AsHalJson, AsHttpHeader, FromHttpHeader};
+use crate::data_formats::{self, AsHalJson, FromHttpHeader};
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::http::{self, Body, Parse};
+use crate::{config, payment};
 
 use super::http::server::*;
 
@@ -96,9 +97,9 @@ impl ProxyServiceImpl {
             destination,
         )
     }
-    fn extract_visa(headers: &http::request::Headers) -> Option<Visa> {
+    fn extract_visa(headers: &http::request::Headers) -> Option<payment::Visa> {
         let visa_header = headers.extension("X-Keeper-Token")?;
-        let visa = Visa::from_http_header(visa_header).ok()?;
+        let visa = payment::Visa::from_http_header(visa_header).ok()?;
         Some(visa)
     }
     fn send_request_to_proxy(req: Request) -> Response {
@@ -149,12 +150,48 @@ impl Display for PaymentRequiredError {
     }
 }
 
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct Toll {
     recipient: Recipient,
     order_id: OrderId,
-    challenge: HashMap<String, String>,
+    challenge: Challenge,
     signature: String,
+}
+
+impl Toll {
+    pub fn new(
+        recipient: Recipient,
+        order_id: OrderId,
+        challenge: Challenge,
+        signature: Vec<u8>,
+    ) -> Self {
+        Self {
+            recipient,
+            order_id,
+            challenge,
+            signature: BASE64_STANDARD.encode(signature),
+        }
+    }
+
+    /// Client requesting resource
+    pub fn recipient(&self) -> &Recipient {
+        &self.recipient
+    }
+
+    /// Id of the order that issued this toll
+    pub fn order_id(&self) -> &OrderId {
+        &self.order_id
+    }
+
+    /// Challenge parameters
+    pub fn challenge(&self) -> &Challenge {
+        &self.challenge
+    }
+
+    /// Base64 encoded signature
+    pub fn signature(&self) -> &str {
+        &self.signature
+    }
 }
 impl From<&Signed<tollkeeper::declarations::Toll>> for Toll {
     fn from(val: &Signed<tollkeeper::declarations::Toll>) -> Self {
@@ -162,9 +199,27 @@ impl From<&Signed<tollkeeper::declarations::Toll>> for Toll {
         Toll {
             recipient: toll.recipient().into(),
             order_id: toll.order_id().into(),
-            challenge: toll.challenge().clone(),
+            challenge: toll.challenge().into(),
             signature: signature.base64(),
         }
+    }
+}
+impl From<Signed<tollkeeper::declarations::Toll>> for Toll {
+    fn from(val: Signed<tollkeeper::declarations::Toll>) -> Self {
+        (&val).into()
+    }
+}
+impl TryFrom<Toll> for Signed<tollkeeper::declarations::Toll> {
+    type Error = base64::DecodeError;
+
+    fn try_from(value: Toll) -> Result<Self, base64::DecodeError> {
+        let toll = tollkeeper::declarations::Toll::new(
+            value.recipient.into(),
+            value.order_id.into(),
+            value.challenge.into(),
+        );
+        let toll = Signed::new(toll, BASE64_STANDARD.decode(value.signature)?);
+        Ok(toll)
     }
 }
 impl data_formats::AsHalJson for Toll {
@@ -178,10 +233,104 @@ impl data_formats::AsHalJson for Toll {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Challenge {
+    values: Vec<(String, String)>,
+}
+impl Challenge {
+    pub fn new(values: Vec<(String, String)>) -> Self {
+        Self { values }
+    }
+
+    pub fn empty() -> Self {
+        Self { values: Vec::new() }
+    }
+
+    pub fn values(&self) -> &[(String, String)] {
+        &self.values
+    }
+}
+impl From<Challenge> for tollkeeper::declarations::Challenge {
+    fn from(value: Challenge) -> Self {
+        let mut challenge = indexmap::IndexMap::new();
+        for (k, v) in value.values {
+            challenge.insert(k, v);
+        }
+        challenge
+    }
+}
+impl From<&tollkeeper::declarations::Challenge> for Challenge {
+    fn from(value: &tollkeeper::declarations::Challenge) -> Self {
+        let mut challenge = vec![];
+        for (k, v) in value {
+            challenge.push((k.clone(), v.clone()));
+        }
+        Self::new(challenge)
+    }
+}
+impl serde::Serialize for Challenge {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let values = self.values();
+        let mut struct_builder = serializer.serialize_map(Some(values.len()))?;
+        for (k, v) in &self.values {
+            struct_builder.serialize_entry(k, v)?;
+        }
+        struct_builder.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for Challenge {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ChallengeVisitor;
+        impl<'de> serde::de::Visitor<'de> for ChallengeVisitor {
+            type Value = Challenge;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string in the format 'part1:part2'")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut challenge = Vec::new();
+                while let Some((key, value)) = &map.next_entry::<String, String>()? {
+                    challenge.push((String::from(key), String::from(value)));
+                }
+                Ok(Challenge::new(challenge))
+            }
+        }
+
+        deserializer.deserialize_map(ChallengeVisitor)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct OrderId {
     gate_id: String,
     order_id: String,
+}
+
+impl OrderId {
+    pub fn new(gate_id: impl Into<String>, order_id: impl Into<String>) -> Self {
+        Self {
+            gate_id: gate_id.into(),
+            order_id: order_id.into(),
+        }
+    }
+
+    pub fn gate_id(&self) -> &str {
+        &self.gate_id
+    }
+
+    pub fn order_id(&self) -> &str {
+        &self.order_id
+    }
 }
 impl From<&tollkeeper::declarations::OrderIdentifier> for OrderId {
     fn from(val: &tollkeeper::declarations::OrderIdentifier) -> Self {
@@ -189,6 +338,11 @@ impl From<&tollkeeper::declarations::OrderIdentifier> for OrderId {
             gate_id: val.gate_id().into(),
             order_id: val.order_id().into(),
         }
+    }
+}
+impl From<tollkeeper::declarations::OrderIdentifier> for OrderId {
+    fn from(val: tollkeeper::declarations::OrderIdentifier) -> Self {
+        (&val).into()
     }
 }
 impl From<OrderId> for tollkeeper::declarations::OrderIdentifier {
@@ -221,11 +375,65 @@ impl serde::Serialize for OrderId {
         serializer.serialize_str(&self.to_string())
     }
 }
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
+impl<'de> serde::Deserialize<'de> for OrderId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct OrderIdVisitor;
+        impl serde::de::Visitor<'_> for OrderIdVisitor {
+            type Value = OrderId;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string in the format 'part1#part2'")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<OrderId, E>
+            where
+                E: serde::de::Error,
+            {
+                let parse_err = serde::de::Error::invalid_value(
+                    serde::de::Unexpected::Str(value),
+                    &"gate_id#order_id",
+                );
+                let order_id = OrderId::from_str(value).or(Err(parse_err))?;
+                Ok(order_id)
+            }
+        }
+
+        deserializer.deserialize_str(OrderIdVisitor)
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct Recipient {
     client_ip: String,
     user_agent: String,
     destination: String,
+}
+impl Recipient {
+    pub fn new(
+        client_ip: impl Into<String>,
+        user_agent: impl Into<String>,
+        destination: impl Into<String>,
+    ) -> Self {
+        Self {
+            client_ip: client_ip.into(),
+            user_agent: user_agent.into(),
+            destination: destination.into(),
+        }
+    }
+
+    pub fn client_ip(&self) -> &str {
+        &self.client_ip
+    }
+
+    pub fn user_agent(&self) -> &str {
+        &self.user_agent
+    }
+
+    pub fn destination(&self) -> &str {
+        &self.destination
+    }
 }
 impl From<&tollkeeper::descriptions::Suspect> for Recipient {
     fn from(val: &tollkeeper::descriptions::Suspect) -> Self {
@@ -234,6 +442,11 @@ impl From<&tollkeeper::descriptions::Suspect> for Recipient {
             user_agent: val.user_agent().into(),
             destination: val.destination().to_string(),
         }
+    }
+}
+impl From<tollkeeper::descriptions::Suspect> for Recipient {
+    fn from(val: tollkeeper::descriptions::Suspect) -> Self {
+        (&val).into()
     }
 }
 impl From<Recipient> for tollkeeper::descriptions::Suspect {
@@ -246,74 +459,5 @@ impl From<Recipient> for tollkeeper::descriptions::Suspect {
             url.path(),
         );
         Self::new(recipient.client_ip, recipient.user_agent, destination)
-    }
-}
-
-#[derive(serde::Serialize, Debug, PartialEq, Eq)]
-pub struct Visa {
-    order_id: OrderId,
-    recipient: Recipient,
-    signature: Vec<u8>,
-}
-impl Visa {
-    pub fn new(order_id: OrderId, recipient: Recipient, signature: Vec<u8>) -> Self {
-        Self {
-            order_id,
-            recipient,
-            signature,
-        }
-    }
-
-    pub fn order_id(&self) -> &OrderId {
-        &self.order_id
-    }
-
-    pub fn recipient(&self) -> &Recipient {
-        &self.recipient
-    }
-
-    pub fn signature(&self) -> &[u8] {
-        &self.signature
-    }
-}
-impl AsHttpHeader for Visa {
-    fn as_http_header(&self) -> (String, String) {
-        let visa_json = serde_json::json!({
-            "ip": self.recipient.client_ip,
-            "ua": self.recipient.user_agent,
-            "dest": self.recipient.destination,
-            "order_id": self.order_id
-        })
-        .to_string();
-        let visa_base64 = BASE64_STANDARD.encode(visa_json);
-        let signature_base64 = BASE64_STANDARD.encode(&self.signature);
-        let header = format!("{visa_base64}.{signature_base64}");
-        ("X-Keeper-Token".into(), header)
-    }
-}
-impl FromHttpHeader for Visa {
-    type Err = ();
-    fn from_http_header(value: &str) -> Result<Visa, ()> {
-        let (visa, signature) = value.split_once('.').ok_or(())?;
-        let visa_json = BASE64_STANDARD.decode(visa).or(Err(()))?;
-        let visa_json: serde_json::Value =
-            serde_json::from_slice(visa_json.as_slice()).or(Err(()))?;
-        let order_id = visa_json["order_id"].as_str().ok_or(())?;
-        let order_id = OrderId::from_str(order_id).or(Err(()))?;
-        let recipient = Recipient {
-            client_ip: visa_json["ip"].as_str().ok_or(())?.into(),
-            user_agent: visa_json["ua"].as_str().ok_or(())?.into(),
-            destination: visa_json["dest"].as_str().ok_or(())?.into(),
-        };
-        let signature = BASE64_STANDARD.decode(signature).or(Err(()))?;
-        let visa = Visa::new(order_id, recipient, signature);
-        Ok(visa)
-    }
-}
-impl From<Visa> for Signed<tollkeeper::declarations::Visa> {
-    fn from(value: Visa) -> Self {
-        let visa =
-            tollkeeper::declarations::Visa::new(value.order_id.into(), value.recipient.into());
-        Signed::new(visa, value.signature)
     }
 }

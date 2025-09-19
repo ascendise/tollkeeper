@@ -9,7 +9,7 @@ use crate::{
 };
 use chrono::TimeZone;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 fn setup() -> HashcashDeclaration {
     let today = chrono::Utc
@@ -62,7 +62,7 @@ pub fn declare_should_return_new_toll_for_suspect() {
     );
     let order_id = OrderIdentifier::new("gate", "order");
     let toll = sut.declare(suspect.clone(), order_id.clone());
-    let mut expected_challenge = HashMap::<String, String>::new();
+    let mut expected_challenge = Challenge::new();
     expected_challenge.insert("ver".into(), "1".into());
     expected_challenge.insert("bits".into(), "4".into());
     expected_challenge.insert("resource".into(), "example.com(8888)/hello".into());
