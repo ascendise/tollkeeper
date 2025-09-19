@@ -280,7 +280,7 @@ pub fn passing_gate_with_visa_with_invalid_signature_should_reject_with_new_toll
 #[test]
 pub fn paying_toll_for_valid_order_with_valid_payment_should_return_visa() {
     // Arrange
-    let (mut sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment();
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(suspect.clone(), order_id, Challenge::new());
@@ -304,7 +304,7 @@ pub fn paying_toll_for_valid_order_with_valid_payment_should_return_visa() {
 #[test]
 pub fn paying_toll_for_valid_order_with_invalid_payment_should_return_error() {
     // Arrange
-    let (mut sut, order_id) = setup();
+    let (sut, order_id) = setup();
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(suspect.clone(), order_id, Challenge::new());
@@ -336,7 +336,7 @@ pub fn paying_toll_for_valid_order_with_invalid_payment_should_return_error() {
 #[test]
 pub fn paying_toll_for_different_suspect_should_return_new_toll_for_current_suspect() {
     // Arrange
-    let (mut sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment();
     // Act
     let suspect_alice = Suspect::new("1.2.3.4", "Alice", Destination::new_base("localhost"));
     let suspect_bob = Suspect::new("90.1.2.6", "Bob", Destination::new_base("localhost"));
@@ -362,7 +362,7 @@ pub fn paying_toll_for_different_suspect_should_return_new_toll_for_current_susp
 #[test]
 pub fn paying_toll_for_unknown_gate_should_return_error() {
     // Arrange
-    let (mut sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment();
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(
@@ -382,7 +382,7 @@ pub fn paying_toll_for_unknown_gate_should_return_error() {
 #[test]
 pub fn paying_toll_for_unknown_order_should_return_error() {
     // Arrange
-    let (mut sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment();
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(
@@ -402,7 +402,7 @@ pub fn paying_toll_for_unknown_order_should_return_error() {
 #[test]
 pub fn paying_toll_with_forged_toll_should_return_error_without_new_toll() {
     // Arrange
-    let (mut sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment();
     // Act
     let real_suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let real_toll = Toll::new(

@@ -38,7 +38,7 @@ impl Declaration for StubDeclaration {
         Toll::new(suspect, order_id, Challenge::new())
     }
 
-    fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError> {
+    fn pay(&self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError> {
         let order_id = payment.toll().order_id();
         if self.accept_payment {
             let visa = Visa::new(order_id.clone(), suspect.clone());

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::{collections::HashSet, mem::size_of, str::FromStr};
+use std::{collections::HashSet, mem::size_of, str::FromStr, sync::Mutex};
 
 use chrono::TimeZone;
 use sha1::Digest;
@@ -25,7 +25,7 @@ impl Declaration for HashcashDeclaration {
         Toll::new(suspect, order_id, challenge)
     }
 
-    fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError> {
+    fn pay(&self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError> {
         let error =
             |decl: &HashcashDeclaration, p: Payment| decl.invalid_payment_error(suspect.clone(), p);
         let stamp = payment.value();
@@ -308,9 +308,9 @@ impl Display for Extension {
 }
 
 pub trait DoubleSpentDatabase {
-    fn insert(&mut self, stamp: String) -> Result<(), DuplicateStampError>;
+    fn insert(&self, stamp: String) -> Result<(), DuplicateStampError>;
     fn is_spent(&self, stamp: &str) -> bool;
-    fn stamps(&self) -> &HashSet<String>;
+    fn stamps(&self) -> HashSet<String>;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -334,8 +334,9 @@ impl Display for DuplicateStampError {
     }
 }
 
+/// An in-memory implementation of a [DoubleSpentDatabase]
 pub struct DoubleSpentDatabaseImpl {
-    stamps: HashSet<String>,
+    stamps: Mutex<HashSet<String>>,
 }
 impl Default for DoubleSpentDatabaseImpl {
     fn default() -> Self {
@@ -346,16 +347,19 @@ impl Default for DoubleSpentDatabaseImpl {
 impl DoubleSpentDatabaseImpl {
     pub fn new() -> Self {
         Self {
-            stamps: HashSet::<String>::new(),
+            stamps: Mutex::new(HashSet::<String>::new()),
         }
     }
     pub fn init(stamps: HashSet<String>) -> Self {
-        Self { stamps }
+        Self {
+            stamps: Mutex::new(stamps),
+        }
     }
 }
 impl DoubleSpentDatabase for DoubleSpentDatabaseImpl {
-    fn insert(&mut self, stamp: String) -> Result<(), DuplicateStampError> {
-        let is_new_stamp = self.stamps.insert(stamp.clone());
+    fn insert(&self, stamp: String) -> Result<(), DuplicateStampError> {
+        let mut stamps = self.stamps.lock().unwrap();
+        let is_new_stamp = stamps.insert(stamp.clone());
         if is_new_stamp {
             Ok(())
         } else {
@@ -364,10 +368,12 @@ impl DoubleSpentDatabase for DoubleSpentDatabaseImpl {
     }
 
     fn is_spent(&self, stamp: &str) -> bool {
-        self.stamps.contains(stamp)
+        let stamps = &self.stamps.lock().unwrap();
+        stamps.contains(stamp)
     }
 
-    fn stamps(&self) -> &HashSet<String> {
-        &self.stamps
+    fn stamps(&self) -> HashSet<String> {
+        let stamps = self.stamps.lock().unwrap();
+        stamps.clone()
     }
 }

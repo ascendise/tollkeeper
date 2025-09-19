@@ -199,7 +199,7 @@ impl tollkeeper::Declaration for StubTollDeclaration {
     }
 
     fn pay(
-        &mut self,
+        &self,
         _: declarations::Payment,
         _: &descriptions::Suspect,
     ) -> Result<declarations::Visa, tollkeeper::declarations::PaymentError> {

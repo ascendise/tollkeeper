@@ -80,7 +80,7 @@ impl Tollkeeper {
     /// Returns new [Toll] if [Payment] is invalid
     /// Returns a [GatewayError] if there was a problem processing the [Payment]
     pub fn pay_toll(
-        &mut self,
+        &self,
         suspect: &Suspect,
         payment: SignedPayment,
     ) -> Result<Result<Signed<Visa>, PaymentDeniedError>, GatewayError> {
@@ -91,8 +91,8 @@ impl Tollkeeper {
         };
         let toll = payment.toll();
         let order_id = toll.order_id();
-        let gate = Self::find_gate_by_id(self.gates.iter_mut(), order_id)?;
-        let order = Self::find_order_by_id(gate.orders.iter_mut(), order_id)?;
+        let gate = Self::find_gate_by_id(&self.gates, order_id)?;
+        let order = Self::find_order_by_id(&gate.orders, order_id)?;
         if suspect != toll.recipient() {
             let new_toll = order
                 .toll_declaration
@@ -112,25 +112,28 @@ impl Tollkeeper {
     }
 
     fn find_gate_by_id<'a>(
-        mut gates: std::slice::IterMut<'a, Gate>,
+        gates: &'a [Gate],
         order_id: &OrderIdentifier,
-    ) -> Result<&'a mut Gate, GatewayError> {
+    ) -> Result<&'a Gate, GatewayError> {
         let gate = gates
+            .iter()
             .find(|g| g.id == order_id.gate_id())
             .ok_or(MissingGateError::new(order_id.gate_id()))?;
         Ok(gate)
     }
 
     fn find_order_by_id<'a>(
-        mut orders: std::slice::IterMut<'a, Order>,
+        orders: &'a [Order],
         order_id: &OrderIdentifier,
-    ) -> Result<&'a mut Order, GatewayError> {
-        let order = orders
-            .find(|o| o.id == order_id.order_id())
-            .ok_or(MissingOrderError::new(
-                order_id.gate_id(),
-                order_id.order_id(),
-            ))?;
+    ) -> Result<&'a Order, GatewayError> {
+        let order =
+            orders
+                .iter()
+                .find(|o| o.id == order_id.order_id())
+                .ok_or(MissingOrderError::new(
+                    order_id.gate_id(),
+                    order_id.order_id(),
+                ))?;
         Ok(order)
     }
 }

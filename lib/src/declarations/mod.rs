@@ -12,7 +12,7 @@ use super::descriptions::Suspect;
 /// Creates and verifies [tolls](Toll)
 pub trait Declaration {
     fn declare(&self, suspect: Suspect, order_id: OrderIdentifier) -> Toll;
-    fn pay(&mut self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError>;
+    fn pay(&self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError>;
 }
 
 pub type Challenge = indexmap::IndexMap<String, String>;

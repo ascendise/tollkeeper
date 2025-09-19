@@ -76,7 +76,7 @@ pub fn declare_should_return_new_toll_for_suspect() {
 #[test]
 pub fn pay_with_valid_payment_should_return_visa() {
     // Arrange
-    let mut sut = setup();
+    let sut = setup();
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
@@ -99,7 +99,7 @@ pub fn pay_with_valid_payment_should_return_visa() {
 #[test]
 pub fn pay_with_invalid_stamp_should_return_error() {
     // Arrange
-    let mut sut = setup();
+    let sut = setup();
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
@@ -126,7 +126,7 @@ pub fn pay_with_expired_stamp_should_return_error() {
         .with_ymd_and_hms(2025, 5, 8, 20, 24, 6)
         .unwrap()
         .to_utc();
-    let mut sut = setup_with_date(today);
+    let sut = setup_with_date(today);
     // Act
     let suspect = Suspect::new(
         "1.2.3.4",
@@ -150,7 +150,7 @@ pub fn pay_with_stamp_from_the_future_should_return_error() {
         .with_ymd_and_hms(2025, 5, 4, 20, 24, 6)
         .unwrap()
         .to_utc();
-    let mut sut = setup_with_date(today);
+    let sut = setup_with_date(today);
     // Act
     let suspect = Suspect::new(
         "1.2.3.4",
@@ -173,7 +173,7 @@ pub fn pay_with_duplicate_stamp_should_return_error() {
     let stamp = String::from("1:4:250506202406:example.com(8888)/hello:suspect.ip=1.2.3.4:kuwuD8w8/fkWCM+K:0000000000000000006");
     let mut stamps = HashSet::<String>::new();
     stamps.insert(stamp.clone());
-    let mut sut = setup_with_init_db(stamps);
+    let sut = setup_with_init_db(stamps);
     // Act
     let suspect = Suspect::new(
         "1.2.3.4",

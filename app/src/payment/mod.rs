@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::{collections::VecDeque, error::Error, fmt::Display, str::FromStr, sync::Mutex};
+use std::{collections::VecDeque, error::Error, fmt::Display, str::FromStr};
 
 use base64::{prelude::BASE64_STANDARD, Engine};
 use tollkeeper::signatures::Signed;
@@ -113,14 +113,12 @@ pub trait PaymentService {
     ) -> Result<Visa, Box<PaymentError>>;
 }
 pub struct PaymentServiceImpl {
-    tollkeeper: Mutex<tollkeeper::Tollkeeper>,
+    tollkeeper: tollkeeper::Tollkeeper,
 }
 
 impl PaymentServiceImpl {
     pub fn new(tollkeeper: tollkeeper::Tollkeeper) -> Self {
-        Self {
-            tollkeeper: Mutex::new(tollkeeper),
-        }
+        Self { tollkeeper }
     }
 }
 impl PaymentService for PaymentServiceImpl {
@@ -131,11 +129,7 @@ impl PaymentService for PaymentServiceImpl {
     ) -> Result<Visa, Box<PaymentError>> {
         let suspect = recipient.into();
         let payment = payment.try_into().unwrap();
-        let visa = self
-            .tollkeeper
-            .lock()
-            .unwrap()
-            .pay_toll(&suspect, payment)??;
+        let visa = self.tollkeeper.pay_toll(&suspect, payment)??;
         Ok(visa.into())
     }
 }

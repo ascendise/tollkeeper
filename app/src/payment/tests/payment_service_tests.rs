@@ -172,7 +172,7 @@ impl tollkeeper::Declaration for FakeTollDeclaration {
     }
 
     fn pay(
-        &mut self,
+        &self,
         payment: tollkeeper::declarations::Payment,
         suspect: &tollkeeper::descriptions::Suspect,
     ) -> Result<tollkeeper::declarations::Visa, tollkeeper::declarations::PaymentError> {
