@@ -1,5 +1,7 @@
 use std::net;
 
+use tollkeeper::signatures::Base64;
+
 use crate::config;
 use crate::http::request::Method;
 use crate::http::response::{self, StatusCode};
@@ -40,7 +42,7 @@ fn setup_with_failing_stub() -> ProxyServe {
                 order_id: "13".into(),
             },
             challenge: Challenge::new(Vec::new()),
-            signature: "do-not-modify".into(),
+            signature: Base64::encode(b"do-not-modify"),
         };
         Err(PaymentRequiredError(Box::new(toll)))
     }
@@ -105,7 +107,7 @@ pub fn serve_should_return_payment_required_if_access_is_denied() {
             },
             "order_id": "12#13",
             "challenge": {},
-            "signature": "do-not-modify",
+            "signature": Base64::encode(b"do-not-modify"),
         },
         "_links": {
             "pay": "http://guard.tollkeeper.ch/api/pay/"

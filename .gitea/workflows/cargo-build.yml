@@ -7,7 +7,7 @@ jobs:
   cargo-test:
     runs-on: ubuntu-latest
     container: 
-      image: docker.ascendise.ch/ascendise/cargo-runner:1.0.2
+      image: docker.ascendise.ch/ascendise/cargo-runner:1.0.3-rust1.92
       credentials:
         username: ${{ secrets.DOCKER_USER }}
         password: ${{ secrets.DOCKER_PASS }}
@@ -31,7 +31,7 @@ jobs:
   cargo-clippy:
     runs-on: ubuntu-latest
     container: 
-      image: docker.ascendise.ch/ascendise/cargo-runner:1.0.2
+      image: docker.ascendise.ch/ascendise/cargo-runner:1.0.3-rust1.92
       credentials:
         username: ${{ secrets.DOCKER_USER }}
         password: ${{ secrets.DOCKER_PASS }}
@@ -55,7 +55,7 @@ jobs:
   cargo-fmt:
     runs-on: ubuntu-latest
     container: 
-      image: docker.ascendise.ch/ascendise/cargo-runner:1.0.2
+      image: docker.ascendise.ch/ascendise/cargo-runner:1.0.3-rust1.92
       credentials:
         username: ${{ secrets.DOCKER_USER }}
         password: ${{ secrets.DOCKER_PASS }}

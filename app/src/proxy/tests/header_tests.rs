@@ -1,3 +1,5 @@
+use tollkeeper::signatures::Base64;
+
 use crate::{
     data_formats::{AsHttpHeader, FromHttpHeader},
     payment::Visa,
@@ -17,7 +19,7 @@ pub fn serializing_visa_should_return_x_keeper_token() {
             user_agent: "Netscape".into(),
             destination: "http://example.com/".into(),
         },
-        vec![1, 2, 3, 4, 5],
+        Base64::encode(&[1, 2, 3, 4, 5]),
     );
     // Act
     let (key, value) = visa.as_http_header();
@@ -43,7 +45,7 @@ pub fn deserializing_x_keeper_token_should_return_visa() {
             user_agent: "Netscape".into(),
             destination: "http://example.com/".into(),
         },
-        vec![1, 2, 3, 4, 5],
+        Base64::encode(&[1, 2, 3, 4, 5]),
     );
     assert_eq!(Ok(expected), visa);
 }

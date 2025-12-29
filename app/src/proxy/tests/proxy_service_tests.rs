@@ -1,10 +1,9 @@
 use std::{io::Write, net, thread};
 
-use base64::prelude::*;
 use tollkeeper::{
     declarations::{self},
     descriptions::{self},
-    signatures::InMemorySecretKeyProvider,
+    signatures::{Base64, InMemorySecretKeyProvider},
 };
 
 use crate::{
@@ -160,8 +159,8 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
         ),
     );
     let signature = tollkeeper::signatures::Signed::sign(signature, b"Secret key");
-    let visa = BASE64_STANDARD.encode(visa);
-    let signature = BASE64_STANDARD.encode(signature.signature().raw());
+    let visa = Base64::encode(visa.as_bytes());
+    let signature = signature.signature().base64();
     let token = format!("{}.{}", visa, signature);
     headers.insert("X-Keeper-Token", token);
     headers.insert("User-Agent", "Yo Mama");

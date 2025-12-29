@@ -1,4 +1,5 @@
 use serde_json::json;
+use tollkeeper::signatures::Base64;
 
 use crate::{
     data_formats::AsHalJson,
@@ -24,7 +25,7 @@ pub fn serializing_toll_should_return_expected_json() {
             order_id: "order".into(),
         },
         challenge,
-        signature: "do-not-edit".into(),
+        signature: Base64::encode(b"do-not-edit"),
     };
     // Act
     let base_url = url::Url::parse("http://tollkeeper.com").unwrap();
@@ -41,7 +42,7 @@ pub fn serializing_toll_should_return_expected_json() {
             "challenge": {
                 "question": "Why does the chicken cross the road?"
             },
-            "signature": "do-not-edit",
+            "signature": Base64::encode(b"do-not-edit"),
         },
         "_links": {
             "pay": "http://tollkeeper.com/api/pay/"

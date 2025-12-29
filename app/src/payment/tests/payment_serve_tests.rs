@@ -5,7 +5,7 @@ use std::{
 };
 
 use serde_json::json;
-use tollkeeper::signatures::AsBytes;
+use tollkeeper::signatures::Base64;
 
 use crate::{
     config,
@@ -52,7 +52,7 @@ fn setup_payment_request(recipient: proxy::Recipient, order_id: proxy::OrderId) 
             "recipient": recipient,
             "order_id": order_id,
             "challenge": {},
-            "signature": "very real; much secure;"
+            "signature": Base64::encode(b"very real; much secure;")
         },
         "value": "hello"
     });
@@ -83,7 +83,7 @@ pub fn pay_toll_serve_should_return_visa_as_json() {
         let expected_visa = payment::Visa::new(
             order_id.clone(),
             recipient.clone(),
-            b"real signature ;D".as_bytes(),
+            Base64::encode(b"real signature ;D"),
         );
         Ok(expected_visa)
     };
@@ -118,7 +118,12 @@ pub fn pay_toll_serve_should_return_400_and_new_toll_for_failed_challenge() {
     let create_challenge_failed = move || {
         let recipient = proxy::Recipient::new("1.2.3.4", "Bob", "example.com:80/");
         let order_id = proxy::OrderId::new("gate", "order");
-        let toll = proxy::Toll::new(recipient, order_id, Challenge::empty(), b"signature".into());
+        let toll = proxy::Toll::new(
+            recipient,
+            order_id,
+            Challenge::empty(),
+            Base64::encode(b"signature"),
+        );
         let challenge_failed = PaymentError::ChallengeFailed(toll, "hello".into());
         Err(Box::new(challenge_failed))
     };
@@ -163,7 +168,7 @@ pub fn pay_toll_serve_should_return_400_with_error_information_for_mismatched_re
             actual_recipient,
             order_id,
             Challenge::empty(),
-            b"signature".into(),
+            Base64::encode(b"signature"),
         );
         let mismatched_recipient = PaymentError::MismatchedRecipient(expected_recipient, toll);
         Err(Box::new(mismatched_recipient))

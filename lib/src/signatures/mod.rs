@@ -1,8 +1,10 @@
 use std::{error::Error, fmt::Display};
 
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{prelude::BASE64_STANDARD, DecodeError, Engine};
 use hmac::Mac;
 
+#[cfg(feature = "serde")]
+mod serde;
 #[cfg(test)]
 mod tests;
 
@@ -107,8 +109,39 @@ impl Signature {
         &self.0
     }
 
-    pub fn base64(&self) -> String {
-        BASE64_STANDARD.encode(&self.0)
+    pub fn base64(&self) -> Base64 {
+        Base64::encode(&self.0)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Base64 {
+    data: String,
+}
+impl Base64 {
+    pub fn from(base64: impl Into<String>) -> Result<Self, DecodeError> {
+        let base64 = base64.into();
+        let _ = BASE64_STANDARD.decode(&base64)?;
+        Ok(Self { data: base64 })
+    }
+
+    pub fn encode(data: &[u8]) -> Self {
+        let base64 = BASE64_STANDARD.encode(data);
+        Self { data: base64 }
+    }
+
+    /// Returns the base64-encoded data
+    pub fn data(&self) -> &str {
+        &self.data
+    }
+
+    pub fn decode(&self) -> Vec<u8> {
+        BASE64_STANDARD.decode(&self.data).unwrap()
+    }
+}
+impl Display for Base64 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", &self.data)
     }
 }
 

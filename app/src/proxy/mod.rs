@@ -5,10 +5,8 @@ use std::io::Write;
 use std::net;
 use std::str::FromStr;
 
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
 use serde::ser::SerializeMap;
-use tollkeeper::signatures::Signed;
+use tollkeeper::signatures::{Base64, Signed};
 use tollkeeper::Tollkeeper;
 
 use crate::data_formats::{self, AsHalJson, FromHttpHeader};
@@ -155,7 +153,7 @@ pub struct Toll {
     recipient: Recipient,
     order_id: OrderId,
     challenge: Challenge,
-    signature: String,
+    signature: Base64,
 }
 
 impl Toll {
@@ -163,13 +161,13 @@ impl Toll {
         recipient: Recipient,
         order_id: OrderId,
         challenge: Challenge,
-        signature: Vec<u8>,
+        signature: Base64,
     ) -> Self {
         Self {
             recipient,
             order_id,
             challenge,
-            signature: BASE64_STANDARD.encode(signature),
+            signature,
         }
     }
 
@@ -189,7 +187,7 @@ impl Toll {
     }
 
     /// Base64 encoded signature
-    pub fn signature(&self) -> &str {
+    pub fn signature(&self) -> &Base64 {
         &self.signature
     }
 }
@@ -218,7 +216,7 @@ impl TryFrom<Toll> for Signed<tollkeeper::declarations::Toll> {
             value.order_id.into(),
             value.challenge.into(),
         );
-        let toll = Signed::new(toll, BASE64_STANDARD.decode(value.signature)?);
+        let toll = Signed::new(toll, value.signature.decode());
         Ok(toll)
     }
 }

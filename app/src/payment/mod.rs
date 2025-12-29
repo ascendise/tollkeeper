@@ -4,7 +4,7 @@ mod tests;
 use std::{collections::VecDeque, error::Error, fmt::Display, str::FromStr};
 
 use base64::{prelude::BASE64_STANDARD, Engine};
-use tollkeeper::signatures::Signed;
+use tollkeeper::signatures::{Base64, Signed};
 
 use crate::{
     config::{self, ServerConfig},
@@ -158,14 +158,14 @@ impl TryFrom<Payment> for tollkeeper::SignedPayment {
 pub struct Visa {
     order_id: proxy::OrderId,
     recipient: proxy::Recipient,
-    signature: String,
+    signature: Base64,
 }
 impl Visa {
-    pub fn new(order_id: proxy::OrderId, recipient: proxy::Recipient, signature: Vec<u8>) -> Self {
+    pub fn new(order_id: proxy::OrderId, recipient: proxy::Recipient, signature: Base64) -> Self {
         Self {
             order_id,
             recipient,
-            signature: BASE64_STANDARD.encode(signature),
+            signature,
         }
     }
 
@@ -180,7 +180,7 @@ impl Visa {
     }
 
     /// Base64 encoded signature
-    pub fn signature(&self) -> &str {
+    pub fn signature(&self) -> &Base64 {
         &self.signature
     }
 }
@@ -193,7 +193,7 @@ impl data_formats::AsHttpHeader for Visa {
             "order_id": self.order_id
         })
         .to_string();
-        let visa_base64 = BASE64_STANDARD.encode(visa_json);
+        let visa_base64 = Base64::encode(visa_json.as_bytes());
         let header = format!("{visa_base64}.{}", self.signature);
         ("X-Keeper-Token".into(), header)
     }
@@ -211,7 +211,7 @@ impl data_formats::FromHttpHeader for Visa {
         let user_agent = visa_json["ua"].as_str().ok_or(())?;
         let destination = visa_json["dest"].as_str().ok_or(())?;
         let recipient = proxy::Recipient::new(client_ip, user_agent, destination);
-        let signature = BASE64_STANDARD.decode(signature).or(Err(()))?;
+        let signature = Base64::from(signature).or(Err(()))?;
         let visa = Visa::new(order_id, recipient, signature);
         Ok(visa)
     }
@@ -233,7 +233,7 @@ impl From<Visa> for Signed<tollkeeper::declarations::Visa> {
     fn from(value: Visa) -> Self {
         let visa =
             tollkeeper::declarations::Visa::new(value.order_id.into(), value.recipient.into());
-        Signed::new(visa, BASE64_STANDARD.decode(value.signature).unwrap())
+        Signed::new(visa, value.signature.decode())
     }
 }
 impl From<Signed<tollkeeper::declarations::Visa>> for Visa {
@@ -242,7 +242,7 @@ impl From<Signed<tollkeeper::declarations::Visa>> for Visa {
         Visa::new(
             visa.order_id().into(),
             visa.suspect().into(),
-            signature.raw().into(),
+            signature.base64(),
         )
     }
 }
