@@ -114,6 +114,7 @@ impl Display for MissingOrderError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PaymentDeniedError {
+    GatewayError(GatewayError),
     InvalidPayment(InvalidPaymentError),
     MismatchedSuspect(MismatchedSuspectError),
     InvalidSignature,
@@ -123,6 +124,7 @@ impl Error for PaymentDeniedError {}
 impl Display for PaymentDeniedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::GatewayError(e) => e.fmt(f),
             Self::InvalidPayment(e) => e.fmt(f),
             Self::MismatchedSuspect(e) => e.fmt(f),
             Self::InvalidSignature => write!(
@@ -147,6 +149,12 @@ impl From<signatures::InvalidSignatureError> for PaymentDeniedError {
         PaymentDeniedError::InvalidSignature
     }
 }
+impl From<GatewayError> for PaymentDeniedError {
+    fn from(value: GatewayError) -> Self {
+        PaymentDeniedError::GatewayError(value)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidPaymentError {
     payment: Box<Payment>,

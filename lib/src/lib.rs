@@ -78,17 +78,15 @@ impl Tollkeeper {
     /// new [Visa], if the new [Order] is higher ordered than the [Order] the [Visa] was bought for
     ///
     /// Returns new [Toll] if [Payment] is invalid
-    /// Returns a [GatewayError] if there was a problem processing the [Payment]
+    /// Returns a [PaymentDeniedError] if there was a problem processing the [Payment]
+    /// Returns a [PaymentDeniedError::GatewayError] if gate/order is unknown/removed
     pub fn pay_toll(
         &self,
         suspect: &Suspect,
         payment: SignedPayment,
-    ) -> Result<Result<Signed<Visa>, PaymentDeniedError>, GatewayError> {
+    ) -> Result<Signed<Visa>, PaymentDeniedError> {
         let secret_key = self.secret_key_provider.read_secret_key();
-        let payment = match payment.verify(secret_key) {
-            Ok(p) => p,
-            Err(e) => return Ok(Err(e.into())),
-        };
+        let payment = payment.verify(secret_key)?;
         let toll = payment.toll();
         let order_id = toll.order_id();
         let gate = Self::find_gate_by_id(&self.gates, order_id)?;
@@ -101,13 +99,12 @@ impl Tollkeeper {
             let error =
                 MismatchedSuspectError::new(Box::new(toll.recipient().clone()), Box::new(new_toll));
             let error = PaymentDeniedError::MismatchedSuspect(error);
-            Ok(Err(error))
+            Err(error)
         } else {
-            let payment_result = match order.toll_declaration.pay(payment.clone(), suspect) {
+            match order.toll_declaration.pay(payment.clone(), suspect) {
                 Ok(visa) => Ok(Signed::sign(visa, secret_key)),
                 Err(err) => Err(PaymentDeniedError::InvalidPayment(err.into(secret_key))),
-            };
-            Ok(payment_result)
+            }
         }
     }
 

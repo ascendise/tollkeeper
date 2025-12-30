@@ -129,7 +129,7 @@ impl PaymentService for PaymentServiceImpl {
     ) -> Result<Visa, Box<PaymentError>> {
         let suspect = recipient.into();
         let payment = payment.try_into().unwrap();
-        let visa = self.tollkeeper.pay_toll(&suspect, payment)??;
+        let visa = self.tollkeeper.pay_toll(&suspect, payment)?;
         Ok(visa.into())
     }
 }
@@ -334,15 +334,7 @@ impl From<tollkeeper::err::PaymentDeniedError> for Box<PaymentError> {
                 PaymentError::MismatchedRecipient(e.expected().into(), e.new_toll().into())
             }
             tollkeeper::err::PaymentDeniedError::InvalidSignature => PaymentError::InvalidSignature,
-        };
-        Box::new(error)
-    }
-}
-impl From<tollkeeper::err::GatewayError> for Box<PaymentError> {
-    fn from(value: tollkeeper::err::GatewayError) -> Self {
-        let error = match value {
-            tollkeeper::err::GatewayError::MissingGate(_) => PaymentError::GatewayError,
-            tollkeeper::err::GatewayError::MissingOrder(_) => PaymentError::GatewayError,
+            tollkeeper::err::PaymentDeniedError::GatewayError(_) => PaymentError::GatewayError,
         };
         Box::new(error)
     }

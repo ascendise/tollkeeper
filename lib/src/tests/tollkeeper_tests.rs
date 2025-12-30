@@ -289,11 +289,8 @@ pub fn paying_toll_for_valid_order_with_valid_payment_should_return_visa() {
     let result = sut.pay_toll(&suspect, payment);
     // Assert
     let visa = match result {
-        Ok(r) => match r {
-            Ok(v) => v,
-            Err(e) => panic!("{e}"),
-        },
-        Err(e) => panic!("{e}"),
+        Ok(v) => v,
+        Err(e) => panic!("Expected Visa got error: {e}"),
     };
     assert!(
         visa.verify(b"Secret key").is_ok(),
@@ -312,11 +309,8 @@ pub fn paying_toll_for_valid_order_with_invalid_payment_should_return_error() {
     let payment = SignedPayment::new(toll, "legal tender");
     let result = sut.pay_toll(&suspect, payment);
     // Assert
-    assert!(result.is_ok(), "Unexpected gateway error");
-    let result = result.ok().unwrap();
-    assert!(result.is_err(), "Expected error, got visa");
-    let err = result.err().unwrap();
-    match err {
+    assert!(result.is_err(), "Expected error, got visa!");
+    match result.unwrap_err() {
         PaymentDeniedError::InvalidPayment(e) => {
             let toll = e.new_toll();
             assert!(
@@ -329,6 +323,9 @@ pub fn paying_toll_for_valid_order_with_invalid_payment_should_return_error() {
         }
         PaymentDeniedError::InvalidSignature => {
             panic!("Expected invalid payment error, got error for invalid signature")
+        }
+        PaymentDeniedError::GatewayError(_) => {
+            panic!("Expected invalid payment error, got gateway error")
         }
     }
 }
@@ -344,7 +341,9 @@ pub fn paying_toll_for_different_suspect_should_return_new_toll_for_current_susp
     let bobs_toll = Signed::sign(bobs_toll, b"Secret key");
     let payment = SignedPayment::new(bobs_toll, "legal tender");
     let result = sut.pay_toll(&suspect_alice, payment); // Alice pays with bobs toll!
-    let err = match result.unwrap() {
+
+    // Assert
+    let err = match result {
         Result::Ok(_) => panic!("Returned visa despite different suspect paying!"),
         Result::Err(e) => e,
     };
@@ -353,7 +352,6 @@ pub fn paying_toll_for_different_suspect_should_return_new_toll_for_current_susp
         _ => panic!("Unexpected failure: {err}"),
     };
     let toll = err.new_toll().verify(b"Secret key").unwrap();
-    // Assert
     assert_eq!(toll.recipient(), &suspect_alice);
     assert_eq!(err.actual(), &suspect_alice);
     assert_eq!(err.expected(), &suspect_bob);
@@ -374,8 +372,8 @@ pub fn paying_toll_for_unknown_gate_should_return_error() {
     let payment = SignedPayment::new(toll, "legal tender");
     let result = sut.pay_toll(&suspect, payment);
     // Assert
-    let expected: Result<Result<Signed<Visa>, PaymentDeniedError>, GatewayError> =
-        Result::Err(MissingGateError::new("gate?").into());
+    let expected: Result<Signed<Visa>, PaymentDeniedError> =
+        Err(GatewayError::MissingGate(MissingGateError::new("gate?")).into());
     assert_eq!(expected, result);
 }
 
@@ -394,8 +392,10 @@ pub fn paying_toll_for_unknown_order_should_return_error() {
     let payment = SignedPayment::new(toll, "legal tender");
     let result = sut.pay_toll(&suspect, payment);
     // Assert
-    let expected: Result<Result<Signed<Visa>, PaymentDeniedError>, GatewayError> =
-        Result::Err(MissingOrderError::new(order_id.gate_id(), "order?").into());
+    let expected: Result<Signed<Visa>, PaymentDeniedError> = Err(GatewayError::MissingOrder(
+        MissingOrderError::new(order_id.gate_id(), "order?"),
+    )
+    .into());
     assert_eq!(expected, result);
 }
 
@@ -422,7 +422,7 @@ pub fn paying_toll_with_forged_toll_should_return_error_without_new_toll() {
     let payment = SignedPayment::new(forged_toll, "legal tender");
     let result = sut.pay_toll(&forged_suspect, payment);
     // Assert
-    let expected: Result<Result<Signed<Visa>, PaymentDeniedError>, GatewayError> =
-        Ok(Err(PaymentDeniedError::InvalidSignature));
+    let expected: Result<Signed<Visa>, PaymentDeniedError> =
+        Err(PaymentDeniedError::InvalidSignature);
     assert_eq!(expected, result);
 }
