@@ -9,6 +9,7 @@ mod data_formats;
 mod http;
 mod payment;
 mod proxy;
+mod templates;
 
 fn main() -> Result<(), io::Error> {
     let base_url = url::Url::parse("http://localhost:9100/").unwrap();
