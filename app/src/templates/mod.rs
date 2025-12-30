@@ -4,7 +4,16 @@ use handlebars::{template, Handlebars};
 mod tests;
 
 pub trait TemplateRenderer {
-    fn render(&self, template_name: &str, data: impl serde::Serialize) -> String;
+    fn render(
+        &self,
+        template_name: &str,
+        data: impl serde::Serialize,
+    ) -> Result<String, TemplateError>;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum TemplateError {
+    MissingTemplate,
 }
 
 struct HandlebarTemplateRenderer {
@@ -16,10 +25,18 @@ impl HandlebarTemplateRenderer {
     }
 }
 impl TemplateRenderer for HandlebarTemplateRenderer {
-    fn render(&self, template_name: &str, data: impl serde::Serialize) -> String {
+    fn render(
+        &self,
+        template_name: &str,
+        data: impl serde::Serialize,
+    ) -> Result<String, TemplateError> {
         let handlebars = Handlebars::new();
-        let template = self.template_store.read(template_name).unwrap(); //TODO: Handle missing template
-        handlebars.render_template(&template, &data).unwrap() //TODO: Handle rendering failures
+        let template = self
+            .template_store
+            .read(template_name)
+            .ok_or(TemplateError::MissingTemplate)?;
+        let content = handlebars.render_template(&template, &data).unwrap(); //TODO: Handle rendering failures
+        Ok(content)
     }
 }
 
