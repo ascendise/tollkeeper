@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tollkeeper::{
     signatures::{InMemorySecretKeyProvider, Signed},
     Declaration,
@@ -27,7 +29,7 @@ fn setup(password: String, recipient: Recipient) -> (Toll, PaymentServiceImpl) {
         tollkeeper::declarations::OrderIdentifier::new("gate", "order"),
     );
     let toll = Signed::sign(toll, b"Secret key");
-    (toll.into(), PaymentServiceImpl::new(tollkeeper))
+    (toll.into(), PaymentServiceImpl::new(Arc::new(tollkeeper)))
 }
 
 fn setup_unsigned_toll(
@@ -52,7 +54,7 @@ fn setup_unsigned_toll(
         recipient.into(),
         tollkeeper::declarations::OrderIdentifier::new(gate_id, order_id),
     );
-    (toll, PaymentServiceImpl::new(tollkeeper))
+    (toll, PaymentServiceImpl::new(Arc::new(tollkeeper)))
 }
 
 #[test]

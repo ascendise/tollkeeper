@@ -1,6 +1,7 @@
 use http::server::*;
 use proxy::{ProxyServe, ProxyServiceImpl};
-use std::{io, net, thread};
+use std::{io, net, sync::Arc, thread};
+use tollkeeper::Tollkeeper;
 
 mod config;
 mod data_formats;
@@ -14,10 +15,13 @@ fn main() -> Result<(), io::Error> {
     thread::scope(|s| {
         let proxy_config = config::ServerConfig::new(base_url);
         let api_config = proxy_config.clone();
+        let tollkeeper = Arc::new(create_tollkeeper(true));
+        let proxy_tollkeeper = tollkeeper.clone();
+        let api_tollkeeper = tollkeeper.clone();
         s.spawn(move || {
             println!("Starting Proxy Socket");
             let (mut proxy_server, proxy_server_cancellation) =
-                create_proxy_server(proxy_config).unwrap();
+                create_proxy_server(proxy_config, proxy_tollkeeper).unwrap();
             proxy_server
                 .start_listening(proxy_server_cancellation)
                 .unwrap();
@@ -25,25 +29,13 @@ fn main() -> Result<(), io::Error> {
         s.spawn(move || {
             println!("Starting Api Socket");
             let (mut proxy_server, proxy_server_cancellation) =
-                create_api_server(api_config).unwrap();
+                create_api_server(api_config, api_tollkeeper).unwrap();
             proxy_server
                 .start_listening(proxy_server_cancellation)
                 .unwrap();
         });
     });
     Ok(())
-}
-
-fn create_proxy_server(
-    server_config: config::ServerConfig,
-) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
-    let listener = net::TcpListener::bind("127.0.0.1:9000")?;
-    let tollkeeper = create_tollkeeper(true);
-    let proxy_service = ProxyServiceImpl::new(tollkeeper);
-    let proxy_handler = ProxyServe::new(server_config, Box::new(proxy_service));
-    let server = Server::new(listener, Box::new(proxy_handler));
-    let (_, receiver) = cancellation_token::create_cancellation_token();
-    Ok((server, receiver))
 }
 
 fn create_tollkeeper(requires_challenge: bool) -> tollkeeper::Tollkeeper {
@@ -76,11 +68,23 @@ fn create_tollkeeper(requires_challenge: bool) -> tollkeeper::Tollkeeper {
     tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap()
 }
 
+fn create_proxy_server(
+    server_config: config::ServerConfig,
+    tollkeeper: Arc<Tollkeeper>,
+) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
+    let listener = net::TcpListener::bind("127.0.0.1:9000")?;
+    let proxy_service = ProxyServiceImpl::new(tollkeeper);
+    let proxy_handler = ProxyServe::new(server_config, Box::new(proxy_service));
+    let server = Server::new(listener, Box::new(proxy_handler));
+    let (_, receiver) = cancellation_token::create_cancellation_token();
+    Ok((server, receiver))
+}
+
 fn create_api_server(
     server_config: config::ServerConfig,
+    tollkeeper: Arc<Tollkeeper>,
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
     let listener = net::TcpListener::bind("127.0.0.1:9100")?;
-    let tollkeeper = create_tollkeeper(true);
     let payment_service = payment::PaymentServiceImpl::new(tollkeeper);
     let payment_endpoint =
         payment::create_pay_toll_endpoint("/api/pay", server_config, Box::new(payment_service));

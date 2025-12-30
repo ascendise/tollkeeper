@@ -4,6 +4,7 @@ use std::fmt::{self, Display};
 use std::io::Write;
 use std::net;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use serde::ser::SerializeMap;
 use tollkeeper::signatures::{Base64, Signed};
@@ -64,10 +65,10 @@ impl HttpServe for ProxyServe {
 }
 
 pub struct ProxyServiceImpl {
-    tollkeeper: Tollkeeper,
+    tollkeeper: Arc<Tollkeeper>,
 }
 impl ProxyServiceImpl {
-    pub fn new(tollkeeper: Tollkeeper) -> Self {
+    pub fn new(tollkeeper: Arc<Tollkeeper>) -> Self {
         Self { tollkeeper }
     }
     fn get_host(request: &Request) -> String {

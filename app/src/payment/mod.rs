@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::{collections::VecDeque, error::Error, fmt::Display, str::FromStr};
+use std::{collections::VecDeque, error::Error, fmt::Display, str::FromStr, sync::Arc};
 
 use base64::{prelude::BASE64_STANDARD, Engine};
 use tollkeeper::signatures::{Base64, Signed};
@@ -113,11 +113,11 @@ pub trait PaymentService {
     ) -> Result<Visa, Box<PaymentError>>;
 }
 pub struct PaymentServiceImpl {
-    tollkeeper: tollkeeper::Tollkeeper,
+    tollkeeper: Arc<tollkeeper::Tollkeeper>,
 }
 
 impl PaymentServiceImpl {
-    pub fn new(tollkeeper: tollkeeper::Tollkeeper) -> Self {
+    pub fn new(tollkeeper: Arc<tollkeeper::Tollkeeper>) -> Self {
         Self { tollkeeper }
     }
 }

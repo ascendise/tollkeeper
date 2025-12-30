@@ -1,4 +1,4 @@
-use std::{io::Write, net, thread};
+use std::{io::Write, net, sync::Arc, thread};
 
 use tollkeeper::{
     declarations::{self},
@@ -37,7 +37,7 @@ fn setup_and_get_id(
     let secret_key_provider = Box::new(secret_key_provider);
     let tollkeeper = tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap();
     let order_id = OrderId { gate_id, order_id };
-    (order_id, ProxyServiceImpl::new(tollkeeper))
+    (order_id, ProxyServiceImpl::new(Arc::new(tollkeeper)))
 }
 
 fn setup(requires_challenge: bool, proxy_addr: net::SocketAddr) -> ProxyServiceImpl {
