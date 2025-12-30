@@ -1,3 +1,5 @@
+use handlebars::{template, Handlebars};
+
 #[cfg(test)]
 mod tests;
 
@@ -15,7 +17,9 @@ impl HandlebarTemplateRenderer {
 }
 impl TemplateRenderer for HandlebarTemplateRenderer {
     fn render(&self, template_name: &str, data: impl serde::Serialize) -> String {
-        todo!()
+        let handlebars = Handlebars::new();
+        let template = self.template_store.read(template_name).unwrap(); //TODO: Handle missing template
+        handlebars.render_template(&template, &data).unwrap() //TODO: Handle rendering failures
     }
 }
 
