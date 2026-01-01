@@ -78,7 +78,8 @@ fn create_proxy_server(
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
     let listener = net::TcpListener::bind("127.0.0.1:9000")?;
     let proxy_service = ProxyServiceImpl::new(tollkeeper);
-    let exe_root_dir = std::env::current_dir().unwrap();
+    let exe_root_dir = std::env::current_dir().unwrap().join("app/templates");
+    println!("Using templates located at: '{}'", exe_root_dir.display());
     let template_store = FileTemplateStore::new(exe_root_dir);
     let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
     let proxy_handler = ProxyServe::new(
