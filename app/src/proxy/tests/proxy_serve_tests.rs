@@ -6,7 +6,7 @@ use tollkeeper::signatures::Base64;
 use crate::config;
 use crate::http::request::Method;
 use crate::http::response::{self, StatusCode};
-use crate::http::server::HttpServe;
+use crate::http::server::{HttpServe, InternalServerError};
 use crate::http::{self, request, Headers, Request, StreamBody};
 use crate::proxy::{Challenge, OrderId, ProxyServe};
 use crate::proxy::{PaymentRequiredError, Recipient, Toll};
@@ -166,4 +166,29 @@ pub fn serve_should_return_challenge_html_page_if_request_accepts_html() {
         .read_to_string(&mut actual_body)
         .unwrap();
     assert_eq!(expected_body, actual_body);
+}
+
+#[test]
+pub fn serve_should_return_internal_server_error_on_render_failure() {
+    // Arrange
+    let mut stub_templates = HashMap::new();
+    stub_templates.insert(
+        "templates/challenge.html".into(),
+        "<div>{{unclosed-placeholder</div>".into(), //invalid template
+    );
+    let sut = setup_with_failing_stub(Some(stub_templates));
+    // Act
+    let mut headers = Headers::empty();
+    headers.insert("Host", "127.0.0.1:65000");
+    headers.insert("Content-Length", "16");
+    headers.insert("Accept", "text/html");
+    let headers = request::Headers::new(headers).unwrap();
+    let body = StreamBody::new("Hello, Server!\r\n".as_bytes());
+    let request = Request::with_body(Method::Get, "/", headers, Box::new(body)).unwrap();
+    let response = sut.serve_http(&client_addr(), request);
+    // Assert
+    assert!(
+        response.is_err(),
+        "invalid template did not return Internal Server Error"
+    );
 }

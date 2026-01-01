@@ -54,13 +54,13 @@ impl ProxyServe {
         Response::payment_required(headers, Some(body))
     }
 
-    fn toll_to_html_response(&self, toll: &Toll) -> Response {
+    fn toll_to_html_response(&self, toll: &Toll) -> Result<Response, InternalServerError> {
         let base_url = self.config.base_url();
         let toll = toll.as_hal_json(base_url);
         let page_html = self
             .template_renderer
             .render("templates/challenge.html", &SerializedData::new(toll))
-            .unwrap();
+            .or(Err(InternalServerError::new()))?;
         let mut headers = http::Headers::empty();
         headers.insert("Content-Type", "text/html");
         headers.insert("Content-Length", page_html.len().to_string());
@@ -68,7 +68,7 @@ impl ProxyServe {
         let page_html_stream: VecDeque<u8> = page_html.into_bytes().into();
         let body = http::StreamBody::new(page_html_stream);
         let body = Box::new(body) as Box<dyn Body>;
-        Response::payment_required(headers, Some(body))
+        Ok(Response::payment_required(headers, Some(body)))
     }
 }
 impl HttpServe for ProxyServe {
@@ -83,7 +83,7 @@ impl HttpServe for ProxyServe {
             Ok(res) => res,
             Err(err) => {
                 if accept_header.contains("html") {
-                    self.toll_to_html_response(&err.0)
+                    self.toll_to_html_response(&err.0)?
                 } else {
                     self.toll_to_json_response(&err.0)
                 }
