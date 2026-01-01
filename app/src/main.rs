@@ -4,7 +4,7 @@ use proxy::{ProxyServe, ProxyServiceImpl};
 use std::{collections::HashMap, io, net, sync::Arc, thread};
 use tollkeeper::Tollkeeper;
 
-use crate::templates::{HandlebarTemplateRenderer, InMemoryTemplateStore};
+use crate::templates::{FileTemplateStore, HandlebarTemplateRenderer, InMemoryTemplateStore};
 
 mod config;
 mod data_formats;
@@ -78,7 +78,8 @@ fn create_proxy_server(
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
     let listener = net::TcpListener::bind("127.0.0.1:9000")?;
     let proxy_service = ProxyServiceImpl::new(tollkeeper);
-    let template_store = InMemoryTemplateStore::new(HashMap::new());
+    let exe_root_dir = std::env::current_dir().unwrap();
+    let template_store = FileTemplateStore::new(exe_root_dir);
     let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
     let proxy_handler = ProxyServe::new(
         server_config,

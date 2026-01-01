@@ -149,7 +149,7 @@ pub fn serve_should_return_payment_required_if_access_is_denied() {
 pub fn serve_should_return_challenge_html_page_if_request_accepts_html(accept_header: &str) {
     // Arrange
     let mut stub_templates = HashMap::new();
-    stub_templates.insert("templates/challenge.html".into(), "<div>Stub</div>".into());
+    stub_templates.insert("challenge.html".into(), "<div>Stub</div>".into());
     let sut = setup_with_failing_stub(Some(stub_templates));
     // Act
     let mut headers = Headers::empty();
@@ -181,7 +181,7 @@ pub fn serve_should_return_internal_server_error_on_render_failure() {
     // Arrange
     let mut stub_templates = HashMap::new();
     stub_templates.insert(
-        "templates/challenge.html".into(),
+        "challenge.html".into(),
         "<div>{{unclosed-placeholder</div>".into(), //invalid template
     );
     let sut = setup_with_failing_stub(Some(stub_templates));

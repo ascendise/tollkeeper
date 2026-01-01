@@ -59,7 +59,7 @@ impl ProxyServe {
         let toll = toll.as_hal_json(base_url);
         let page_html = self
             .template_renderer
-            .render("templates/challenge.html", &SerializedData::new(toll))
+            .render("challenge.html", &SerializedData::new(toll))
             .or(Err(InternalServerError::new()))?;
         let mut headers = http::Headers::empty();
         headers.insert("Content-Type", "text/html");

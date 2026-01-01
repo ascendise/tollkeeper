@@ -1,4 +1,11 @@
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{self, PathBuf},
+    sync::Mutex,
+};
+
+use handlebars::template;
 
 #[cfg(test)]
 mod tests;
@@ -121,5 +128,25 @@ impl TemplateStore for InMemoryTemplateStore {
             return None;
         }
         Some(templates[template_name].clone())
+    }
+}
+
+pub struct FileTemplateStore {
+    root_dir: PathBuf,
+}
+
+impl FileTemplateStore {
+    pub fn new(root_dir: PathBuf) -> Self {
+        Self { root_dir }
+    }
+}
+impl TemplateStore for FileTemplateStore {
+    fn read(&self, template_name: &str) -> Option<String> {
+        let path = self.root_dir.join(template_name);
+        let path = path.canonicalize().ok()?;
+        if !path.starts_with(&self.root_dir) {
+            return None; //Requested path is outside template directory!
+        }
+        fs::read_to_string(path).ok()
     }
 }
