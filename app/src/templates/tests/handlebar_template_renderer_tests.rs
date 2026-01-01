@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use serde_json::json;
 
 use crate::templates::{
-    tests::InMemoryTemplateStore, HandlebarTemplateRenderer, TemplateError, TemplateRenderer,
-    TemplateStore,
+    HandlebarTemplateRenderer, InMemoryTemplateStore, SerializedData, TemplateError,
+    TemplateRenderer, TemplateStore,
 };
 
-fn setup(template_store: Box<dyn TemplateStore>) -> HandlebarTemplateRenderer {
+fn setup(template_store: Box<dyn TemplateStore + Send + Sync>) -> HandlebarTemplateRenderer {
     HandlebarTemplateRenderer::new(template_store)
 }
 
@@ -18,7 +18,7 @@ pub fn render_should_return_filled_template() {
     templates.insert("html/my_template.html".into(), "Hello {{place}}".into());
     let template_store = InMemoryTemplateStore::new(templates);
     let sut = setup(Box::new(template_store));
-    let data = json!({"place": "World"});
+    let data = SerializedData::new(json!({"place": "World"}));
     // Act
     let result = sut.render("html/my_template.html", &data);
     // Assert
@@ -30,7 +30,7 @@ pub fn render_should_return_error_when_template_is_missing() {
     // Arrange
     let template_store = InMemoryTemplateStore::new(HashMap::new());
     let sut = setup(Box::new(template_store));
-    let data = json!({"place": "World"});
+    let data = SerializedData::new(json!({"place": "World"}));
     // Act
     let result = sut.render("html/no_template.html", &data);
     // Assert
@@ -44,7 +44,7 @@ pub fn render_should_return_error_when_template_is_faulty() {
     templates.insert("html/my_template.html".into(), "Hello {{place??".into());
     let template_store = InMemoryTemplateStore::new(templates);
     let sut = setup(Box::new(template_store));
-    let data = json!({"place": "World"});
+    let data = SerializedData::new(json!({"place": "World"}));
     // Act
     let result = sut.render("html/my_template.html", &data);
     // Assert

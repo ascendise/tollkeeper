@@ -1,12 +1,25 @@
+use std::{collections::HashMap, sync::Mutex};
+
 #[cfg(test)]
 mod tests;
 
 pub trait TemplateRenderer {
-    fn render(
-        &self,
-        template_name: &str,
-        data: impl serde::Serialize,
-    ) -> Result<String, TemplateError>;
+    fn render(&self, template_name: &str, data: &SerializedData) -> Result<String, TemplateError>;
+}
+
+pub struct SerializedData {
+    data: serde_json::Value,
+}
+impl SerializedData {
+    pub fn new(data: impl serde::Serialize) -> Self {
+        Self {
+            data: serde_json::json!(data),
+        }
+    }
+
+    pub fn data(&self) -> &serde_json::Value {
+        &self.data
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -58,26 +71,22 @@ pub trait TemplateStore {
     fn read(&self, template_name: &str) -> Option<String>;
 }
 
-struct HandlebarTemplateRenderer {
-    template_store: Box<dyn TemplateStore>,
+pub struct HandlebarTemplateRenderer {
+    template_store: Box<dyn TemplateStore + Send + Sync>,
 }
 impl HandlebarTemplateRenderer {
-    pub fn new(template_store: Box<dyn TemplateStore>) -> Self {
+    pub fn new(template_store: Box<dyn TemplateStore + Send + Sync>) -> Self {
         Self { template_store }
     }
 }
 impl TemplateRenderer for HandlebarTemplateRenderer {
-    fn render(
-        &self,
-        template_name: &str,
-        data: impl serde::Serialize,
-    ) -> Result<String, TemplateError> {
+    fn render(&self, template_name: &str, data: &SerializedData) -> Result<String, TemplateError> {
         let handlebars = handlebars::Handlebars::new();
         let template = self
             .template_store
             .read(template_name)
             .ok_or(TemplateError::MissingTemplate)?;
-        let content = handlebars.render_template(&template, &data)?;
+        let content = handlebars.render_template(&template, &data.data())?;
         Ok(content)
     }
 }
@@ -92,5 +101,25 @@ impl From<handlebars::RenderError> for TemplateError {
             Some(reason),
         );
         Self::RenderError(error)
+    }
+}
+
+pub struct InMemoryTemplateStore {
+    templates: Mutex<HashMap<String, String>>,
+}
+impl InMemoryTemplateStore {
+    pub fn new(templates: HashMap<String, String>) -> Self {
+        Self {
+            templates: Mutex::new(templates),
+        }
+    }
+}
+impl TemplateStore for InMemoryTemplateStore {
+    fn read(&self, template_name: &str) -> Option<String> {
+        let templates = self.templates.lock().unwrap();
+        if !templates.contains_key(template_name) {
+            return None;
+        }
+        Some(templates[template_name].clone())
     }
 }

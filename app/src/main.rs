@@ -1,7 +1,10 @@
+use handlebars::{template, Handlebars};
 use http::server::*;
 use proxy::{ProxyServe, ProxyServiceImpl};
-use std::{io, net, sync::Arc, thread};
+use std::{collections::HashMap, io, net, sync::Arc, thread};
 use tollkeeper::Tollkeeper;
+
+use crate::templates::{HandlebarTemplateRenderer, InMemoryTemplateStore};
 
 mod config;
 mod data_formats;
@@ -75,7 +78,13 @@ fn create_proxy_server(
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
     let listener = net::TcpListener::bind("127.0.0.1:9000")?;
     let proxy_service = ProxyServiceImpl::new(tollkeeper);
-    let proxy_handler = ProxyServe::new(server_config, Box::new(proxy_service));
+    let template_store = InMemoryTemplateStore::new(HashMap::new());
+    let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
+    let proxy_handler = ProxyServe::new(
+        server_config,
+        Box::new(proxy_service),
+        Box::new(template_renderer),
+    );
     let server = Server::new(listener, Box::new(proxy_handler));
     let (_, receiver) = cancellation_token::create_cancellation_token();
     Ok((server, receiver))
