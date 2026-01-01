@@ -1,0 +1,9 @@
+# Service for testing tollkeeper. Deploys a simple website protected by tollkeeper
+services:
+  proxy_test:
+    build: 
+      context: "../"
+      dockerfile: "./proxy_test/Dockerfile" 
+    ports: 
+      - 80:9000
+      - 8080:80 # Circumvents tollkeeper

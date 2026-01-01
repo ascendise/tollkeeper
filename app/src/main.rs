@@ -19,7 +19,7 @@ fn main() -> Result<(), io::Error> {
     thread::scope(|s| {
         let proxy_config = config::ServerConfig::new(base_url);
         let api_config = proxy_config.clone();
-        let tollkeeper = Arc::new(create_tollkeeper(true));
+        let tollkeeper = Arc::new(create_tollkeeper());
         let proxy_tollkeeper = tollkeeper.clone();
         let api_tollkeeper = tollkeeper.clone();
         s.spawn(move || {
@@ -42,8 +42,23 @@ fn main() -> Result<(), io::Error> {
     Ok(())
 }
 
-fn create_tollkeeper(requires_challenge: bool) -> tollkeeper::Tollkeeper {
-    let destination = tollkeeper::descriptions::Destination::new("wtfismyip.com", 80, "/json");
+fn create_tollkeeper() -> tollkeeper::Tollkeeper {
+    let json_api_destination =
+        tollkeeper::descriptions::Destination::new("wtfismyip.com", 80, "/json");
+    let json_api_gate = create_simple_gate("json_api_gate".into(), json_api_destination);
+    let web_page_destination = tollkeeper::descriptions::Destination::new("localhost", 80, "/");
+    let web_page_gate = create_simple_gate("web_page_gate".into(), web_page_destination);
+    let gates = vec![json_api_gate, web_page_gate];
+    let secret_key_provider =
+        tollkeeper::signatures::InMemorySecretKeyProvider::new(b"Secret key".into());
+    let secret_key_provider = Box::new(secret_key_provider);
+    tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap()
+}
+
+fn create_simple_gate(
+    gate_id: String,
+    destination: tollkeeper::descriptions::Destination,
+) -> tollkeeper::Gate {
     let date_provider = tollkeeper::util::DateTimeProviderImpl {};
     let double_spent_db = tollkeeper::declarations::hashcash::DoubleSpentDatabaseImpl::new();
     let hashcash_declaration = tollkeeper::declarations::hashcash::HashcashDeclaration::new(
@@ -52,9 +67,7 @@ fn create_tollkeeper(requires_challenge: bool) -> tollkeeper::Tollkeeper {
         Box::new(date_provider),
         Box::new(double_spent_db),
     );
-    let description = StubDescription {
-        is_match: requires_challenge,
-    };
+    let description = StubDescription { is_match: true };
     let order = tollkeeper::Order::with_id(
         "order",
         vec![Box::new(description)],
@@ -63,20 +76,16 @@ fn create_tollkeeper(requires_challenge: bool) -> tollkeeper::Tollkeeper {
     );
     println!("Order: {}", order.id());
     let orders = vec![order];
-    let gate = tollkeeper::Gate::with_id("gate", destination, orders).unwrap();
+    let gate = tollkeeper::Gate::with_id(gate_id, destination, orders).unwrap();
     println!("Gate: {}", gate.id());
-    let gates = vec![gate];
-    let secret_key_provider =
-        tollkeeper::signatures::InMemorySecretKeyProvider::new(b"Secret key".into());
-    let secret_key_provider = Box::new(secret_key_provider);
-    tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap()
+    gate
 }
 
 fn create_proxy_server(
     server_config: config::ServerConfig,
     tollkeeper: Arc<Tollkeeper>,
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
-    let listener = net::TcpListener::bind("127.0.0.1:9000")?;
+    let listener = net::TcpListener::bind("0.0.0.0:9000")?;
     let proxy_service = ProxyServiceImpl::new(tollkeeper);
     let exe_root_dir = std::env::current_dir().unwrap().join("app/templates");
     println!("Using templates located at: '{}'", exe_root_dir.display());
@@ -96,7 +105,7 @@ fn create_api_server(
     server_config: config::ServerConfig,
     tollkeeper: Arc<Tollkeeper>,
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
-    let listener = net::TcpListener::bind("127.0.0.1:9100")?;
+    let listener = net::TcpListener::bind("0.0.0.0:9100")?;
     let payment_service = payment::PaymentServiceImpl::new(tollkeeper);
     let payment_endpoint =
         payment::create_pay_toll_endpoint("/api/pay", server_config, Box::new(payment_service));
