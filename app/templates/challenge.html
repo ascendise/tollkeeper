@@ -1,3 +1,48 @@
-<div>
-  <p>Hallo Welt</p>
-</div>
+<html>
+
+<head></head>
+
+<body>
+  <h1>Guarded Endpoint {{toll.recipient.destination}}</h1>
+  <h2>Your Challenge</h2>
+  <h3>Hashcash (V1)</h3>
+  {{#with toll.challenge}}
+  <p>
+    bits: {{bits}}
+    resource: {{resource}}
+    ext: {{ext}}
+  </p>
+  {{/with}}
+  <h3>Payment</h3>
+  <p>
+    Payment will be provided to {{_links.pay}}
+    Signature: {{toll.signature}}
+  </p>
+</body>
+<script>
+  function calc_stamp(stamp_prefix) {
+
+  }
+
+  const toll = JSON.parse("{{{toll}}}"); //Ends up being [object]... put into a form?
+  const pay_link = "{{_links.pay}}";
+  const date = new Date();
+  const date_string = `${date.getUTCFullYear().substring(2, 4)}${date.getMonth()}${date.getDay()}${date.getHours()}${date.getMinutes()}${date.getSeconds()}`;;
+  const rand = window.crypto.randomUUID().replace('-',);
+  const stamp_prefix = `${toll.ver}:${toll.bits}:${date_string}:${toll.resource}:${toll.ext}:${rand}`;
+  const stamp = calc_stamp(stamp_prefix);
+  const payment = {
+    toll: toll,
+    value: stamp
+  };
+  fetch(pay_link, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payment)
+  }).then(res => {
+    console.log(res);
+    //TODO: Set as cookie
+  });
+</script>
+
+</html>
