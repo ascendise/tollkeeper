@@ -6,11 +6,12 @@ use tollkeeper::signatures::Base64;
 use crate::config;
 use crate::http::request::Method;
 use crate::http::response::{self, StatusCode};
-use crate::http::server::{HttpServe, InternalServerError};
+use crate::http::server::HttpServe;
 use crate::http::{self, request, Headers, Request, StreamBody};
 use crate::proxy::{Challenge, OrderId, ProxyServe};
 use crate::proxy::{PaymentRequiredError, Recipient, Toll};
 use crate::templates::{HandlebarTemplateRenderer, InMemoryTemplateStore};
+use test_case::test_case;
 
 use super::StubProxyService;
 
@@ -136,8 +137,16 @@ pub fn serve_should_return_payment_required_if_access_is_denied() {
     assert_eq!(expected_toll, actual_toll);
 }
 
-#[test]
-pub fn serve_should_return_challenge_html_page_if_request_accepts_html() {
+#[test_case("text/html" ; "simple text/html header")]
+#[test_case(
+    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" ;
+    "firefox 132+"
+)]
+#[test_case("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" ; "Safari 18+")]
+#[test_case("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7" ; "Chrome 131+")]
+#[test_case("text/html, application/xhtml+xml, image/jxr, */*" ; "Edge")]
+#[test_case("text/html, application/xml;q=0.9, application/xhtml+xml, image/png, image/webp, image/jpeg, image/gif, image/x-xbitmap, */*;q=0.1" ; "Opera")]
+pub fn serve_should_return_challenge_html_page_if_request_accepts_html(accept_header: &str) {
     // Arrange
     let mut stub_templates = HashMap::new();
     stub_templates.insert("templates/challenge.html".into(), "<div>Stub</div>".into());
@@ -146,8 +155,7 @@ pub fn serve_should_return_challenge_html_page_if_request_accepts_html() {
     let mut headers = Headers::empty();
     headers.insert("Host", "127.0.0.1:65000");
     headers.insert("Content-Length", "16");
-    headers.insert("Accept", "text/html"); //TODO: Create different test cases for the
-                                           //variety of headers different browsers send
+    headers.insert("Accept", accept_header);
     let headers = request::Headers::new(headers).unwrap();
     let body = StreamBody::new("Hello, Server!\r\n".as_bytes());
     let request = Request::with_body(Method::Get, "/", headers, Box::new(body)).unwrap();
