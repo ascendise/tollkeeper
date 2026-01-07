@@ -69,6 +69,7 @@ impl HashcashDeclaration {
         let mut challenge = Challenge::new();
         challenge.insert("ver".into(), "1".into());
         challenge.insert("bits".into(), self.difficulty.to_string());
+        challenge.insert("width".into(), Timestamp::width().to_string());
         let dest = suspect.destination();
         challenge.insert(
             "resource".into(),
@@ -287,6 +288,11 @@ impl FromStr for Stamp {
 struct ParseStampError;
 #[derive(Debug, PartialEq, Eq)]
 struct Timestamp(chrono::DateTime<chrono::Utc>);
+impl Timestamp {
+    fn width() -> usize {
+        12
+    }
+}
 impl Display for Timestamp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let date_str = self.0.format("%y%m%d%H%M%S");

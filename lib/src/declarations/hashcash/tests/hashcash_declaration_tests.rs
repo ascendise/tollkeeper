@@ -66,6 +66,7 @@ pub fn declare_should_return_new_toll_for_suspect() {
     let mut expected_challenge = Challenge::new();
     expected_challenge.insert("ver".into(), "1".into());
     expected_challenge.insert("bits".into(), "4".into());
+    expected_challenge.insert("width".into(), "12".into());
     expected_challenge.insert("resource".into(), "example.com(8888)/hello".into());
     expected_challenge.insert("ext".into(), "suspect.ip=1.2.3.4".into());
     // Assert
