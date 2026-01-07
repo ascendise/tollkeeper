@@ -1,5 +1,6 @@
 use crate::http::response::{self, Response, StatusCode};
 use crate::http::{self, StreamBody};
+use pretty_assertions::assert_eq;
 use std::collections::VecDeque;
 
 #[test]

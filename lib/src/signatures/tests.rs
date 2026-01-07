@@ -1,4 +1,5 @@
 use hex_literal::hex;
+use pretty_assertions::assert_eq;
 use test_case::test_case;
 
 use crate::signatures::Signed;

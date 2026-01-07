@@ -2,6 +2,7 @@ use crate::http::parsing::ParseError;
 use crate::http::request::{Headers, Method, Request};
 use crate::http::{self, Parse};
 use indexmap::IndexMap;
+use pretty_assertions::assert_eq;
 use std::collections::VecDeque;
 use test_case::test_case;
 

@@ -1,5 +1,6 @@
 use crate::http::Headers;
 use indexmap::IndexMap;
+use pretty_assertions::assert_eq;
 use test_case::test_case;
 
 #[test_case("User-Agent" ; "normal case")]

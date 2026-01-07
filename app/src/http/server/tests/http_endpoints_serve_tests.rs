@@ -3,6 +3,7 @@ use crate::http::{
     response::StatusCode,
     server::{tests::HelloHandler, *},
 };
+use pretty_assertions::assert_eq;
 
 fn setup(endpoints: Vec<Endpoint>) -> HttpEndpointsServe {
     HttpEndpointsServe::new(endpoints)

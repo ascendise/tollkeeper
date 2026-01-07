@@ -1,3 +1,4 @@
+use pretty_assertions::assert_eq;
 use std::{io::Write, net, sync::Arc, thread};
 use test_case::test_case;
 

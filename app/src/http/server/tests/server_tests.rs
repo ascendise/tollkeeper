@@ -2,6 +2,7 @@ use crate::http::server::{
     tests::{HelloHandler, PanicHandler},
     *,
 };
+use pretty_assertions::assert_eq;
 use std::{
     io::{Read, Write},
     net::{self},
