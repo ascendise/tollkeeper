@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+
+<head></head>
+
+<body>
+  <h1>Guarded Endpoint {{toll.recipient.destination}}</h1>
+  <h2>Your Challenge</h2>
+  <h3>Hashcash (V1)</h3>
+  {{#with toll.challenge}}
+  <p>
+    bits: {{bits}}
+    resource: {{resource}}
+    ext: {{ext}}
+  </p>
+  {{/with}}
+  <h3>Payment</h3>
+  <p>
+    Payment will be provided to {{_links.pay}}
+    Signature: {{toll.signature}}
+  </p>
+</body>
+<script>
+
+  async function isValidStamp(stamp, bits) {
+    let hash = await window.crypto.subtle.digest("SHA-1", new TextEncoder().encode(stamp));
+    bytes = new Uint8Array(hash);
+    let bits_left = bits;
+    for (const obyte of bytes) {
+      let expected_bits = 8 <= bits_left ? 8 : bits_left;
+      let valid = 0 == (obyte >> (8 % expected_bits));
+      bits_left -= expected_bits;
+      if (bits_left <= 8 && !valid) {
+        return false;
+      }
+      if (0 == bits_left) {
+        return true;
+      }
+    }
+  }
+
+  async function calcStamp(stamp_prefix, bits) {
+    let count = 0;
+    let stamp;
+    do {
+      stamp = `${stamp_prefix}:${count}`
+      console.log(`Try stamp: '${stamp}'`);
+      count++;
+    } while (!await isValidStamp(stamp, bits))
+    console.log(`Valid stamp found: '${stamp}'`);
+    return stamp;
+  }
+
+  function padTime(timeElement) {
+    return timeElement.toString().padStart(2, "0");
+  }
+
+  async function main() {
+    const toll = {{js toll}};
+    const pay_link = "{{_links.pay}}";
+    const date = new Date();
+    const year = padTime(date.getUTCFullYear() % 100);
+    const month = padTime(date.getUTCMonth() + 1);
+    const day = padTime(date.getUTCDate());
+    const hours = padTime(date.getUTCHours());
+    const minutes = padTime(date.getUTCMinutes());
+    const seconds = padTime(date.getUTCSeconds());
+    const date_string = `${year}${month}${day}${hours}${minutes}${seconds}`;
+    const rand = window.crypto.randomUUID().replace(/-/g, "");
+    const challenge = toll.challenge;
+    const stamp_prefix = `${challenge.ver}:${challenge.bits}:${date_string}:${challenge.resource}:${challenge.ext}:${rand}`;
+    const stamp = await calcStamp(stamp_prefix, challenge.bits)
+    const payment = {
+      toll: toll,
+      value: stamp
+    };
+    const response = await fetch(pay_link, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payment)
+        });
+    let visa = await response.json();
+    console.log(visa);
+    document.cookie = `${visa.header_name}=${visa.token}`;
+    window.location.href = `http://${visa._links.origin_url}`;
+  }
+
+  main();
+</script>
+
+</html>

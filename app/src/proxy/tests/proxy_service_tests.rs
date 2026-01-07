@@ -1,4 +1,5 @@
 use std::{io::Write, net, sync::Arc, thread};
+use test_case::test_case;
 
 use tollkeeper::{
     declarations::{self},
@@ -134,8 +135,11 @@ pub fn proxy_request_should_return_404_response_when_trying_to_access_unknown_ta
     let response = proxy_result.unwrap();
     assert_eq!(StatusCode::NotFound, response.status_code())
 }
-#[test]
-pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa() {
+#[test_case(ProxyWithVisaTestCases::Header ; "read token from X-Keeper-Token header")]
+#[test_case(ProxyWithVisaTestCases::Cookie ; "read token from cookies")]
+pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
+    test_case: ProxyWithVisaTestCases,
+) {
     // Arrange
     let (proxy, proxy_addr) = setup_proxy("HTTP/1.1 200 OK\r\n\r\n".into());
     let (order_id, sut) = setup_and_get_id(true, proxy_addr);
@@ -162,8 +166,9 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
     let visa = Base64::encode(visa.as_bytes());
     let signature = signature.signature().base64();
     let token = format!("{}.{}", visa, signature);
-    headers.insert("X-Keeper-Token", token);
     headers.insert("User-Agent", "Yo Mama");
+    add_token_header(test_case, &mut headers, token);
+    println!("{headers}");
     let headers = request::Headers::new(headers).unwrap();
     let request = Request::new(Method::Get, "/", headers).unwrap();
     let response = sut
@@ -172,6 +177,23 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
     proxy.join().unwrap();
     // Assert
     assert_eq!(StatusCode::OK, response.status_code());
+}
+
+pub enum ProxyWithVisaTestCases {
+    Header,
+    Cookie,
+}
+fn add_token_header(
+    test_case: ProxyWithVisaTestCases,
+    headers: &mut http::Headers,
+    token: impl Into<String>,
+) {
+    match test_case {
+        ProxyWithVisaTestCases::Header => headers.insert("X-Keeper-Token", token),
+        ProxyWithVisaTestCases::Cookie => {
+            headers.insert("Cookie", format!("X-Keeper-Token={}", token.into()))
+        }
+    };
 }
 
 struct StubDescription {

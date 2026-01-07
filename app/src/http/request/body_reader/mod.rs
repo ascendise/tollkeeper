@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Display};
 
 use crate::http;
 #[cfg(test)]
-pub mod tests;
+mod tests;
 
 pub trait ReadJson {
     fn read_json(&mut self) -> Result<serde_json::Value, ReadJsonError>;

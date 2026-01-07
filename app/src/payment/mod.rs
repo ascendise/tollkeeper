@@ -17,10 +17,19 @@ pub fn create_pay_toll_endpoint(
     path: &str,
     config: ServerConfig,
     payment_service: Box<dyn PaymentService + Send + Sync>,
-) -> http::server::Endpoint {
-    let method = http::request::Method::Post;
-    let handler = PayTollServe::new(config, payment_service);
-    http::server::Endpoint::new(method, path, Box::new(handler))
+) -> Vec<http::server::Endpoint> {
+    let pay_toll_handler = PayTollServe::new(config, payment_service);
+    let pay_post_endpoint = http::server::Endpoint::new(
+        http::request::Method::Post,
+        path,
+        Box::new(pay_toll_handler),
+    );
+    let pay_options_endpoint = http::server::Endpoint::new(
+        http::request::Method::Options,
+        path,
+        Box::new(PayTollOptionsServe),
+    );
+    vec![pay_post_endpoint, pay_options_endpoint]
 }
 
 pub struct PayTollServe {
@@ -64,7 +73,7 @@ impl PayTollServe {
     ) -> Result<http::Response, http::server::InternalServerError> {
         let visa_json = visa.as_hal_json(self.config.base_url());
         let visa_json: VecDeque<u8> = visa_json.to_string().into_bytes().into();
-        let mut headers = http::Headers::empty();
+        let mut headers = cors_headers("POST");
         headers.insert("Content-Type", "application/hal+json");
         headers.insert("Content-Length", visa_json.len().to_string());
         let headers = http::response::Headers::new(headers);
@@ -84,7 +93,7 @@ impl PayTollServe {
     ) -> Result<http::Response, http::server::InternalServerError> {
         let error_json = payment_error.as_hal_json(self.config.base_url());
         let error_json: VecDeque<u8> = error_json.to_string().into_bytes().into();
-        let mut headers = http::Headers::empty();
+        let mut headers = cors_headers("POST");
         headers.insert("Content-Type", "application/hal+json");
         headers.insert("Content-Length", error_json.len().to_string());
         let headers = http::response::Headers::new(headers);
@@ -338,4 +347,30 @@ impl From<tollkeeper::err::PaymentDeniedError> for Box<PaymentError> {
         };
         Box::new(error)
     }
+}
+
+//TODO: Handle OPTIONS more elegantly
+struct PayTollOptionsServe;
+impl HttpServe for PayTollOptionsServe {
+    fn serve_http(
+        &self,
+        _: &std::net::SocketAddr,
+        _: http::Request,
+    ) -> Result<http::Response, http::server::InternalServerError> {
+        let mut headers = cors_headers("POST");
+        headers.insert("Accept", "application/json");
+        headers.insert("Allow", "POST");
+        let headers = http::response::Headers::new(headers);
+        let response =
+            http::Response::new(http::response::StatusCode::NoContent, None, headers, None);
+        Ok(response)
+    }
+}
+
+fn cors_headers(methods: impl Into<String>) -> http::Headers {
+    let mut headers = http::Headers::empty();
+    headers.insert("Access-Control-Allow-Headers", "*");
+    headers.insert("Access-Control-Allow-Methods", methods);
+    headers.insert("Access-Control-Allow-Origin", "*");
+    headers
 }

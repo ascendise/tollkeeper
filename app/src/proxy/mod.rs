@@ -14,6 +14,7 @@ use crate::data_formats::{self, AsHalJson, FromHttpHeader};
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::http::{self, Body, Parse};
+use crate::templates::{SerializedData, TemplateRenderer};
 use crate::{config, payment};
 
 use super::http::server::*;
@@ -24,17 +25,50 @@ mod tests;
 pub struct ProxyServe {
     config: config::ServerConfig,
     proxy_service: Box<dyn ProxyService + Send + Sync>,
+    template_renderer: Box<dyn TemplateRenderer + Send + Sync>,
 }
 
 impl ProxyServe {
     pub fn new(
         config: config::ServerConfig,
         proxy_service: Box<dyn ProxyService + Send + Sync>,
+        template_renderer: Box<dyn TemplateRenderer + Send + Sync>,
     ) -> Self {
         Self {
             config,
             proxy_service,
+            template_renderer,
         }
+    }
+
+    fn toll_to_json_response(&self, toll: &Toll) -> Response {
+        let json = toll.as_hal_json(self.config.base_url());
+        let data: VecDeque<u8> = json.to_string().into_bytes().into();
+        let content_length = data.len().to_string();
+        let body = http::StreamBody::new(data);
+        let body = Box::new(body) as Box<dyn Body>;
+        let mut headers = http::Headers::empty();
+        headers.insert("Content-Type", "application/hal+json");
+        headers.insert("Content-Length", content_length);
+        let headers = http::response::Headers::new(headers);
+        Response::payment_required(headers, Some(body))
+    }
+
+    fn toll_to_html_response(&self, toll: &Toll) -> Result<Response, InternalServerError> {
+        let base_url = self.config.base_url();
+        let toll = toll.as_hal_json(base_url);
+        let page_html = self
+            .template_renderer
+            .render("challenge.html", &SerializedData::new(toll))
+            .or(Err(InternalServerError::new()))?;
+        let mut headers = http::Headers::empty();
+        headers.insert("Content-Type", "text/html");
+        headers.insert("Content-Length", page_html.len().to_string());
+        let headers = http::response::Headers::new(headers);
+        let page_html_stream: VecDeque<u8> = page_html.into_bytes().into();
+        let body = http::StreamBody::new(page_html_stream);
+        let body = Box::new(body) as Box<dyn Body>;
+        Ok(Response::payment_required(headers, Some(body)))
     }
 }
 impl HttpServe for ProxyServe {
@@ -43,21 +77,16 @@ impl HttpServe for ProxyServe {
         client_addr: &net::SocketAddr,
         request: Request,
     ) -> Result<Response, InternalServerError> {
+        let accept_header: String = request.headers().accept().unwrap_or("").into();
         let response = self.proxy_service.proxy_request(client_addr, request);
         let response = match response {
             Ok(res) => res,
             Err(err) => {
-                let toll = err.0;
-                let json = toll.as_hal_json(self.config.base_url());
-                let data: VecDeque<u8> = json.to_string().into_bytes().into();
-                let content_length = data.len().to_string();
-                let body = http::StreamBody::new(data);
-                let body = Box::new(body) as Box<dyn Body>;
-                let mut headers = http::Headers::empty();
-                headers.insert("Content-Type", "application/hal+json");
-                headers.insert("Content-Length", content_length);
-                let headers = http::response::Headers::new(headers);
-                Response::payment_required(headers, Some(body))
+                if accept_header.contains("html") {
+                    self.toll_to_html_response(&err.0)?
+                } else {
+                    self.toll_to_json_response(&err.0)
+                }
             }
         };
         Ok(response)
@@ -97,7 +126,9 @@ impl ProxyServiceImpl {
         )
     }
     fn extract_visa(headers: &http::request::Headers) -> Option<payment::Visa> {
-        let visa_header = headers.extension("X-Keeper-Token")?;
+        let visa_header = headers
+            .extension("X-Keeper-Token")
+            .or_else(|| headers.cookie("X-Keeper-Token"))?;
         let visa = payment::Visa::from_http_header(visa_header).ok()?;
         Some(visa)
     }

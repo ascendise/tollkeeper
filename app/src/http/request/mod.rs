@@ -278,6 +278,20 @@ impl Headers {
         self.headers.get("content-type")
     }
 
+    pub fn cookie(&self, key: &str) -> Option<&str> {
+        let cookies = self.headers.get("Cookie")?;
+        let cookies = cookies
+            .split(";")
+            .map(|s| s.trim().split_once("=").unwrap_or(("", "")))
+            .collect::<Vec<(&str, &str)>>();
+        for (cookie_key, cookie_value) in cookies {
+            if cookie_key == key {
+                return Some(cookie_value);
+            }
+        }
+        None
+    }
+
     pub fn extension(&self, name: &str) -> Option<&str> {
         self.headers.get(name)
     }

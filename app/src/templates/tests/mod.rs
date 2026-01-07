@@ -1,0 +1,1 @@
+mod handlebar_template_renderer_tests;
