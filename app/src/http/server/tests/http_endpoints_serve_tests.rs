@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::http::{
     self, request,
     response::StatusCode,
@@ -15,6 +17,18 @@ const fn client_addr() -> net::SocketAddr {
     net::SocketAddr::V4(v4_addr)
 }
 
+pub fn assert_body_contains(expected_content: &str, body: &mut http::Body) {
+    match body {
+        http::Body::Buffer(buffer_body) => {
+            let mut body = String::new();
+            buffer_body.read_to_string(&mut body).unwrap();
+            assert_eq!(expected_content, body);
+        }
+        http::Body::Stream(_) => panic!("stream body not expected"),
+        http::Body::None => panic!("no body"),
+    }
+}
+
 #[test]
 pub fn serve_should_handle_request_through_defined_endpoint() {
     // Arrange
@@ -27,16 +41,14 @@ pub fn serve_should_handle_request_through_defined_endpoint() {
     let mut headers = http::Headers::empty();
     headers.insert("Host", "localhost");
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/hello", headers).unwrap();
+    let request = Request::new(Method::Get, "/hello", headers, http::Body::None).unwrap();
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(response.is_ok());
     let mut response = response.unwrap();
     assert_eq!(StatusCode::OK, response.status_code());
     assert_eq!(Some(8), response.headers().content_length());
-    let mut body = String::new();
-    response.body().unwrap().read_to_string(&mut body).unwrap();
-    assert_eq!("Hello!\r\n", body);
+    assert_body_contains("Hello!\r\n", response.body());
 }
 
 #[test]
@@ -57,12 +69,10 @@ pub fn serve_should_handle_request_on_specific_path() {
     let mut headers = http::Headers::empty();
     headers.insert("Host", "localhost");
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/hello", headers).unwrap();
+    let request = Request::new(Method::Get, "/hello", headers, http::Body::None).unwrap();
     let mut response = sut.serve_http(&client_addr(), request).unwrap();
     // Assert
-    let mut body = String::new();
-    response.body().unwrap().read_to_string(&mut body).unwrap();
-    assert_eq!("Hello!\r\n", body);
+    assert_body_contains("Hello!\r\n", response.body());
 }
 
 #[test]
@@ -77,7 +87,13 @@ pub fn serve_should_return_not_found_when_no_matching_endpoint_path_is_found() {
     let mut headers = http::Headers::empty();
     headers.insert("Host", "localhost");
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/this-path-is-unknown", headers).unwrap();
+    let request = Request::new(
+        Method::Get,
+        "/this-path-is-unknown",
+        headers,
+        http::Body::None,
+    )
+    .unwrap();
     let response = sut.serve_http(&client_addr(), request).unwrap();
     // Assert
     assert_eq!(StatusCode::NotFound, response.status_code());
@@ -95,7 +111,7 @@ pub fn serve_should_return_method_not_allowed_when_matching_endpoint_is_wrong_pa
     let mut headers = http::Headers::empty();
     headers.insert("Host", "localhost");
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Head, "/hello", headers).unwrap();
+    let request = Request::new(Method::Head, "/hello", headers, http::Body::None).unwrap();
     let response = sut.serve_http(&client_addr(), request).unwrap();
     // Assert
     assert_eq!(StatusCode::MethodNotAllowed, response.status_code());

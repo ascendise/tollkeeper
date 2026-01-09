@@ -1,5 +1,5 @@
 use crate::http::server::{
-    tests::{HelloHandler, PanicHandler},
+    tests::{ChunkedHandler, HelloHandler, PanicHandler},
     *,
 };
 use pretty_assertions::assert_eq;
@@ -50,6 +50,34 @@ pub fn server_should_handle_request() {
     let response = send_request(addr, request);
     // Assert
     let expected_response = "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nHello!\r\n";
+    assert_eq!(expected_response, response);
+    sender.send_shutdown().unwrap();
+    server_thread.join().unwrap().unwrap();
+}
+
+#[test]
+pub fn server_should_return_chunked_response() {
+    // Arrange
+    let chunked_body = "6\r\nHello!\r\n5\r\nChunk\r\n0\r\n\r\n";
+    let handler = Box::new(ChunkedHandler {
+        chunked_body: chunked_body.into(),
+    });
+    let (mut sut, addr) = setup(handler);
+    let (sender, receiver) = cancellation_token::create_cancellation_token();
+    // Act
+    let server_thread = thread::spawn(move || sut.start_listening(receiver));
+    let request = concat!(
+        "POST /hello HTTP/1.1\r\n",
+        "Host: localhost\r\n",
+        "Content-Length: 13\r\n",
+        "\r\n",
+        "Hey Server!\r\n"
+    )
+    .as_bytes();
+    let response = send_request(addr, request);
+    // Assert
+    let expected_response =
+        format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{chunked_body}");
     assert_eq!(expected_response, response);
     sender.send_shutdown().unwrap();
     server_thread.join().unwrap().unwrap();

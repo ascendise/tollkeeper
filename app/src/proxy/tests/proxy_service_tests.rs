@@ -1,11 +1,16 @@
 use pretty_assertions::assert_eq;
-use std::{io::Write, net, sync::Arc, thread};
+use std::{
+    io::{Read, Write},
+    net,
+    sync::Arc,
+    thread,
+};
 use test_case::test_case;
 
 use tollkeeper::{
     declarations::{self},
     descriptions::{self},
-    signatures::{Base64, InMemorySecretKeyProvider},
+    signatures::{AsBytes, Base64, InMemorySecretKeyProvider},
 };
 
 use crate::{
@@ -13,7 +18,7 @@ use crate::{
         self,
         request::{self, Method},
         response::StatusCode,
-        Request,
+        Parse, Request,
     },
     proxy::{Challenge, OrderId, ProxyService, ProxyServiceImpl, Recipient, Toll},
 };
@@ -52,7 +57,23 @@ fn setup_proxy(response: Vec<u8>) -> (thread::JoinHandle<()>, net::SocketAddr) {
     let local_addr = listener.local_addr().unwrap();
     let thread = thread::spawn(move || {
         let (mut conn, _) = listener.accept().unwrap();
+        _ = Request::parse(conn.try_clone().unwrap());
         conn.write_all(&response).unwrap();
+    });
+    (thread, local_addr)
+}
+
+fn setup_proxy_with_chunked_response(
+    chunks: Vec<&'static [u8]>,
+) -> (thread::JoinHandle<()>, net::SocketAddr) {
+    let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let local_addr = listener.local_addr().unwrap();
+    let thread = thread::spawn(move || {
+        let (mut conn, _) = listener.accept().unwrap();
+        _ = Request::parse(conn.try_clone().unwrap());
+        for chunk in chunks {
+            conn.write_all(chunk).unwrap();
+        }
     });
     (thread, local_addr)
 }
@@ -63,22 +84,88 @@ const fn client_addr() -> net::SocketAddr {
     net::SocketAddr::V4(v4_addr)
 }
 
-#[test]
-pub fn proxy_request_should_send_request_to_target_and_return_response() {
+#[test_case(None ; "response with no body")]
+#[test_case(Some(b"ABC\r\n") ; "response with fixed size body")]
+pub fn proxy_request_should_send_request_to_target_and_return_response(
+    expected_body: Option<&[u8]>,
+) {
     // Arrange
-    let (proxy, proxy_addr) = setup_proxy("HTTP/1.1 200 OK\r\n\r\n".into());
+    let mut proxy_response = b"HTTP/1.1 200 OK\r\n".as_bytes();
+    let headers: Vec<u8> = match expected_body {
+        None => b"\r\n".into(),
+        Some(b) => format!("Content-Length: {}\r\n\r\n", b.len()).into(),
+    };
+    proxy_response.extend_from_slice(&headers);
+    if let Some(d) = expected_body {
+        proxy_response.extend_from_slice(d)
+    };
+    let (proxy, proxy_addr) = setup_proxy(proxy_response);
     let sut = setup(false, proxy_addr);
     // Act
     let mut headers = http::Headers::empty();
     headers.insert("Host", format!("127.0.0.1:{}", proxy_addr.port()));
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/", headers).unwrap();
-    let response = sut
+    let request = Request::new(Method::Get, "/", headers, http::Body::None).unwrap();
+    let mut response = sut
         .proxy_request(&client_addr(), request)
         .expect("Expected response, got denied");
-    proxy.join().unwrap();
     // Assert
     assert_eq!(StatusCode::OK, response.status_code());
+    let body = match response.body() {
+        http::Body::Buffer(buffer_body) => {
+            let mut buff = String::new();
+            buffer_body.read_to_string(&mut buff).unwrap();
+            Some(buff)
+        }
+        http::Body::Stream(_) => panic!("unexpected stream body"),
+        http::Body::None => None,
+    };
+    proxy.join().unwrap();
+    let expected_body = expected_body.map(|b| String::from_utf8(b.into()).unwrap());
+    assert_eq!(expected_body, body);
+}
+
+#[test]
+pub fn proxy_request_should_send_request_to_target_and_return_chunked_response() {
+    // Arrange
+    let mut proxy_response: Vec<&[u8]> =
+        vec![b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"];
+    let expected_body = vec![
+        "5\r\nThis \r\n",
+        "3\r\nIs \r\n",
+        "b\r\nTollkeeper!\r\n",
+        "0\r\n\r\n",
+    ];
+    proxy_response.append(
+        &mut expected_body
+            .clone()
+            .into_iter()
+            .map(|s| s.as_bytes())
+            .collect(),
+    );
+    let (proxy, proxy_addr) = setup_proxy_with_chunked_response(proxy_response);
+    let sut = setup(false, proxy_addr);
+    // Act
+    let mut headers = http::Headers::empty();
+    headers.insert("Host", format!("127.0.0.1:{}", proxy_addr.port()));
+    let headers = request::Headers::new(headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers, http::Body::None).unwrap();
+    let mut response = sut
+        .proxy_request(&client_addr(), request)
+        .expect("Expected response, got denied");
+    // Assert
+    assert_eq!(StatusCode::OK, response.status_code());
+    if let http::Body::Stream(body) = response.body() {
+        let mut actual_body: Vec<String> = Vec::new();
+        while let Some(chunk) = body.read_chunk() {
+            let chunk = String::from_utf8(chunk.content().into()).unwrap();
+            actual_body.push(chunk);
+        }
+        assert_eq!(expected_body, actual_body);
+        proxy.join().unwrap();
+    } else {
+        panic!("unexpected body");
+    }
 }
 
 #[test]
@@ -92,7 +179,7 @@ pub fn proxy_request_should_return_error_when_payment_is_required() {
     let mut headers = http::Headers::empty();
     headers.insert("Host", "127.0.0.1");
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/", headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers, http::Body::None).unwrap();
     let proxy_result = sut.proxy_request(&client_addr, request);
     // Assert
     assert!(
@@ -126,7 +213,7 @@ pub fn proxy_request_should_return_404_response_when_trying_to_access_unknown_ta
     let host = "127.0.0.1:3333";
     headers.insert("Host", host);
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/", headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers, http::Body::None).unwrap();
     let proxy_result = sut.proxy_request(&client_addr, request);
     // Assert
     assert!(
@@ -169,9 +256,8 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
     let token = format!("{}.{}", visa, signature);
     headers.insert("User-Agent", "Yo Mama");
     add_token_header(test_case, &mut headers, token);
-    println!("{headers}");
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/", headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers, http::Body::None).unwrap();
     let response = sut
         .proxy_request(&client_addr(), request)
         .expect("Expected response, got denied");

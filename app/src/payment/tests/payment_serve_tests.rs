@@ -1,6 +1,7 @@
 use pretty_assertions::assert_eq;
 use std::{
     collections::VecDeque,
+    io::Read,
     net::{SocketAddr, SocketAddrV4},
     str::FromStr,
 };
@@ -40,11 +41,17 @@ fn assert_has_content_length(headers: &http::response::Headers) -> usize {
 fn assert_body_contains_json(expected_content: serde_json::Value, mut response: http::Response) {
     let content_length = assert_has_content_length(response.headers());
     let mut json = vec![0u8; content_length];
-    let body = response.body().unwrap();
-    body.read_exact(&mut json).unwrap();
-    let json = String::from_utf8(json).unwrap();
-    let json: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(expected_content, json);
+    let body = response.body();
+    match body {
+        http::Body::Buffer(body) => {
+            body.read_exact(&mut json).unwrap();
+            let json = String::from_utf8(json).unwrap();
+            let json: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert_eq!(expected_content, json);
+        }
+        http::Body::Stream(_) => panic!("unexpected stream body"),
+        http::Body::None => panic!("no body"),
+    }
 }
 
 fn setup_payment_request(recipient: proxy::Recipient, order_id: proxy::OrderId) -> http::Request {
@@ -60,17 +67,17 @@ fn setup_payment_request(recipient: proxy::Recipient, order_id: proxy::OrderId) 
     let json = payment.to_string();
     let data: VecDeque<u8> = json.into_bytes().into();
     let content_length = data.len();
-    let body = http::StreamBody::new(data);
+    let body = http::Body::from_stream(Box::new(data), Some(content_length));
     let mut headers = http::Headers::empty();
     headers.insert("Host", "localhost");
     headers.insert("Content-Type", "application/json");
     headers.insert("Content-Length", content_length.to_string());
     let headers = http::request::Headers::new(headers).unwrap();
-    http::Request::with_body(
+    http::Request::new(
         http::request::Method::Post,
         "/payment-endpoint",
         headers,
-        Box::new(body),
+        body,
     )
     .unwrap()
 }

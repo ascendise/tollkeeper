@@ -1,5 +1,6 @@
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
+use std::io::Read;
 use std::net;
 
 use tollkeeper::signatures::Base64;
@@ -8,7 +9,7 @@ use crate::config;
 use crate::http::request::Method;
 use crate::http::response::{self, StatusCode};
 use crate::http::server::HttpServe;
-use crate::http::{self, request, Headers, Request, StreamBody};
+use crate::http::{self, request, Body, Headers, Request};
 use crate::proxy::{Challenge, OrderId, ProxyServe};
 use crate::proxy::{PaymentRequiredError, Recipient, Toll};
 use crate::templates::{handlebars::HandlebarTemplateRenderer, InMemoryTemplateStore};
@@ -22,7 +23,7 @@ fn setup() -> ProxyServe {
             StatusCode::OK,
             Some("OK".into()),
             response::Headers::empty(),
-            None,
+            Body::None,
         );
         Ok(response)
     }
@@ -84,7 +85,7 @@ pub fn serve_should_return_response_of_target() {
     let mut headers = Headers::empty();
     headers.insert("Host", "127.0.0.1:65000");
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/", headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers, Body::None).unwrap();
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(response.is_ok());
@@ -101,8 +102,8 @@ pub fn serve_should_return_payment_required_if_access_is_denied() {
     headers.insert("Host", "127.0.0.1:65000");
     headers.insert("Content-Length", "16");
     let headers = request::Headers::new(headers).unwrap();
-    let body = StreamBody::new("Hello, Server!\r\n".as_bytes());
-    let request = Request::with_body(Method::Get, "/", headers, Box::new(body)).unwrap();
+    let body = http::Body::from_string("Hello, Server!\r\n".into());
+    let request = Request::new(Method::Get, "/", headers, body).unwrap();
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(response.is_ok());
@@ -128,14 +129,16 @@ pub fn serve_should_return_payment_required_if_access_is_denied() {
             "pay": "http://guard.tollkeeper.ch/api/pay/"
         }
     });
-    let mut actual_toll = String::new();
-    response
-        .body()
-        .unwrap()
-        .read_to_string(&mut actual_toll)
-        .unwrap();
-    let actual_toll: serde_json::Value = serde_json::from_str(&actual_toll).unwrap();
-    assert_eq!(expected_toll, actual_toll);
+    match response.body() {
+        Body::Buffer(buffer_body) => {
+            let mut actual_toll = String::new();
+            buffer_body.read_to_string(&mut actual_toll).unwrap();
+            let actual_toll: serde_json::Value = serde_json::from_str(&actual_toll).unwrap();
+            assert_eq!(expected_toll, actual_toll);
+        }
+        Body::Stream(_) => panic!("unexpected stream body"),
+        Body::None => panic!("no body"),
+    }
 }
 
 #[test_case("text/html" ; "simple text/html header")]
@@ -158,8 +161,8 @@ pub fn serve_should_return_challenge_html_page_if_request_accepts_html(accept_he
     headers.insert("Content-Length", "16");
     headers.insert("Accept", accept_header);
     let headers = request::Headers::new(headers).unwrap();
-    let body = StreamBody::new("Hello, Server!\r\n".as_bytes());
-    let request = Request::with_body(Method::Get, "/", headers, Box::new(body)).unwrap();
+    let body = Body::from_string("Hello, Server!\r\n".into());
+    let request = Request::new(Method::Get, "/", headers, body).unwrap();
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(response.is_ok());
@@ -167,14 +170,16 @@ pub fn serve_should_return_challenge_html_page_if_request_accepts_html(accept_he
     assert_eq!(StatusCode::PaymentRequired, response.status_code());
     assert_eq!(Some("text/html"), response.headers().content_type());
     assert!(response.headers().content_length().is_some());
-    let expected_body = "<div>Stub</div>";
-    let mut actual_body = String::new();
-    response
-        .body()
-        .unwrap()
-        .read_to_string(&mut actual_body)
-        .unwrap();
-    assert_eq!(expected_body, actual_body);
+    match response.body() {
+        Body::Buffer(buffer_body) => {
+            let expected_body = "<div>Stub</div>";
+            let mut actual_body = String::new();
+            buffer_body.read_to_string(&mut actual_body).unwrap();
+            assert_eq!(expected_body, actual_body);
+        }
+        Body::Stream(_) => panic!("unexpected stream body"),
+        Body::None => panic!("no body"),
+    }
 }
 
 #[test]
@@ -192,8 +197,8 @@ pub fn serve_should_return_internal_server_error_on_render_failure() {
     headers.insert("Content-Length", "16");
     headers.insert("Accept", "text/html");
     let headers = request::Headers::new(headers).unwrap();
-    let body = StreamBody::new("Hello, Server!\r\n".as_bytes());
-    let request = Request::with_body(Method::Get, "/", headers, Box::new(body)).unwrap();
+    let body = Body::from_string("Hello, Server!\r\n".into());
+    let request = Request::new(Method::Get, "/", headers, body).unwrap();
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(

@@ -1,5 +1,6 @@
 use indexmap::IndexMap;
-use std::io::Read;
+use std::collections::VecDeque;
+use std::io::{BufRead, Read};
 use std::{fmt::Display, io, str::FromStr};
 
 #[cfg(test)]
@@ -82,30 +83,133 @@ pub trait Parse<T>: Sized {
     fn parse(stream: T) -> Result<Self, Self::Err>;
 }
 
-/// Body of an HTTP Message
-pub trait Body {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error>;
-    fn read_to_string(&mut self, buf: &mut String) -> Result<usize, io::Error>;
-    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()>;
+pub enum Body {
+    Buffer(BufferBody),
+    Stream(StreamBody),
+    None,
+}
+impl Body {
+    pub fn from_stream(mut stream: Box<dyn io::Read>, content_length: Option<usize>) -> Self {
+        match content_length {
+            Some(len) => {
+                let mut buffer = vec![0; len];
+                stream.read_exact(&mut buffer).unwrap();
+                let body = BufferBody::new(buffer.into());
+                Body::Buffer(body)
+            }
+            None => {
+                let body = StreamBody::new(stream);
+                Body::Stream(body)
+            }
+        }
+    }
+
+    pub fn from_string(data: String) -> Self {
+        let data = data.into_bytes().into();
+        Self::Buffer(BufferBody::new(data))
+    }
+
+    pub fn has_body(&self) -> bool {
+        match self {
+            Body::Buffer(_) => true,
+            Body::Stream(_) => true,
+            Body::None => true,
+        }
+    }
 }
 
-pub struct StreamBody<T: Read> {
-    stream: io::BufReader<T>,
+/// HTTP Body with fixed length
+pub struct BufferBody {
+    data: VecDeque<u8>,
 }
-impl<T: Read> StreamBody<T> {
-    pub fn new(stream: T) -> Self {
-        let stream = io::BufReader::new(stream);
-        Self { stream }
+impl BufferBody {
+    pub fn new(data: VecDeque<u8>) -> Self {
+        Self { data }
+    }
+
+    pub fn data(&self) -> &VecDeque<u8> {
+        &self.data
     }
 }
-impl<T: Read> Body for StreamBody<T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
-        self.stream.read(buf)
+impl io::Read for BufferBody {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.data.read(buf)
     }
-    fn read_to_string(&mut self, buf: &mut String) -> Result<usize, io::Error> {
-        self.stream.read_to_string(buf)
+}
+
+/// HTTP Body with data stream
+pub struct StreamBody {
+    stream: io::BufReader<Box<dyn io::Read>>,
+}
+impl StreamBody {
+    pub fn new(stream: Box<dyn io::Read>) -> Self {
+        Self {
+            stream: io::BufReader::new(stream),
+        }
     }
-    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        self.stream.read_exact(buf)
+
+    pub fn read_chunk(&mut self) -> Option<Chunk> {
+        let chunk_size = self.read_chunk_size()?;
+        if chunk_size == 0 {
+            self.stream.consume(2); //Empty Content
+            Some(Chunk::eof())
+        } else {
+            let content = self.read_chunk_content(chunk_size)?;
+            let chunk = Chunk::new(chunk_size, content);
+            Some(chunk)
+        }
+    }
+
+    fn read_chunk_size(&mut self) -> Option<usize> {
+        let mut chunk_size = vec![];
+        let _ = self
+            .stream
+            .by_ref()
+            .take(8)
+            .read_until(b'\r', &mut chunk_size)
+            .ok()?;
+        self.stream.consume(1); // Remove LF from stream
+        let mut chunk_size = String::from_utf8(chunk_size).unwrap();
+        chunk_size.pop(); // Remove CR from chunk
+        if chunk_size.is_empty() {
+            None
+        } else {
+            let chunk_size = usize::from_str_radix(&chunk_size, 16).unwrap();
+            Some(chunk_size)
+        }
+    }
+
+    fn read_chunk_content(&mut self, chunk_size: usize) -> Option<Vec<u8>> {
+        let mut content: Vec<u8> = format!("{chunk_size:x}\r\n").into_bytes();
+        let mut content_buff = vec![0; chunk_size];
+        self.stream.read_exact(&mut content_buff).ok()?;
+        content.append(&mut content_buff);
+        content.append(&mut vec![b'\r', b'\n']);
+        self.stream.consume(2); // Remove CRLF from stream
+        Some(content)
+    }
+}
+pub struct Chunk {
+    size: usize,
+    content: Vec<u8>,
+}
+impl Chunk {
+    pub fn new(size: usize, content: Vec<u8>) -> Self {
+        Self { size, content }
+    }
+
+    pub fn eof() -> Self {
+        Self {
+            size: 0,
+            content: b"0\r\n\r\n".into(),
+        }
+    }
+
+    pub fn content(&self) -> &[u8] {
+        &self.content
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
     }
 }

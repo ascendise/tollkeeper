@@ -4,7 +4,7 @@ use crate::http::{
     self,
     response::{self, StatusCode},
     server::{HttpServe, InternalServerError},
-    Request, Response, StreamBody,
+    BufferBody, Request, Response, StreamBody,
 };
 
 mod http_endpoints_serve_tests;
@@ -15,12 +15,29 @@ struct HelloHandler {
 }
 impl HttpServe for HelloHandler {
     fn serve_http(&self, _: &net::SocketAddr, _: Request) -> Result<Response, InternalServerError> {
-        let mut headers = indexmap::IndexMap::<String, String>::new();
-        headers.insert("Content-Length".into(), self.body.len().to_string());
-        let headers = http::Headers::new(headers);
+        let mut headers = http::Headers::empty();
+        headers.insert("Content-Length", self.body.len().to_string());
         let headers = response::Headers::new(headers);
-        let body = Box::new(StreamBody::<VecDeque<u8>>::new(self.body.clone().into()));
-        let response = Response::new(StatusCode::OK, Some("OK".into()), headers, Some(body));
+        let data: VecDeque<u8> = self.body.clone().into();
+        let body = BufferBody::new(data);
+        let body = http::Body::Buffer(body);
+        let response = Response::new(StatusCode::OK, Some("OK".into()), headers, body);
+        Ok(response)
+    }
+}
+
+struct ChunkedHandler {
+    chunked_body: Vec<u8>,
+}
+impl HttpServe for ChunkedHandler {
+    fn serve_http(&self, _: &net::SocketAddr, _: Request) -> Result<Response, InternalServerError> {
+        let mut headers = http::Headers::empty();
+        headers.insert("Transfer-Encoding", "chunked");
+        let headers = response::Headers::new(headers);
+        let data: VecDeque<u8> = self.chunked_body.clone().into();
+        let body = StreamBody::new(Box::new(data));
+        let body = http::Body::Stream(body);
+        let response = Response::new(StatusCode::OK, Some("OK".into()), headers, body);
         Ok(response)
     }
 }

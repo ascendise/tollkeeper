@@ -48,7 +48,11 @@ fn create_tollkeeper() -> tollkeeper::Tollkeeper {
     let json_api_gate = create_simple_gate("json_api_gate".into(), json_api_destination);
     let web_page_destination = tollkeeper::descriptions::Destination::new("localhost", 80, "/");
     let web_page_gate = create_simple_gate("web_page_gate".into(), web_page_destination);
-    let gates = vec![json_api_gate, web_page_gate];
+    let web_page_gate_ext_destination =
+        tollkeeper::descriptions::Destination::new("example.com", 80, "/");
+    let web_page_gate_ext =
+        create_simple_gate("web_page_gate_ext".into(), web_page_gate_ext_destination);
+    let gates = vec![json_api_gate, web_page_gate, web_page_gate_ext];
     let secret_key_provider =
         tollkeeper::signatures::InMemorySecretKeyProvider::new(b"Secret key".into());
     let secret_key_provider = Box::new(secret_key_provider);

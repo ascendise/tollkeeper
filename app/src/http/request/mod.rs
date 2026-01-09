@@ -7,31 +7,23 @@ pub struct Request {
     request_target: String,
     absolute_target: url::Url,
     headers: Headers,
-    body: Option<Box<dyn Body>>,
+    body: Body,
 }
 impl Request {
     pub fn new(
         method: Method,
         request_target: impl Into<String>,
         headers: Headers,
+        body: Body,
     ) -> Result<Self, BadRequestError> {
-        Self::create(method, request_target.into(), headers, None)
-    }
-
-    pub fn with_body(
-        method: Method,
-        request_target: impl Into<String>,
-        headers: Headers,
-        body: Box<dyn Body>,
-    ) -> Result<Self, BadRequestError> {
-        Self::create(method, request_target.into(), headers, Some(body))
+        Self::create(method, request_target.into(), headers, body)
     }
 
     fn create(
         method: Method,
         request_target: String,
         headers: Headers,
-        body: Option<Box<dyn Body>>,
+        body: Body,
     ) -> Result<Self, BadRequestError> {
         let absolute_target = Self::resolve_absolute_target(&request_target, &headers)?;
         let request = Self {
@@ -95,7 +87,7 @@ impl Request {
         &self.headers
     }
 
-    pub fn body(&mut self) -> &mut Option<Box<dyn Body>> {
+    pub fn body(&mut self) -> &mut Body {
         &mut self.body
     }
 
@@ -108,8 +100,7 @@ impl Request {
     }
 
     /// Turns [Request] into an HTTP representation
-    /// Consumes [self] to avoid having two copies of the body
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub fn as_bytes(&mut self) -> Vec<u8> {
         let method = self.method();
         let request_target = self.request_target();
         let http_version = self.http_version();
@@ -119,11 +110,8 @@ impl Request {
             method, request_target, http_version, headers
         );
         let mut raw_data = Vec::from(http_message.as_bytes());
-        if self.body.is_some() {
-            let mut body = self.body.unwrap();
-            let mut data = String::new();
-            body.read_to_string(&mut data).unwrap();
-            raw_data.extend(data.as_bytes());
+        if let Body::Buffer(body) = self.body() {
+            raw_data.extend(body.data());
         }
         raw_data
     }

@@ -4,6 +4,7 @@ use crate::http::{self, Parse};
 use indexmap::IndexMap;
 use pretty_assertions::assert_eq;
 use std::collections::VecDeque;
+use std::io::Read;
 use test_case::test_case;
 
 #[test]
@@ -49,15 +50,14 @@ pub fn parse_should_read_http_request_with_body() {
     let expected_headers = http::Headers::new(expected_headers);
     let expected_headers = Headers::new(expected_headers).unwrap();
     assert_eq!(&expected_headers, request.headers());
-    let mut content = String::new();
-    match request.body() {
-        Some(b) => b
-            .read_to_string(&mut content)
-            .expect("Something bad happened while trying to read body"),
-        None => panic!("No body found"),
-    };
-    let expected_content = "Hello, World!\r\n";
-    assert_eq!(expected_content, content);
+    if let http::Body::Buffer(b) = request.body() {
+        let mut content = String::new();
+        b.read_to_string(&mut content).unwrap();
+        let expected_content = "Hello, World!\r\n";
+        assert_eq!(expected_content, content);
+    } else {
+        panic!("No body found");
+    }
 }
 
 #[test_case(String::from("Hello") ; "Hello")]

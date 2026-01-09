@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display};
+use std::{error::Error, fmt::Display, io::Read};
 
 use crate::http;
 #[cfg(test)]
@@ -20,10 +20,16 @@ impl ReadJson for http::Request {
         }
         let content_length = self.headers().content_length().unwrap_or(0);
         let mut json = vec![0; content_length];
-        let body = self.body().as_mut().ok_or(ReadJsonError::NonJsonData)?;
-        body.read_exact(&mut json).or(Err(ReadJsonError::IoError))?;
-        let json = serde_json::from_reader(json.as_slice()).or(Err(ReadJsonError::NonJsonData))?;
-        Ok(json)
+        if let http::Body::Buffer(buffer) = self.body() {
+            buffer
+                .read_exact(&mut json)
+                .or(Err(ReadJsonError::IoError))?;
+            let json: serde_json::Value =
+                serde_json::from_slice(json.as_slice()).or(Err(ReadJsonError::NonJsonData))?;
+            Ok(json)
+        } else {
+            Err(ReadJsonError::NonJsonData)
+        }
     }
 }
 

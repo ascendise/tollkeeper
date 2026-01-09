@@ -122,7 +122,7 @@ impl Stamp {
         }
     }
 
-    /// Returns ```true``` if hash has correct amount of zero bits
+    /// Returns `true` if hash has correct amount of zero bits
     pub fn is_valid(&self) -> bool {
         let mut sha1 = sha1::Sha1::new();
         sha1.update(self.to_string().into_bytes());
@@ -152,7 +152,7 @@ impl Stamp {
         self.bits
     }
 
-    /// ```YYMMDDhhmmss``` format date the stamp was created at. Used for expiry check
+    /// `YYMMDDhhmmss` format date the stamp was created at. Used for expiry check
     pub fn date(&self) -> &Timestamp {
         &self.date
     }

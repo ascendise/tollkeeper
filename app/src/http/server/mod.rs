@@ -4,6 +4,8 @@ mod tests;
 
 use cancellation_token::CancelReceiver;
 
+use crate::http::Body;
+
 use super::{
     parsing,
     request::{Method, Request},
@@ -148,7 +150,7 @@ impl<T: HttpServe> TcpServe for T {
     fn serve_tcp(&self, stream: net::TcpStream) {
         match self::handle_incoming_request(self, stream.try_clone().unwrap()) {
             Ok(_) => (),
-            Err(_) => send_request(&stream, Response::bad_request()),
+            Err(_) => send_response(&stream, Response::bad_request()),
         }
     }
 }
@@ -159,15 +161,28 @@ fn handle_incoming_request(
     let mut write_stream = stream.try_clone().unwrap();
     let reader = io::BufReader::new(stream);
     let request = Request::parse(reader)?;
-    let response = match http_serve.serve_http(&write_stream.peer_addr().unwrap(), request) {
+    let mut response = match http_serve.serve_http(&write_stream.peer_addr().unwrap(), request) {
         Ok(res) => res,
         Err(_) => Response::internal_server_error(),
     };
-    write_stream.write_all(&response.into_bytes()).unwrap();
+    let response_raw = response.as_bytes();
+    println!(
+        "Sending Response: \r\n{}",
+        String::from_utf8(response_raw.clone()).unwrap()
+    );
+    write_stream.write_all(&response_raw).unwrap();
+    if let Body::Stream(body) = response.body() {
+        println!("(Chunked Body)");
+        while let Some(chunk) = body.read_chunk() {
+            write_stream.write_all(chunk.content()).unwrap();
+            println!("{}", String::from_utf8(chunk.content().into()).unwrap());
+        }
+    }
     Ok(())
 }
-fn send_request(mut stream: &net::TcpStream, response: Response) {
-    stream.write_all(&response.into_bytes()).unwrap();
+fn send_response(mut stream: &net::TcpStream, mut response: Response) {
+    let response = &response.as_bytes();
+    stream.write_all(response).unwrap();
 }
 
 /// Return this error in case an unrecoverable error happened

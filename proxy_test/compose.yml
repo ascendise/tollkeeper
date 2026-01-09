@@ -9,4 +9,4 @@ services:
       - 9100:9100 # Payment API
       - 8080:80 # Direct access to nginx (circumvents tollkeeper)
     volumes:
-      - ../app/templates/:/usr/local/bin/tollkeeper/templates
+      - ../app/templates/:/usr/local/bin/app/templates

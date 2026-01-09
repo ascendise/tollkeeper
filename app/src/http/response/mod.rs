@@ -11,14 +11,14 @@ pub struct Response {
     status_code: StatusCode,
     reason_phrase: Option<String>,
     headers: Headers,
-    body: Option<Box<dyn Body>>,
+    body: Body,
 }
 impl Response {
     pub fn new(
         status_code: StatusCode,
         reason_phrase: Option<String>,
         headers: Headers,
-        body: Option<Box<dyn Body>>,
+        body: Body,
     ) -> Self {
         Self {
             status_code,
@@ -44,13 +44,12 @@ impl Response {
         &self.headers
     }
 
-    pub fn body(&mut self) -> Option<&mut Box<dyn Body>> {
-        self.body.as_mut()
+    pub fn body(&mut self) -> &mut Body {
+        &mut self.body
     }
 
     /// Turns [Response] into an HTTP representation
-    /// Consumes [self] to avoid having two copies of the body
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub fn as_bytes(&mut self) -> Vec<u8> {
         let http_version = self.http_version();
         let status_code: isize = self.status_code as isize;
         let reason_phrase = match &self.reason_phrase {
@@ -62,14 +61,11 @@ impl Response {
             "{} {} {}\r\n{}\r\n",
             http_version, status_code, reason_phrase, headers
         );
-        let mut raw_data = Vec::from(http_message.as_bytes());
-        if let Some(len) = self.headers.content_length() {
-            let mut buffer = vec![0; len];
-            let mut body = self.body.unwrap();
-            body.read_exact(&mut buffer).unwrap();
-            raw_data.extend(buffer);
-        };
-        raw_data
+        let mut raw_response = Vec::from(http_message.as_bytes());
+        if let Body::Buffer(buf) = self.body() {
+            raw_response.extend(buf.data());
+        }
+        raw_response
     }
 
     pub fn not_found() -> Self {
@@ -77,7 +73,7 @@ impl Response {
             StatusCode::NotFound,
             Some("Not Found".into()),
             Headers::empty(),
-            None,
+            Body::None,
         )
     }
 
@@ -86,7 +82,7 @@ impl Response {
             StatusCode::MethodNotAllowed,
             Some("Method Not Allowed".into()),
             Headers::empty(),
-            None,
+            Body::None,
         )
     }
 
@@ -95,7 +91,7 @@ impl Response {
             StatusCode::InternalServerError,
             Some("Internal Server Error".into()),
             Headers::empty(),
-            None,
+            Body::None,
         )
     }
 
@@ -104,11 +100,11 @@ impl Response {
             StatusCode::BadRequest,
             Some("Bad Request".into()),
             Headers::empty(),
-            None,
+            Body::None,
         )
     }
 
-    pub fn payment_required(headers: Headers, body: Option<Box<dyn Body>>) -> Self {
+    pub fn payment_required(headers: Headers, body: Body) -> Self {
         Self::new(
             StatusCode::PaymentRequired,
             Some("Payment Required".into()),
@@ -237,6 +233,9 @@ impl Headers {
     }
     pub fn content_type(&self) -> Option<&str> {
         self.0.get("Content-Type")
+    }
+    pub fn transfer_encoding(&self) -> Option<&str> {
+        self.0.get("Transfer-Encoding")
     }
     pub fn extension(&self, key: &str) -> Option<&str> {
         self.0.get(key)

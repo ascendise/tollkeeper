@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io::Write;
@@ -13,7 +12,7 @@ use tollkeeper::Tollkeeper;
 use crate::data_formats::{self, AsHalJson, FromHttpHeader};
 use crate::http::request::Request;
 use crate::http::response::Response;
-use crate::http::{self, Body, Parse};
+use crate::http::{self, Parse};
 use crate::templates::{SerializedData, TemplateRenderer};
 use crate::{config, payment};
 
@@ -43,15 +42,14 @@ impl ProxyServe {
 
     fn toll_to_json_response(&self, toll: &Toll) -> Response {
         let json = toll.as_hal_json(self.config.base_url());
-        let data: VecDeque<u8> = json.to_string().into_bytes().into();
+        let data = json.to_string();
         let content_length = data.len().to_string();
-        let body = http::StreamBody::new(data);
-        let body = Box::new(body) as Box<dyn Body>;
+        let body = http::Body::from_string(data);
         let mut headers = http::Headers::empty();
         headers.insert("Content-Type", "application/hal+json");
         headers.insert("Content-Length", content_length);
         let headers = http::response::Headers::new(headers);
-        Response::payment_required(headers, Some(body))
+        Response::payment_required(headers, body)
     }
 
     fn toll_to_html_response(&self, toll: &Toll) -> Result<Response, InternalServerError> {
@@ -65,10 +63,9 @@ impl ProxyServe {
         headers.insert("Content-Type", "text/html");
         headers.insert("Content-Length", page_html.len().to_string());
         let headers = http::response::Headers::new(headers);
-        let page_html_stream: VecDeque<u8> = page_html.into_bytes().into();
-        let body = http::StreamBody::new(page_html_stream);
-        let body = Box::new(body) as Box<dyn Body>;
-        Ok(Response::payment_required(headers, Some(body)))
+        let page_html_stream = page_html;
+        let body = http::Body::from_string(page_html_stream);
+        Ok(Response::payment_required(headers, body))
     }
 }
 impl HttpServe for ProxyServe {
@@ -132,10 +129,10 @@ impl ProxyServiceImpl {
         let visa = payment::Visa::from_http_header(visa_header).ok()?;
         Some(visa)
     }
-    fn send_request_to_proxy(req: Request) -> Response {
+    fn send_request_to_proxy(mut req: Request) -> Response {
         let addr = Self::get_host(&req);
         let mut target_conn = net::TcpStream::connect(&addr).unwrap();
-        target_conn.write_all(&req.into_bytes()).unwrap();
+        target_conn.write_all(&req.as_bytes()).unwrap();
 
         Response::parse(target_conn.try_clone().unwrap()).unwrap()
     }

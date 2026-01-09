@@ -4,11 +4,11 @@ use std::{
 };
 
 use super::{util, ParseError};
-use crate::http::Parse;
 use crate::http::{
     self,
     request::{self, BadRequestError, *},
 };
+use crate::http::{Body, Parse};
 
 impl<T: Read + 'static> Parse<T> for Request {
     type Err = ParseError;
@@ -18,14 +18,20 @@ impl<T: Read + 'static> Parse<T> for Request {
         let headers = request::Headers::parse(&mut stream)?;
         let request = if headers.content_length().is_some() {
             stream.consume(2); //Consume additional newline for body
-            Request::with_body(
+            let content_length = headers.content_length();
+            Request::new(
                 request_line.method,
                 request_line.request_target,
                 headers,
-                Box::new(http::StreamBody::new(stream)),
+                Body::from_stream(Box::new(stream), content_length),
             )
         } else {
-            Request::new(request_line.method, request_line.request_target, headers)
+            Request::new(
+                request_line.method,
+                request_line.request_target,
+                headers,
+                Body::None,
+            )
         }?;
         Ok(request)
     }

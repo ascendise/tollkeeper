@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use std::{collections::VecDeque, error::Error, fmt::Display, str::FromStr, sync::Arc};
+use std::{error::Error, fmt::Display, str::FromStr, sync::Arc};
 
 use base64::{prelude::BASE64_STANDARD, Engine};
 use tollkeeper::signatures::{Base64, Signed};
@@ -72,17 +72,17 @@ impl PayTollServe {
         visa: Visa,
     ) -> Result<http::Response, http::server::InternalServerError> {
         let visa_json = visa.as_hal_json(self.config.base_url());
-        let visa_json: VecDeque<u8> = visa_json.to_string().into_bytes().into();
+        let visa_json = visa_json.to_string();
         let mut headers = cors_headers("POST");
         headers.insert("Content-Type", "application/hal+json");
         headers.insert("Content-Length", visa_json.len().to_string());
         let headers = http::response::Headers::new(headers);
-        let body = http::StreamBody::new(visa_json);
+        let body = http::Body::from_string(visa_json);
         let response = http::Response::new(
             http::response::StatusCode::OK,
             Some("OK".into()),
             headers,
-            Some(Box::new(body)),
+            body,
         );
         Ok(response)
     }
@@ -92,24 +92,19 @@ impl PayTollServe {
         payment_error: Box<PaymentError>,
     ) -> Result<http::Response, http::server::InternalServerError> {
         let error_json = payment_error.as_hal_json(self.config.base_url());
-        let error_json: VecDeque<u8> = error_json.to_string().into_bytes().into();
+        let error_json = error_json.to_string();
         let mut headers = cors_headers("POST");
         headers.insert("Content-Type", "application/hal+json");
         headers.insert("Content-Length", error_json.len().to_string());
         let headers = http::response::Headers::new(headers);
-        let body = http::StreamBody::new(error_json);
+        let body = http::Body::from_string(error_json);
         let status_code = match *payment_error {
             PaymentError::ChallengeFailed(_, _) => http::response::StatusCode::BadRequest,
             PaymentError::MismatchedRecipient(_, _) => http::response::StatusCode::BadRequest,
             PaymentError::InvalidSignature => http::response::StatusCode::UnprocessableContent,
             PaymentError::GatewayError => http::response::StatusCode::Conflict,
         };
-        let response = http::Response::new(
-            status_code,
-            Some("Bad Request".into()),
-            headers,
-            Some(Box::new(body)),
-        );
+        let response = http::Response::new(status_code, Some("Bad Request".into()), headers, body);
         Ok(response)
     }
 }
@@ -361,8 +356,12 @@ impl HttpServe for PayTollOptionsServe {
         headers.insert("Accept", "application/json");
         headers.insert("Allow", "POST");
         let headers = http::response::Headers::new(headers);
-        let response =
-            http::Response::new(http::response::StatusCode::NoContent, None, headers, None);
+        let response = http::Response::new(
+            http::response::StatusCode::NoContent,
+            None,
+            headers,
+            http::Body::None,
+        );
         Ok(response)
     }
 }

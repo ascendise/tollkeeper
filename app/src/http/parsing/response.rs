@@ -1,5 +1,5 @@
 use crate::http::response::{self, Response, StatusCode};
-use crate::http::{self, Parse, StreamBody};
+use crate::http::{self, Body, Parse};
 use std::io::{self};
 use std::io::{BufRead, BufReader};
 
@@ -12,25 +12,29 @@ impl<T: io::Read + 'static> Parse<T> for Response {
         let mut stream = BufReader::new(stream);
         let status_line = StatusLine::parse(&mut stream)?;
         let headers = response::Headers::parse(&mut stream)?;
-        let response = if headers.content_length().is_some() {
+        let response = if has_body(&headers) {
             stream.consume(2); //Consume additional newline for body
-            let body = Box::new(StreamBody::new(stream));
+            let body = Body::from_stream(Box::new(stream), headers.content_length());
             Response::new(
                 status_line.status_code,
                 status_line.reason_phrase,
                 headers,
-                Some(body),
+                body,
             )
         } else {
             Response::new(
                 status_line.status_code,
                 status_line.reason_phrase,
                 headers,
-                None,
+                Body::None,
             )
         };
         Ok(response)
     }
+}
+
+fn has_body(headers: &response::Headers) -> bool {
+    headers.content_length().is_some() || headers.transfer_encoding().unwrap_or("") == "chunked"
 }
 
 struct StatusLine {
