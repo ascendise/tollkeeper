@@ -5,6 +5,7 @@ use tollkeeper::Tollkeeper;
 
 use crate::templates::{handlebars::HandlebarTemplateRenderer, FileTemplateStore};
 
+#[allow(dead_code)]
 mod config;
 mod data_formats;
 #[allow(dead_code)]

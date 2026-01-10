@@ -16,7 +16,7 @@ destination = "example.com:80/"
 orders = [ "&hash_cash_order" ]
 
 [orders.hash_cash_order]
-descriptions = { kind = "Stub", is_match = true}
+descriptions = { kind = "Stub", config = {is_match = true}}
 access_policy = "Blacklist"
 toll_declaration: "Hashcash"
 
