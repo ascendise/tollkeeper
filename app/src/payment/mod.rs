@@ -7,7 +7,7 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 use tollkeeper::signatures::{Base64, Signed};
 
 use crate::{
-    config::{self, ServerConfig},
+    config::{self, Server},
     data_formats::{self, AsHalJson, AsHttpHeader},
     http::{self, request::body_reader::ReadJson, server::HttpServe},
     proxy::{self},
@@ -15,7 +15,7 @@ use crate::{
 
 pub fn create_pay_toll_endpoint(
     path: &str,
-    config: ServerConfig,
+    config: Server,
     payment_service: Box<dyn PaymentService + Send + Sync>,
 ) -> Vec<http::server::Endpoint> {
     let pay_toll_handler = PayTollServe::new(config, payment_service);
@@ -33,7 +33,7 @@ pub fn create_pay_toll_endpoint(
 }
 
 pub struct PayTollServe {
-    config: config::ServerConfig,
+    config: config::Server,
     payment_service: Box<dyn PaymentService + Send + Sync>,
 }
 impl HttpServe for PayTollServe {
@@ -58,7 +58,7 @@ impl HttpServe for PayTollServe {
 }
 impl PayTollServe {
     pub fn new(
-        config: config::ServerConfig,
+        config: config::Server,
         payment_service: Box<dyn PaymentService + Send + Sync>,
     ) -> Self {
         Self {

@@ -17,7 +17,7 @@ mod templates;
 fn main() -> Result<(), io::Error> {
     let base_url = url::Url::parse("http://localhost:9100/").unwrap();
     thread::scope(|s| {
-        let proxy_config = config::ServerConfig::new(base_url);
+        let proxy_config = config::Server::new(base_url);
         let api_config = proxy_config.clone();
         let tollkeeper = Arc::new(create_tollkeeper());
         let proxy_tollkeeper = tollkeeper.clone();
@@ -86,7 +86,7 @@ fn create_simple_gate(
 }
 
 fn create_proxy_server(
-    server_config: config::ServerConfig,
+    server_config: config::Server,
     tollkeeper: Arc<Tollkeeper>,
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
     let listener = net::TcpListener::bind("0.0.0.0:9000")?;
@@ -106,7 +106,7 @@ fn create_proxy_server(
 }
 
 fn create_api_server(
-    server_config: config::ServerConfig,
+    server_config: config::Server,
     tollkeeper: Arc<Tollkeeper>,
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
     let listener = net::TcpListener::bind("0.0.0.0:9100")?;

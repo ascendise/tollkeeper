@@ -22,14 +22,14 @@ use super::http::server::*;
 mod tests;
 
 pub struct ProxyServe {
-    config: config::ServerConfig,
+    config: config::Server,
     proxy_service: Box<dyn ProxyService + Send + Sync>,
     template_renderer: Box<dyn TemplateRenderer + Send + Sync>,
 }
 
 impl ProxyServe {
     pub fn new(
-        config: config::ServerConfig,
+        config: config::Server,
         proxy_service: Box<dyn ProxyService + Send + Sync>,
         template_renderer: Box<dyn TemplateRenderer + Send + Sync>,
     ) -> Self {

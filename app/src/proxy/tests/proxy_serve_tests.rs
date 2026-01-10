@@ -30,7 +30,7 @@ fn setup() -> ProxyServe {
     let create_response = Box::new(create_response);
     let stub_proxy_service = StubProxyService::new(create_response);
     let server_config =
-        config::ServerConfig::new(url::Url::parse("http://guard.tollkeeper.ch/").unwrap());
+        config::Server::new(url::Url::parse("http://guard.tollkeeper.ch/").unwrap());
     let template_store = InMemoryTemplateStore::new(HashMap::new());
     let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
     ProxyServe::new(
@@ -60,7 +60,7 @@ fn setup_with_failing_stub(templates: Option<HashMap<String, String>>) -> ProxyS
     let create_error = Box::new(create_error);
     let stub_proxy_service = StubProxyService::new(create_error);
     let server_config =
-        config::ServerConfig::new(url::Url::parse("http://guard.tollkeeper.ch/").unwrap());
+        config::Server::new(url::Url::parse("http://guard.tollkeeper.ch/").unwrap());
     let templates = templates.unwrap_or_default();
     let template_store = InMemoryTemplateStore::new(templates);
     let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));

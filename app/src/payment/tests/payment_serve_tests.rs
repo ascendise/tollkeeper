@@ -23,7 +23,7 @@ fn setup(
     >,
 ) -> PayTollServe {
     let base_url = setup_server_url();
-    let config = config::ServerConfig::new(base_url);
+    let config = config::Server::new(base_url);
     let stub_payment_service = StubPaymentService::new(result);
     PayTollServe::new(config, Box::new(stub_payment_service))
 }

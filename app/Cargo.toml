@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 indexmap = "2.9.0"
-url = "2.5.4"
+url = { version = "2.5.4", features = ["serde"] }
 tollkeeper = { path = "../lib", features = ["serde"] }
 base64 = "0.22.1"
 serde_json = { version = "1.0.141", features = ["preserve_order"]}
