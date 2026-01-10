@@ -41,7 +41,7 @@ impl ProxyServe {
     }
 
     fn toll_to_json_response(&self, toll: &Toll) -> Response {
-        let json = toll.as_hal_json(self.config.base_url());
+        let json = toll.as_hal_json(self.config.base_api_url());
         let data = json.to_string();
         let content_length = data.len().to_string();
         let body = http::Body::from_string(data);
@@ -53,7 +53,7 @@ impl ProxyServe {
     }
 
     fn toll_to_html_response(&self, toll: &Toll) -> Result<Response, InternalServerError> {
-        let base_url = self.config.base_url();
+        let base_url = self.config.base_api_url();
         let toll = toll.as_hal_json(base_url);
         let page_html = self
             .template_renderer

@@ -71,7 +71,7 @@ impl PayTollServe {
         &self,
         visa: Visa,
     ) -> Result<http::Response, http::server::InternalServerError> {
-        let visa_json = visa.as_hal_json(self.config.base_url());
+        let visa_json = visa.as_hal_json(self.config.base_api_url());
         let visa_json = visa_json.to_string();
         let mut headers = cors_headers("POST");
         headers.insert("Content-Type", "application/hal+json");
@@ -91,7 +91,7 @@ impl PayTollServe {
         &self,
         payment_error: Box<PaymentError>,
     ) -> Result<http::Response, http::server::InternalServerError> {
-        let error_json = payment_error.as_hal_json(self.config.base_url());
+        let error_json = payment_error.as_hal_json(self.config.base_api_url());
         let error_json = error_json.to_string();
         let mut headers = cors_headers("POST");
         headers.insert("Content-Type", "application/hal+json");
