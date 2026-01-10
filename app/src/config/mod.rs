@@ -74,6 +74,7 @@ impl Gate {
 }
 
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+#[serde(untagged)]
 pub enum Ref<T> {
     Value(T),
     Id(String),

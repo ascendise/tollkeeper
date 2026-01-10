@@ -14,18 +14,18 @@ base_api_url = "http://localhost:9100/"
 
 [gates.json_api_gate]
 destination = "wtfismyip.com:80/json"
-orders = [{Id = "hash_cash_order"}]
+orders = ["hash_cash_order"]
 
 [gates.local_proxy_gate]
 destination = "localhost:80/"
-orders = [{Id = "hash_cash_order"}]
+orders = ["hash_cash_order"]
 
 [gates.ext_proxy_gate]
 destination = "example.com:80/"
-orders = [{Id = "hash_cash_order"}]
+orders = ["hash_cash_order"]
 
 [orders.hash_cash_order]
-descriptions = [{Value={kind = "Stub", config = {is_match = "true"}}}]
+descriptions = [{kind = "Stub", config = {is_match = "true"}}]
 access_policy = "Blacklist"
 toll_declaration = "Hashcash"
 "#;
