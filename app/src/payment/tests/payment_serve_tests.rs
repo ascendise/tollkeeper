@@ -22,8 +22,10 @@ fn setup(
         dyn Fn() -> Result<payment::Visa, Box<payment::PaymentError>> + Send + Sync + 'static,
     >,
 ) -> PayTollServe {
-    let base_url = setup_server_url();
-    let config = config::ServerConfig::new(base_url);
+    let base_api_url = setup_server_url();
+    let config = config::Api {
+        base_url: base_api_url,
+    };
     let stub_payment_service = StubPaymentService::new(result);
     PayTollServe::new(config, Box::new(stub_payment_service))
 }

@@ -7,7 +7,7 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 use tollkeeper::signatures::{Base64, Signed};
 
 use crate::{
-    config::{self, ServerConfig},
+    config::{self, Api},
     data_formats::{self, AsHalJson, AsHttpHeader},
     http::{self, request::body_reader::ReadJson, server::HttpServe},
     proxy::{self},
@@ -15,7 +15,7 @@ use crate::{
 
 pub fn create_pay_toll_endpoint(
     path: &str,
-    config: ServerConfig,
+    config: Api,
     payment_service: Box<dyn PaymentService + Send + Sync>,
 ) -> Vec<http::server::Endpoint> {
     let pay_toll_handler = PayTollServe::new(config, payment_service);
@@ -33,7 +33,7 @@ pub fn create_pay_toll_endpoint(
 }
 
 pub struct PayTollServe {
-    config: config::ServerConfig,
+    config: config::Api,
     payment_service: Box<dyn PaymentService + Send + Sync>,
 }
 impl HttpServe for PayTollServe {
@@ -58,7 +58,7 @@ impl HttpServe for PayTollServe {
 }
 impl PayTollServe {
     pub fn new(
-        config: config::ServerConfig,
+        config: config::Api,
         payment_service: Box<dyn PaymentService + Send + Sync>,
     ) -> Self {
         Self {
@@ -71,7 +71,7 @@ impl PayTollServe {
         &self,
         visa: Visa,
     ) -> Result<http::Response, http::server::InternalServerError> {
-        let visa_json = visa.as_hal_json(self.config.base_url());
+        let visa_json = visa.as_hal_json(&self.config.base_url);
         let visa_json = visa_json.to_string();
         let mut headers = cors_headers("POST");
         headers.insert("Content-Type", "application/hal+json");
@@ -91,7 +91,7 @@ impl PayTollServe {
         &self,
         payment_error: Box<PaymentError>,
     ) -> Result<http::Response, http::server::InternalServerError> {
-        let error_json = payment_error.as_hal_json(self.config.base_url());
+        let error_json = payment_error.as_hal_json(&self.config.base_url);
         let error_json = error_json.to_string();
         let mut headers = cors_headers("POST");
         headers.insert("Content-Type", "application/hal+json");
@@ -104,7 +104,13 @@ impl PayTollServe {
             PaymentError::InvalidSignature => http::response::StatusCode::UnprocessableContent,
             PaymentError::GatewayError => http::response::StatusCode::Conflict,
         };
-        let response = http::Response::new(status_code, Some("Bad Request".into()), headers, body);
+
+        let response = http::Response::new(
+            status_code,
+            Some(status_code.reason_phrase().to_string()),
+            headers,
+            body,
+        );
         Ok(response)
     }
 }

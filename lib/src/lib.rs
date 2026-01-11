@@ -206,7 +206,8 @@ impl Gate {
 
 /// Defines if [gates](Gate) suspects are allowed or denied on matching [Description]
 /// [AccessPolicy::Whitelist]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AccessPolicy {
     Whitelist,
     Blacklist,

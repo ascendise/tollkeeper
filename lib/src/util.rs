@@ -2,7 +2,7 @@ pub trait DateTimeProvider {
     fn now(&self) -> chrono::DateTime<chrono::Utc>;
 }
 
-pub struct DateTimeProviderImpl {}
+pub struct DateTimeProviderImpl;
 impl DateTimeProvider for DateTimeProviderImpl {
     fn now(&self) -> chrono::DateTime<chrono::Utc> {
         chrono::Utc::now()

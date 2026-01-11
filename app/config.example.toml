@@ -1,0 +1,27 @@
+secret_key_provider = { InMemory = "snowball2" }
+
+#[server]
+#proxy_port = 
+#api_port =
+
+[api]
+base_url = "http://localhost:8080/"
+    
+[gates]
+
+[gates.json_api_gate] 
+destination = "http://wtfismyip.com/json"
+orders = [ "hash_cash_order" ]
+
+[gates.local_proxy_gate]
+destination = "http://localhost/"
+orders = ["hash_cash_order"]
+
+[gates.ext_proxy_gate]
+destination = "http://example.com/"
+orders = ["hash_cash_order"]
+
+[orders.hash_cash_order]
+descriptions = [{Stub = {is_match = true}}]
+access_policy = "Blacklist"
+toll_declaration = { Hashcash = {expiry = "1h", difficulty = 8}}

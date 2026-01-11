@@ -5,8 +5,9 @@ services:
       context: "../"
       dockerfile: "./proxy_test/Dockerfile" 
     ports: 
-      - 80:9000 # Proxy
-      - 9100:9100 # Payment API
-      - 8080:80 # Direct access to nginx (circumvents tollkeeper)
+      - 80:8000 # Proxy
+      - 8080:8080 # Payment API
+      - 1337:80 # Direct access to nginx (circumvents tollkeeper)
     volumes:
       - ../app/templates/:/usr/local/bin/app/templates
+      - ../app/config.example.toml/:/usr/local/bin/app/config.example.toml

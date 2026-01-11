@@ -9,11 +9,12 @@ const TEMPLATES_DIR: &str = "templates";
 
 fn main() {
     println!("Copy package(app) assets to target");
-    let target_dir_path = env::var("OUT_DIR").unwrap();
+    let target_dir_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let cargo_manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let templates_dir: PathBuf = [&cargo_manifest_dir, TEMPLATES_DIR].iter().collect();
     let base_path = PathBuf::from(cargo_manifest_dir);
-    copy_dir(&templates_dir, &PathBuf::from(target_dir_path), &base_path);
+    copy_dir(&templates_dir, &target_dir_path, &base_path);
+    copy_file(&PathBuf::from("config.example.toml"), &target_dir_path);
 }
 
 fn copy_dir(src_dir_path: &Path, target_dir_path: &Path, base_path: &Path) {
@@ -45,4 +46,9 @@ fn copy_dir(src_dir_path: &Path, target_dir_path: &Path, base_path: &Path) {
             fs::copy(src_file, target_file).unwrap();
         }
     }
+}
+
+fn copy_file(src_path: &Path, target_dir: &Path) {
+    let target_path: PathBuf = [target_dir, src_path].iter().collect();
+    fs::copy(src_path, target_path).unwrap();
 }
