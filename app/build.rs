@@ -14,7 +14,7 @@ fn main() {
     let templates_dir: PathBuf = [&cargo_manifest_dir, TEMPLATES_DIR].iter().collect();
     let base_path = PathBuf::from(cargo_manifest_dir);
     copy_dir(&templates_dir, &target_dir_path, &base_path);
-    copy_file(&PathBuf::from("config.example.toml"), &target_dir_path);
+    copy_file(&PathBuf::from("config.toml"), &target_dir_path);
 }
 
 fn copy_dir(src_dir_path: &Path, target_dir_path: &Path, base_path: &Path) {

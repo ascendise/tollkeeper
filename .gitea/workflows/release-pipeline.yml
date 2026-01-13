@@ -1,0 +1,25 @@
+name: release-pipeline
+on:
+  push:
+    tags:
+      - "*"
+env:
+  DOCKER_REPO: dev.docker.ascendise.ch/ascendise/tollkeeper
+
+jobs:
+  docker-push:
+    env:
+      VERSION_TAG: ${{env.DOCKER_REPO}}:${{gitea.ref_name}}
+      LATEST_TAG: ${{env.DOCKER_REPO}}:latest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Docker Registry
+        run: docker login -u ${{secrets.DOCKER_USER}} -p ${{secrets.DOCKER_PASS}} dev.docker.ascendise.ch
+      - name: Checkout project
+        uses: actions/checkout@v3
+      - name: Build docker image
+        run: docker build . -t $VERSION_TAG -t $LATEST_TAG
+      - name: Push docker image
+        run: docker push $VERSION_TAG 
+      - name: Push latest tag
+        run: docker push $LATEST_TAG

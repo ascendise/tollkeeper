@@ -17,7 +17,11 @@ mod templates;
 fn main() -> Result<(), io::Error> {
     thread::scope(|s| {
         let config = read_config();
-        let tollkeeper = Arc::new(config.create_tollkeeper().unwrap());
+        let tollkeeper = Arc::new(
+            config
+                .create_tollkeeper()
+                .expect("Failed to create tollkeeper"),
+        );
         let proxy_tollkeeper = tollkeeper.clone();
         let proxy_config = config.api.clone();
         let server_config = config.server();
@@ -25,10 +29,11 @@ fn main() -> Result<(), io::Error> {
         s.spawn(move || {
             println!("Starting Proxy Socket: {proxy_port}");
             let (mut proxy_server, proxy_server_cancellation) =
-                create_proxy_server(proxy_port, proxy_config, proxy_tollkeeper).unwrap();
+                create_proxy_server(proxy_port, proxy_config, proxy_tollkeeper)
+                    .expect("Error during startup (proxy)");
             proxy_server
                 .start_listening(proxy_server_cancellation)
-                .unwrap();
+                .expect("Error during listening (proxy)");
         });
         let api_tollkeeper = tollkeeper.clone();
         let api_config = config.api.clone();
@@ -36,19 +41,21 @@ fn main() -> Result<(), io::Error> {
         s.spawn(move || {
             println!("Starting Api Socket: {api_port}");
             let (mut api_server, api_server_cancellation) =
-                create_api_server(api_port, api_config, api_tollkeeper).unwrap();
-            api_server.start_listening(api_server_cancellation).unwrap();
+                create_api_server(api_port, api_config, api_tollkeeper)
+                    .expect("Error during startup (api)");
+            api_server
+                .start_listening(api_server_cancellation)
+                .expect("Error during listening (proxy)");
         });
     });
     Ok(())
 }
 
 fn read_config() -> config::Config {
-    let config_path = std::env::current_dir()
-        .unwrap()
-        .join("app/config.example.toml");
+    let config_path = std::env::current_dir().unwrap().join("app/config.toml");
     println!("Read config from {}", config_path.display());
-    let config = fs::read_to_string(config_path).unwrap();
+    let config = fs::read_to_string(config_path.clone())
+        .unwrap_or_else(|_| panic!("Cannot find config file at {}", config_path.display()));
     config::Config::from_toml(&config).unwrap()
 }
 
