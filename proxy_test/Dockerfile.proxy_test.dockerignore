@@ -1,0 +1,7 @@
+.git
+.gitea
+target
+Dockerfile
+.dockerignore
+Dockerfile.proxy_test
+proxy_test.dockerignore

@@ -1,9 +1,11 @@
 # Service for testing tollkeeper. Deploys a simple website protected by tollkeeper
 services:
   proxy_test:
+    environment:
+      RUST_LOG: trace
     build: 
       context: "../"
-      dockerfile: "./proxy_test/Dockerfile" 
+      dockerfile: "./proxy_test/Dockerfile.proxy_test" 
     ports: 
       - 80:8000 # Proxy
       - 8080:8080 # Payment API

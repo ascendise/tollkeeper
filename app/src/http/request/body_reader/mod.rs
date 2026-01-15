@@ -20,7 +20,7 @@ impl ReadJson for http::Request {
         }
         let content_length = self.headers().content_length().unwrap_or(0);
         let mut json = vec![0; content_length];
-        if let http::Body::Buffer(buffer) = self.body() {
+        if let http::Body::Buffer(buffer) = self.body_mut() {
             buffer
                 .read_exact(&mut json)
                 .or(Err(ReadJsonError::IoError))?;

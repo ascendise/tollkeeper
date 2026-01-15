@@ -50,7 +50,7 @@ pub fn parse_should_read_http_request_with_body() {
     let expected_headers = http::Headers::new(expected_headers);
     let expected_headers = Headers::new(expected_headers).unwrap();
     assert_eq!(&expected_headers, request.headers());
-    if let http::Body::Buffer(b) = request.body() {
+    if let http::Body::Buffer(b) = request.body_mut() {
         let mut content = String::new();
         b.read_to_string(&mut content).unwrap();
         let expected_content = "Hello, World!\r\n";

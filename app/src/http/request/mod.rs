@@ -87,8 +87,12 @@ impl Request {
         &self.headers
     }
 
-    pub fn body(&mut self) -> &mut Body {
+    pub fn body_mut(&mut self) -> &mut Body {
         &mut self.body
+    }
+
+    pub fn body(&self) -> &Body {
+        &self.body
     }
 
     pub fn matches_path(&self, path: &str) -> bool {
@@ -101,19 +105,36 @@ impl Request {
 
     /// Turns [Request] into an HTTP representation
     pub fn as_bytes(&mut self) -> Vec<u8> {
-        let method = self.method();
-        let request_target = self.request_target();
-        let http_version = self.http_version();
+        let request_line = self.request_line();
         let headers = self.headers();
-        let http_message = format!(
-            "{} {} {}\r\n{}\r\n",
-            method, request_target, http_version, headers
-        );
+        let http_message = format!("{request_line}\r\n{headers}\r\n",);
         let mut raw_data = Vec::from(http_message.as_bytes());
         if let Body::Buffer(body) = self.body() {
             raw_data.extend(body.data());
         }
         raw_data
+    }
+
+    fn request_line(&self) -> String {
+        let method = self.method();
+        let request_target = self.request_target();
+        let http_version = self.http_version();
+        format!("{method} {request_target} {http_version}")
+    }
+}
+impl Display for Request {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let request_line = self.request_line();
+        let headers = self.headers();
+        let body = match self.body() {
+            Body::Buffer(body) => {
+                let data = body.data().clone().into();
+                String::from_utf8(data).unwrap_or("(Non UTF8 Body)".into())
+            }
+            Body::Stream(_) => "(Chunked Body)".into(),
+            Body::None => "".into(),
+        };
+        write!(f, "{request_line}\r\n{headers}\r\n{body}")
     }
 }
 

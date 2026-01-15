@@ -2,6 +2,8 @@ use http::server::*;
 use proxy::{ProxyServe, ProxyServiceImpl};
 use std::{fs, io, net, sync::Arc, thread};
 use tollkeeper::Tollkeeper;
+use tracing::{event, span, Level};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::templates::{handlebars::HandlebarTemplateRenderer, FileTemplateStore};
 
@@ -15,6 +17,7 @@ mod proxy;
 mod templates;
 
 fn main() -> Result<(), io::Error> {
+    setup_logging();
     thread::scope(|s| {
         let config = read_config();
         let tollkeeper = Arc::new(
@@ -27,7 +30,8 @@ fn main() -> Result<(), io::Error> {
         let server_config = config.server();
         let proxy_port = server_config.proxy_port();
         s.spawn(move || {
-            println!("Starting Proxy Socket: {proxy_port}");
+            let _span = span!(Level::INFO, "[Proxy]").entered();
+            event!(Level::INFO, "Startup on Port {proxy_port}");
             let (mut proxy_server, proxy_server_cancellation) =
                 create_proxy_server(proxy_port, proxy_config, proxy_tollkeeper)
                     .expect("Error during startup (proxy)");
@@ -39,7 +43,8 @@ fn main() -> Result<(), io::Error> {
         let api_config = config.api.clone();
         let api_port = server_config.api_port();
         s.spawn(move || {
-            println!("Starting Api Socket: {api_port}");
+            let _span = span!(Level::INFO, "[API]").entered();
+            event!(Level::INFO, "Startup on Port {api_port}");
             let (mut api_server, api_server_cancellation) =
                 create_api_server(api_port, api_config, api_tollkeeper)
                     .expect("Error during startup (api)");
@@ -51,9 +56,21 @@ fn main() -> Result<(), io::Error> {
     Ok(())
 }
 
+fn setup_logging() {
+    let format = tracing_subscriber::fmt::layer()
+        .with_level(true)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_target(true);
+    tracing_subscriber::registry()
+        .with(format)
+        .with(tracing_subscriber::filter::EnvFilter::from_default_env())
+        .init();
+}
+
 fn read_config() -> config::Config {
     let config_path = std::env::current_dir().unwrap().join("app/config.toml");
-    println!("Read config from {}", config_path.display());
+    event!(Level::INFO, "Read config from {}", config_path.display());
     let config = fs::read_to_string(config_path.clone())
         .unwrap_or_else(|_| panic!("Cannot find config file at {}", config_path.display()));
     config::Config::from_toml(&config).unwrap()
@@ -67,7 +84,11 @@ fn create_proxy_server(
     let listener = net::TcpListener::bind(format!("0.0.0.0:{port}"))?;
     let proxy_service = ProxyServiceImpl::new(tollkeeper);
     let exe_root_dir = std::env::current_dir().unwrap().join("app/templates");
-    println!("Using templates located at: '{}'", exe_root_dir.display());
+    event!(
+        Level::INFO,
+        "Using templates located at: '{}'",
+        exe_root_dir.display()
+    );
     let template_store = FileTemplateStore::new(exe_root_dir);
     let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
     let proxy_handler = ProxyServe::new(

@@ -3,6 +3,7 @@ pub mod cancellation_token;
 mod tests;
 
 use cancellation_token::CancelReceiver;
+use tracing::{event, span, Level};
 
 use crate::http::Body;
 
@@ -49,10 +50,16 @@ impl Server {
                     Ok(result) => result.0,
                     Err(_) => continue,
                 };
-                s.spawn(|| {
-                    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                        self.handler.serve_tcp(stream);
+                let handler = &self.handler;
+                s.spawn(move || {
+                    let _span = span!(Level::INFO, "[HTTP]").entered();
+                    let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                        handler.serve_tcp(stream);
                     })); // Keep server alive when a request crashes handler
+                    match res {
+                        Ok(_) => event!(Level::TRACE, "Request handled exceptionless!"),
+                        Err(e) => event!(Level::ERROR, panic = ?e, "Request failed"),
+                    }
                 });
             }
         });
@@ -161,21 +168,26 @@ fn handle_incoming_request(
     let mut write_stream = stream.try_clone().unwrap();
     let reader = io::BufReader::new(stream);
     let request = Request::parse(reader)?;
+    event!(Level::INFO, "Incoming Request: \r\n{request}");
     let mut response = match http_serve.serve_http(&write_stream.peer_addr().unwrap(), request) {
         Ok(res) => res,
         Err(_) => Response::internal_server_error(),
     };
     let response_raw = response.as_bytes();
-    println!(
-        "Sending Response: \r\n{}",
-        String::from_utf8(response_raw.clone()).unwrap()
+    event!(
+        Level::INFO,
+        "Outgoing Response:  \r\n{response}",
+        response = String::from_utf8(response_raw.clone()).unwrap(),
     );
     write_stream.write_all(&response_raw).unwrap();
     if let Body::Stream(body) = response.body() {
-        println!("(Chunked Body)");
         while let Some(chunk) = body.read_chunk() {
             write_stream.write_all(chunk.content()).unwrap();
-            println!("{}", String::from_utf8(chunk.content().into()).unwrap());
+            event!(
+                Level::INFO,
+                "Chunked Body: \r\n{chunked_body}",
+                chunked_body = String::from_utf8(chunk.content().into()).unwrap()
+            );
         }
     }
     Ok(())
