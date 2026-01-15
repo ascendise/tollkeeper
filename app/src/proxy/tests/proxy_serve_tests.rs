@@ -10,6 +10,7 @@ use crate::http::request::Method;
 use crate::http::response::{self, StatusCode};
 use crate::http::server::HttpServe;
 use crate::http::{self, request, Body, Headers, Request};
+use crate::proxy::tests::{ProxyRequestCall, SpyProxyService};
 use crate::proxy::{Challenge, OrderId, ProxyServe};
 use crate::proxy::{PaymentRequiredError, Recipient, Toll};
 use crate::templates::{handlebars::HandlebarTemplateRenderer, InMemoryTemplateStore};
@@ -17,7 +18,7 @@ use test_case::test_case;
 
 use super::StubProxyService;
 
-fn setup() -> ProxyServe {
+fn setup_with_ok_stub() -> ProxyServe {
     fn create_response() -> Result<http::Response, PaymentRequiredError> {
         let response = http::Response::new(
             StatusCode::OK,
@@ -31,6 +32,7 @@ fn setup() -> ProxyServe {
     let stub_proxy_service = StubProxyService::new(create_response);
     let server_config = config::Api {
         base_url: url::Url::parse("http://guard.tollkeeper.ch/").unwrap(),
+        real_ip_header: None,
     };
     let template_store = InMemoryTemplateStore::new(HashMap::new());
     let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
@@ -62,6 +64,7 @@ fn setup_with_failing_stub(templates: Option<HashMap<String, String>>) -> ProxyS
     let stub_proxy_service = StubProxyService::new(create_error);
     let server_config = config::Api {
         base_url: url::Url::parse("http://guard.tollkeeper.ch/").unwrap(),
+        real_ip_header: None,
     };
     let templates = templates.unwrap_or_default();
     let template_store = InMemoryTemplateStore::new(templates);
@@ -73,6 +76,18 @@ fn setup_with_failing_stub(templates: Option<HashMap<String, String>>) -> ProxyS
     )
 }
 
+fn setup_with_spy(config: config::Api) -> (ProxyServe, SpyProxyService) {
+    let spy_service = SpyProxyService::default();
+    let template_store = InMemoryTemplateStore::new(HashMap::new());
+    let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
+    let proxy_serve = ProxyServe::new(
+        config,
+        Box::new(spy_service.clone()),
+        Box::new(template_renderer),
+    );
+    (proxy_serve, spy_service)
+}
+
 const fn client_addr() -> net::SocketAddr {
     let v4_addr = net::Ipv4Addr::new(127, 0, 0, 1);
     let v4_addr = net::SocketAddrV4::new(v4_addr, 5501);
@@ -82,7 +97,7 @@ const fn client_addr() -> net::SocketAddr {
 #[test]
 pub fn serve_should_return_response_of_target() {
     // Arrange
-    let sut = setup();
+    let sut = setup_with_ok_stub();
     // Act
     let mut headers = Headers::empty();
     headers.insert("Host", "127.0.0.1:65000");
@@ -93,6 +108,30 @@ pub fn serve_should_return_response_of_target() {
     assert!(response.is_ok());
     let response = response.unwrap();
     assert_eq!(StatusCode::OK, response.status_code());
+}
+
+#[test_case("X-Real-Ip")]
+#[test_case("My-Ip")]
+pub fn serve_should_pass_real_ip_from_header_if_specified(real_ip_header_name: &str) {
+    // Arrange
+    let config = config::Api {
+        base_url: url::Url::parse("http://guard.tollkeeper.ch/").unwrap(),
+        real_ip_header: Some(real_ip_header_name.to_string()),
+    };
+    let (sut, spy_proxy_service) = setup_with_spy(config);
+    // Act
+    let mut headers = Headers::empty();
+    headers.insert("Host", "127.0.0.1:65000");
+    headers.insert(real_ip_header_name, "1.2.3.4");
+    let headers = request::Headers::new(headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers.clone(), Body::None).unwrap();
+    let _ = sut.serve_http(&client_addr(), request);
+    // Assert
+    let expected_calls = vec![ProxyRequestCall {
+        client_addr: net::SocketAddrV4::new(net::Ipv4Addr::new(1, 2, 3, 4), 0).into(),
+        request_headers: headers,
+    }];
+    spy_proxy_service.assert_all_calls(&expected_calls);
 }
 
 #[test]

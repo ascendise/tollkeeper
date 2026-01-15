@@ -75,6 +75,7 @@ impl Default for Server {
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct Api {
     pub base_url: url::Url,
+    pub real_ip_header: Option<String>,
 }
 
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]

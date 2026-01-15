@@ -168,7 +168,7 @@ impl FromStr for Method {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Headers {
     headers: http::Headers,
 }

@@ -19,6 +19,7 @@ proxy_port = 9000
 
 [api]
 base_url = "http://localhost:9100/"
+real_ip_header = "X-Real-Ip"
     
 [gates]
 
@@ -40,6 +41,7 @@ toll_declaration = { Hashcash = { expiry = "1h", difficulty = 4}}
     // Assert
     let api = Api {
         base_url: url("http://localhost:9100/"),
+        real_ip_header: Some("X-Real-Ip".to_string()),
     };
     let mut gates = IndexMap::new();
     gates.insert(
@@ -93,6 +95,7 @@ pub fn create_tollkeeper_should_create_a_new_tollkeeper_instance_with_given_conf
     // Arrange
     let api = Api {
         base_url: url("http://localhost:9100/"),
+        real_ip_header: None,
     };
 
     let mut gates = IndexMap::new();

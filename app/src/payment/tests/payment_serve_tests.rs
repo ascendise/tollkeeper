@@ -25,6 +25,7 @@ fn setup(
     let base_api_url = setup_server_url();
     let config = config::Api {
         base_url: base_api_url,
+        real_ip_header: None,
     };
     let stub_payment_service = StubPaymentService::new(result);
     PayTollServe::new(config, Box::new(stub_payment_service))

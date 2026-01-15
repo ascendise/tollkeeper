@@ -40,6 +40,12 @@ impl ProxyServe {
         }
     }
 
+    fn read_ip_from_header(request: &Request, h: &str) -> net::SocketAddr {
+        let real_ip_header = request.headers().extension(h).expect("No IP header found!");
+        let ip_with_stub_port = [real_ip_header, ":0"].join("");
+        net::SocketAddr::from_str(&ip_with_stub_port).unwrap()
+    }
+
     fn toll_to_json_response(&self, toll: &Toll) -> Response {
         let json = toll.as_hal_json(&self.config.base_url);
         let data = json.to_string();
@@ -75,6 +81,10 @@ impl HttpServe for ProxyServe {
         request: Request,
     ) -> Result<Response, InternalServerError> {
         let accept_header: String = request.headers().accept().unwrap_or("").into();
+        let client_addr = match &self.config.real_ip_header {
+            Some(h) => &Self::read_ip_from_header(&request, h),
+            None => client_addr,
+        };
         let response = self.proxy_service.proxy_request(client_addr, request);
         let response = match response {
             Ok(res) => res,
@@ -90,6 +100,13 @@ impl HttpServe for ProxyServe {
     }
 }
 
+pub trait ProxyService {
+    fn proxy_request(
+        &self,
+        client_addr: &net::SocketAddr,
+        req: http::Request,
+    ) -> Result<http::Response, PaymentRequiredError>;
+}
 pub struct ProxyServiceImpl {
     tollkeeper: Arc<Tollkeeper>,
 }
@@ -159,14 +176,6 @@ impl ProxyService for ProxyServiceImpl {
             },
         }
     }
-}
-
-pub trait ProxyService {
-    fn proxy_request(
-        &self,
-        client_addr: &net::SocketAddr,
-        req: http::Request,
-    ) -> Result<http::Response, PaymentRequiredError>;
 }
 #[derive(Debug, PartialEq, Eq)]
 pub struct PaymentRequiredError(Box<Toll>);

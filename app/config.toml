@@ -4,8 +4,10 @@ secret_key_provider = { InMemory = "snowball2" }
 #proxy_port = 
 #api_port =
 
+
 [api]
 base_url = "http://localhost:8080/"
+#real_ip_header = "X-Real-Ip"
     
 [gates]
 

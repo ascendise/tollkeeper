@@ -14,7 +14,7 @@ pub use request::Request;
 pub use response::Response;
 
 /// Key-Value collection with case-insensitve access
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Headers {
     headers: IndexMap<String, Header>,
 }
@@ -72,7 +72,7 @@ impl Display for Headers {
         Ok(())
     }
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct Header {
     original_key: String,
     value: String,
