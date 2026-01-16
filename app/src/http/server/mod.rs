@@ -28,7 +28,7 @@ pub struct Server {
 impl Server {
     /// Creates a new HTTP [Server] with multiple [endpoints](Endpoint)
     pub fn create_http_endpoints(listener: net::TcpListener, endpoints: Vec<Endpoint>) -> Self {
-        let handler = HttpEndpointsServe::new(endpoints);
+        let handler = HttpEndpointsServe::new(endpoints, None);
         Self::new(listener, Box::new(handler))
     }
 
@@ -86,11 +86,15 @@ impl StartupError {
 /// Serve implementation that handles HTTP [requests](Request) and returns HTTP
 /// [responses](Response)
 pub struct HttpEndpointsServe {
+    real_ip_header: Option<String>,
     endpoints: Vec<Endpoint>,
 }
 impl HttpEndpointsServe {
-    pub fn new(endpoints: Vec<Endpoint>) -> Self {
-        Self { endpoints }
+    pub fn new(endpoints: Vec<Endpoint>, real_ip_header: Option<String>) -> Self {
+        Self {
+            endpoints,
+            real_ip_header,
+        }
     }
 }
 impl HttpServe for HttpEndpointsServe {
@@ -104,7 +108,13 @@ impl HttpServe for HttpEndpointsServe {
             .iter()
             .filter(|e| request.matches_path(&e.path))
             .peekable();
-
+        let client_addr = match &self.real_ip_header {
+            Some(h) => &request
+                .headers()
+                .read_real_ip(h)
+                .expect("No IP Header found"),
+            None => client_addr,
+        };
         if endpoints.peek().is_some() {
             match endpoints.find(|e| request.matches_method(&e.method)) {
                 Some(e) => e.serve(client_addr, request),
@@ -155,7 +165,7 @@ pub trait HttpServe {
 }
 impl<T: HttpServe> TcpServe for T {
     fn serve_tcp(&self, stream: net::TcpStream) {
-        match self::handle_incoming_request(self, stream.try_clone().unwrap()) {
+        match handle_incoming_request(self, stream.try_clone().unwrap()) {
             Ok(_) => (),
             Err(_) => send_response(&stream, Response::bad_request()),
         }
@@ -192,6 +202,7 @@ fn handle_incoming_request(
     }
     Ok(())
 }
+
 fn send_response(mut stream: &net::TcpStream, mut response: Response) {
     let response = &response.as_bytes();
     stream.write_all(response).unwrap();

@@ -1,4 +1,8 @@
-use std::{collections::VecDeque, net};
+use std::{
+    collections::VecDeque,
+    net,
+    sync::{Arc, Mutex},
+};
 
 use crate::http::{
     self,
@@ -6,6 +10,8 @@ use crate::http::{
     server::{HttpServe, InternalServerError},
     BufferBody, Request, Response, StreamBody,
 };
+
+use pretty_assertions::assert_eq;
 
 mod http_endpoints_serve_tests;
 mod server_tests;
@@ -53,5 +59,33 @@ struct PanicHandler;
 impl HttpServe for PanicHandler {
     fn serve_http(&self, _: &net::SocketAddr, _: Request) -> Result<Response, InternalServerError> {
         panic!("I am trying to kill the server")
+    }
+}
+
+#[derive(Default, Clone)]
+struct IpSpyHandler {
+    ips: Arc<Mutex<Vec<net::SocketAddr>>>,
+}
+
+impl IpSpyHandler {
+    fn assert_ips_equal(&self, expected_ips: &[net::SocketAddr]) {
+        let ips = self.ips.lock().unwrap();
+        assert_eq!(expected_ips, ips.as_slice());
+    }
+}
+impl HttpServe for IpSpyHandler {
+    fn serve_http(
+        &self,
+        client_addr: &net::SocketAddr,
+        _: Request,
+    ) -> Result<Response, InternalServerError> {
+        let headers = response::Headers::empty();
+        self.ips.lock().unwrap().push(*client_addr);
+        Ok(Response::new(
+            StatusCode::NoContent,
+            Some("No Content".into()),
+            headers,
+            http::Body::None,
+        ))
     }
 }

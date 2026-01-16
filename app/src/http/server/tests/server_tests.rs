@@ -17,7 +17,7 @@ fn setup(handler: Box<dyn TcpServe + Send + Sync + 'static>) -> (Server, net::So
     (Server::new(listener, handler), local_addr)
 }
 
-fn send_request(addr: net::SocketAddr, request: &[u8]) -> String {
+fn send_request(addr: net::SocketAddr, request: &[u8]) -> (String, net::SocketAddr) {
     let mut connection = net::TcpStream::connect(addr).expect("Failed to connect to test socket");
     connection
         .write_all(request)
@@ -26,7 +26,7 @@ fn send_request(addr: net::SocketAddr, request: &[u8]) -> String {
     connection
         .read_to_string(&mut response)
         .expect("Failed to read response");
-    response
+    (response, connection.local_addr().unwrap())
 }
 
 #[test]
@@ -47,7 +47,7 @@ pub fn server_should_handle_request() {
         "Hey Server!\r\n"
     )
     .as_bytes();
-    let response = send_request(addr, request);
+    let (response, _) = send_request(addr, request);
     // Assert
     let expected_response = "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nHello!\r\n";
     assert_eq!(expected_response, response);
@@ -74,7 +74,7 @@ pub fn server_should_return_chunked_response() {
         "Hey Server!\r\n"
     )
     .as_bytes();
-    let response = send_request(addr, request);
+    let (response, _) = send_request(addr, request);
     // Assert
     let expected_response =
         format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{chunked_body}");

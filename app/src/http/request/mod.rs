@@ -1,3 +1,5 @@
+use std::net;
+
 use super::*;
 use crate::http;
 pub mod body_reader;
@@ -299,6 +301,12 @@ impl Headers {
             }
         }
         None
+    }
+
+    pub fn read_real_ip(&self, header_name: &str) -> Option<net::SocketAddr> {
+        let real_ip_header = self.extension(header_name)?;
+        let ip_with_stub_port = [real_ip_header, ":0"].join("");
+        net::SocketAddr::from_str(&ip_with_stub_port).ok()
     }
 
     pub fn extension(&self, name: &str) -> Option<&str> {

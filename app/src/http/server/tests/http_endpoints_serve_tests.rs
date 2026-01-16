@@ -1,14 +1,18 @@
-use std::io::Read;
+use std::{io::Read, str::FromStr};
 
 use crate::http::{
     self, request,
     response::StatusCode,
-    server::{tests::HelloHandler, *},
+    server::{
+        tests::{HelloHandler, IpSpyHandler},
+        *,
+    },
 };
 use pretty_assertions::assert_eq;
+use test_case::test_case;
 
 fn setup(endpoints: Vec<Endpoint>) -> HttpEndpointsServe {
-    HttpEndpointsServe::new(endpoints)
+    HttpEndpointsServe::new(endpoints, None)
 }
 
 const fn client_addr() -> net::SocketAddr {
@@ -115,4 +119,54 @@ pub fn serve_should_return_method_not_allowed_when_matching_endpoint_is_wrong_pa
     let response = sut.serve_http(&client_addr(), request).unwrap();
     // Assert
     assert_eq!(StatusCode::MethodNotAllowed, response.status_code());
+}
+
+#[test]
+pub fn serve_should_pass_client_address_to_inner_serve_if_no_header_configured() {
+    // Arrange
+    let ip_spy_handler = IpSpyHandler::default();
+    let endpoints = vec![Endpoint::new(
+        Method::Get,
+        "/",
+        Box::new(ip_spy_handler.clone()),
+    )];
+    let sut = setup(endpoints);
+    // Act
+    let mut headers = http::Headers::empty();
+    headers.insert("Host", "localhost");
+    let headers = request::Headers::new(headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers, http::Body::None).unwrap();
+    let client_addr = client_addr();
+    let _ = sut.serve_http(&client_addr, request).unwrap();
+    // Assert
+    let expected_ip = &[client_addr];
+    ip_spy_handler.assert_ips_equal(expected_ip);
+}
+
+#[test_case("X-Real-Ip", "12.34.56.78")]
+#[test_case("My-Ip", "87.65.43.21")]
+pub fn serve_should_pass_peer_address_from_header_to_inner_serve_if_configured(
+    header_name: &str,
+    expected_ip: &str,
+) {
+    // Arrange
+    let ip_spy_handler = IpSpyHandler::default();
+    let endpoints = vec![Endpoint::new(
+        Method::Get,
+        "/",
+        Box::new(ip_spy_handler.clone()),
+    )];
+    let sut = HttpEndpointsServe::new(endpoints, Some(header_name.to_string()));
+    // Act
+    let mut headers = http::Headers::empty();
+    headers.insert("Host", "localhost");
+    headers.insert(header_name, expected_ip);
+    let headers = request::Headers::new(headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers, http::Body::None).unwrap();
+    let client_addr = client_addr();
+    let _ = sut.serve_http(&client_addr, request).unwrap();
+    // Assert
+    let expected_ip = net::SocketAddr::from_str(&format!("{expected_ip}:0")).unwrap();
+    let expected_ip = &[expected_ip];
+    ip_spy_handler.assert_ips_equal(expected_ip);
 }

@@ -108,9 +108,13 @@ fn create_api_server(
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
     let listener = net::TcpListener::bind(format!("0.0.0.0:{port}"))?;
     let payment_service = payment::PaymentServiceImpl::new(tollkeeper);
-    let payment_endpoints =
-        payment::create_pay_toll_endpoint("/api/pay/", server_config, Box::new(payment_service));
-    let server = Server::create_http_endpoints(listener, payment_endpoints);
+    let payment_endpoints = payment::create_pay_toll_endpoint(
+        "/api/pay/",
+        server_config.clone(),
+        Box::new(payment_service),
+    );
+    let http_endpoints = HttpEndpointsServe::new(payment_endpoints, server_config.real_ip_header);
+    let server = Server::new(listener, Box::new(http_endpoints));
     let (_, receiver) = cancellation_token::create_cancellation_token();
     Ok((server, receiver))
 }
