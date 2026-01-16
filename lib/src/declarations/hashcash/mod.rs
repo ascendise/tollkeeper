@@ -30,11 +30,15 @@ impl Declaration for HashcashDeclaration {
             |decl: &HashcashDeclaration, p: Payment| decl.invalid_payment_error(suspect.clone(), p);
         let stamp = payment.value();
         if self.double_spent_db.is_spent(stamp) {
+            tracing::info!("Stamp is already spent!");
             return error(self, payment);
         }
         let stamp = match Stamp::from_str(stamp) {
             Ok(s) => s,
-            Err(_) => return error(self, payment),
+            Err(_) => {
+                tracing::info!("Stamp not parseable!");
+                return error(self, payment);
+            }
         };
         let expiry_date = self.date_provider.now() - self.expiry;
         let is_expired = stamp.date().0 < expiry_date || stamp.date().0 > self.date_provider.now();
@@ -43,9 +47,13 @@ impl Declaration for HashcashDeclaration {
             let visa = Visa::new(order_id, suspect.clone());
             match self.double_spent_db.insert(payment.value().into()) {
                 Ok(()) => Ok(visa),
-                Err(_) => error(self, payment),
+                Err(_) => {
+                    tracing::info!("Stamp is already spent!");
+                    error(self, payment)
+                }
             }
         } else {
+            tracing::info!("Stamp invalid! (No UTC?)");
             error(self, payment)
         }
     }

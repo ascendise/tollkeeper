@@ -61,6 +61,7 @@ impl Tollkeeper {
         suspect: &Suspect,
         visa: &Option<Signed<Visa>>,
     ) -> Result<(), AccessError> {
+        let _span = tracing::info_span!("[Tollkeeper(access_control)]").entered();
         let gate = self.find_matching_gate(suspect)?;
         let secret_key = self.secret_key_provider.read_secret_key();
         let result = gate.pass(suspect, visa, secret_key);
@@ -85,6 +86,7 @@ impl Tollkeeper {
         suspect: &Suspect,
         payment: SignedPayment,
     ) -> Result<Signed<Visa>, PaymentDeniedError> {
+        let _span = tracing::info_span!("[Tollkeeper(payment)]").entered();
         let secret_key = self.secret_key_provider.read_secret_key();
         let payment = payment.verify(secret_key)?;
         let toll = payment.toll();
