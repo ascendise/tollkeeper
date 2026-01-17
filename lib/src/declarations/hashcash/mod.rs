@@ -40,8 +40,9 @@ impl Declaration for HashcashDeclaration {
                 return error(self, payment);
             }
         };
-        let expiry_date = self.date_provider.now() - self.expiry;
-        let is_expired = stamp.date().0 < expiry_date || stamp.date().0 > self.date_provider.now();
+        let minimum_valid_date = self.date_provider.now() - self.expiry - Self::GRACE_PERIOD;
+        let today = self.date_provider.now() + Self::GRACE_PERIOD;
+        let is_expired = stamp.date().0 < minimum_valid_date || stamp.date().0 > today;
         if !is_expired && stamp.is_valid() {
             let order_id = payment.toll.order_id().clone();
             let visa = Visa::new(order_id, suspect.clone());
@@ -59,6 +60,9 @@ impl Declaration for HashcashDeclaration {
     }
 }
 impl HashcashDeclaration {
+    /// Time duration allowed after expiry to deal with small time desync
+    const GRACE_PERIOD: chrono::TimeDelta = chrono::TimeDelta::seconds(5);
+
     pub fn new(
         difficulty: u8,
         expiry: chrono::Duration,

@@ -9,6 +9,7 @@ use crate::{
 };
 use chrono::TimeZone;
 use pretty_assertions::assert_eq;
+use test_case::test_case;
 
 use std::collections::HashSet;
 
@@ -167,6 +168,32 @@ pub fn pay_with_stamp_from_the_future_should_return_error() {
         .expect_err("Expected InvalidPaymentError, got Visa");
     // Assert
     assert_eq!(error.payment(), &payment);
+}
+
+#[test_case("1:4:000102130004:example.com(8888)/hello:suspect.ip=1.2.3.4:pPpGomTDbOIdN3Z4:000000000000000000H" ; "Desync into future")]
+#[test_case("1:4:000101130000:example.com(8888)/hello:suspect.ip=1.2.3.4:bAgDUTm7uB1uIVHG:000000000000000000y" ; "Desync into past")]
+pub fn pay_with_expired_stamp_should_allow_grace_period_for_desyncs(stamp: &str) {
+    // Arrange
+    let today = chrono::Utc
+        .with_ymd_and_hms(2000, 1, 2, 12, 59, 59)
+        .unwrap()
+        .to_utc();
+    let sut = setup_with_date(today);
+    // Act
+    let suspect = Suspect::new(
+        "1.2.3.4",
+        "Bot",
+        Destination::new("example.com", 8888, "/hello"),
+    );
+    let order_id = OrderIdentifier::new("gate", "order");
+    let toll = sut.declare(suspect.clone(), order_id.clone());
+    let payment = Payment::new(toll, stamp);
+    let result = sut.pay(payment.clone(), &suspect);
+    // Assert
+    assert!(
+        result.is_ok(),
+        "Stamp got rejected despite time desync being inside grace period"
+    );
 }
 
 #[test]
