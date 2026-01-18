@@ -99,6 +99,17 @@ impl Destination {
     pub fn path(&self) -> &str {
         &self.path
     }
+
+    /// Returns true, if the subDestination is a child of this [Destination]
+    /// E.g. localhost:80/.contains(localhost:80/child) => true
+    /// E.g. localhost:80/root/.contains(localhost:80/) => false
+    pub fn contains(&self, sub_destination: &Destination) -> bool {
+        let root_path = &self.path;
+        let child_path = &sub_destination.path;
+        self.base_url == sub_destination.base_url
+            && self.port == sub_destination.port
+            && child_path.starts_with(root_path)
+    }
 }
 impl Display for Destination {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

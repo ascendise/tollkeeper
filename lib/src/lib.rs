@@ -44,10 +44,16 @@ impl Tollkeeper {
     }
 
     fn find_matching_gate(&self, suspect: &Suspect) -> Result<&Gate, AccessError> {
-        let destination = suspect.destination().clone();
-        match self.gates.iter().find(|g| g.destination() == &destination) {
+        let access_destination = suspect.destination().clone();
+        match self
+            .gates
+            .iter()
+            .find(|g| g.destination().contains(&access_destination))
+        {
             Some(g) => Ok(g),
-            None => Err(AccessError::DestinationNotFound(Box::new(destination))),
+            None => Err(AccessError::DestinationNotFound(Box::new(
+                access_destination,
+            ))),
         }
     }
 
@@ -281,11 +287,19 @@ impl Order {
     ) -> bool {
         match visa {
             Option::Some(v) => match v.verify(secret_key) {
-                Ok(v) => v.order_id().order_id() == self.id && v.suspect() == suspect,
+                Ok(v) => {
+                    v.order_id().order_id() == self.id && Self::matches_visa(suspect, v.suspect())
+                }
                 Err(_) => false,
             },
             Option::None => false,
         }
+    }
+
+    fn matches_visa(suspect: &Suspect, visa_suspect: &Suspect) -> bool {
+        visa_suspect.client_ip() == suspect.client_ip()
+            && visa_suspect.user_agent() == suspect.user_agent()
+            && visa_suspect.destination().contains(suspect.destination())
     }
 
     pub fn id(&self) -> &str {

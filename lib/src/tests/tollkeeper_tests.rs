@@ -219,12 +219,78 @@ pub fn passing_gate_with_valid_visa_should_allow_access() {
     // Arrange
     let (sut, order_id) = setup();
     // Act
-    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new_base("localhost"));
+    let destination = Destination::new_base("localhost");
+    let suspect = Suspect::new("1.2.3.4", "Bot", destination);
     let visa = Visa::new(order_id, suspect.clone());
     let visa = Signed::sign(visa, b"Secret key");
     let access_result = sut.check_access(&suspect, &Option::Some(visa));
     // Assert
     assert_is_allowed(&access_result);
+}
+
+#[test]
+pub fn passing_gate_with_valid_visa_for_resource_should_not_challenge_again_on_subresources() {
+    // Arrange
+    let (sut, order_id) = setup();
+    // Act
+    let visa_destination = Destination::new_base("localhost");
+    let visa_suspect = Suspect::new("1.2.3.4", "Bot", visa_destination);
+    let visa = Visa::new(order_id, visa_suspect.clone());
+    let visa = Signed::sign(visa, b"Secret key");
+    let suspect = Suspect::new(
+        "1.2.3.4",
+        "Bot",
+        Destination::new("localhost", 80, "/child"),
+    );
+    let access_result = sut.check_access(&suspect, &Option::Some(visa));
+    // Assert
+    assert_is_allowed(&access_result);
+}
+
+#[test]
+pub fn passing_gate_should_include_child_resources_in_access_control() {
+    // Arrange
+    let (sut, _) = setup();
+    // Act
+    let destination = Destination::new("localhost", 80, "/child");
+    let suspect = Suspect::new("1.2.3.4", "Bot", destination);
+    let access_result = sut.check_access(&suspect, &None);
+    // Assert
+    let access_result = access_result.unwrap_err();
+    match access_result {
+        AccessError::AccessDeniedError(_) => (),
+        AccessError::DestinationNotFound(_) => panic!("Gate was not found!"),
+    }
+}
+
+#[test_case(Destination::new("localhost", 80, "/otherroot/page/"))]
+#[test_case(Destination::new("localhost", 80, "/wwroot/stuff/page/"))]
+pub fn passing_gate_should_return_destination_not_found_for_mismatched_paths(
+    destination: Destination,
+) {
+    // Arrange
+    let order = Order::new(
+        vec![Box::new(StubDescription::new(false))],
+        AccessPolicy::Blacklist,
+        Box::new(StubDeclaration::new()),
+    );
+    let gate = Gate::new(
+        Destination::new("localhost", 80, "/wwroot/page/"),
+        vec![order],
+    )
+    .unwrap();
+    let sut = setup_gates(vec![gate]);
+    // Act
+    let suspect = Suspect::new("1.2.3.4", "Bot", destination);
+    let access_result = sut.check_access(&suspect, &None);
+    // Assert
+    let access_result = access_result.expect_err("Tollkeeper allowed access to unguarded resource");
+    match access_result {
+        AccessError::AccessDeniedError(_) => {
+            panic!("Unguarded resources should not be controlled by tollkeeper!")
+        }
+        AccessError::DestinationNotFound(_) => (),
+    }
 }
 
 #[test]
