@@ -12,4 +12,4 @@ services:
       - 1337:80 # Direct access to nginx (circumvents tollkeeper)
     volumes:
       - ../app/templates/:/usr/local/bin/app/templates
-      - ../app/config.toml/:/usr/local/bin/app/config.example.toml
+      - ../app/config.toml/:/usr/local/bin/app/config.toml

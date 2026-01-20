@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod tests;
 
-use std::{collections::HashSet, mem::size_of, str::FromStr, sync::Mutex};
+use std::{collections::HashSet, str::FromStr, sync::Mutex};
 
 use chrono::TimeZone;
 use sha1::Digest;
 
-use crate::util::DateTimeProvider;
+use crate::{descriptions::Destination, util::DateTimeProvider};
 
 use super::*;
 
@@ -42,12 +42,14 @@ impl Declaration for HashcashDeclaration {
         };
         let minimum_valid_date = self.date_provider.now() - self.expiry - Self::GRACE_PERIOD;
         let today = self.date_provider.now() + Self::GRACE_PERIOD;
-        let is_expired = stamp.date().0 < minimum_valid_date || stamp.date().0 > today;
-        if !is_expired && stamp.is_valid() {
-            let order_id = payment.toll.order_id().clone();
-            let visa = Visa::new(order_id, suspect.clone());
-            match self.double_spent_db.insert(payment.value().into()) {
-                Ok(()) => Ok(visa),
+        let is_expired = stamp.date().0 < minimum_valid_date;
+        let is_in_the_future = stamp.date().0 > today;
+        if !(is_expired || is_in_the_future)
+            && self.is_matching_challenge(suspect, &stamp)
+            && stamp.is_valid()
+        {
+            match self.try_create_visa(&payment) {
+                Ok(v) => Ok(v),
                 Err(_) => {
                     tracing::info!("Stamp is already spent!");
                     error(self, payment)
@@ -82,11 +84,8 @@ impl HashcashDeclaration {
         challenge.insert("ver".into(), "1".into());
         challenge.insert("bits".into(), self.difficulty.to_string());
         challenge.insert("width".into(), Timestamp::width().to_string());
-        let dest = suspect.destination();
-        challenge.insert(
-            "resource".into(),
-            format!("{}({}){}", dest.base_url(), dest.port(), dest.path()),
-        );
+        let resource = Resource(suspect.destination().clone());
+        challenge.insert("resource".into(), resource.to_string());
         challenge.insert("ext".into(), format!("suspect.ip={}", suspect.client_ip()));
         challenge
     }
@@ -101,6 +100,25 @@ impl HashcashDeclaration {
         let error = PaymentError::new(Box::new(payment), Box::new(toll));
         Err(error)
     }
+
+    fn is_matching_challenge(&self, suspect: &Suspect, stamp: &Stamp) -> bool {
+        let stamp_ip = &stamp.ext().0.get("suspect.ip");
+        let matches_suspect_ip = stamp_ip.map(|s| s == suspect.client_ip()).unwrap_or(false);
+        self.difficulty == stamp.bits
+            && suspect.destination() == &stamp.resource.0
+            && matches_suspect_ip
+    }
+
+    fn try_create_visa(&self, payment: &Payment) -> Result<Visa, DuplicateStampError> {
+        match self.double_spent_db.insert(payment.value().into()) {
+            Ok(()) => {
+                let order_id = payment.toll.order_id().clone();
+                let visa = Visa::new(order_id, payment.toll.recipient().clone());
+                Ok(visa)
+            }
+            Err(e) => Err(e),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -108,7 +126,7 @@ struct Stamp {
     ver: u8,
     bits: u8,
     date: Timestamp,
-    resource: String,
+    resource: Resource,
     ext: Extension,
     rand: String,
     counter: String,
@@ -118,7 +136,7 @@ impl Stamp {
         ver: u8,
         bits: u8,
         date: Timestamp,
-        resource: impl Into<String>,
+        resource: Resource,
         ext: Extension,
         rand: impl Into<String>,
         counter: impl Into<String>,
@@ -127,7 +145,7 @@ impl Stamp {
             ver,
             bits,
             date,
-            resource: resource.into(),
+            resource,
             ext,
             rand: rand.into(),
             counter: counter.into(),
@@ -139,18 +157,17 @@ impl Stamp {
         let mut sha1 = sha1::Sha1::new();
         sha1.update(self.to_string().into_bytes());
         let result = sha1.finalize();
-        let mut required_bits = self.bits;
+        let mut zero_bits_left = self.bits;
         for byte in result {
-            let zeros = byte.leading_zeros() as u8;
-            if zeros >= required_bits {
-                return true;
-            }
-            required_bits = required_bits.saturating_sub(zeros);
-            if zeros as usize != size_of::<u8>() {
+            let expected_zeroes = zero_bits_left.min(8);
+            let shift = u32::from(8 - expected_zeroes);
+            if byte.checked_shr(shift).unwrap_or(0) != 0 || zero_bits_left == 0 {
                 break;
+            } else {
+                zero_bits_left = zero_bits_left.saturating_sub(expected_zeroes);
             }
         }
-        required_bits == 0
+        zero_bits_left == 0
     }
 
     /// Stamp format version. Currently 1 is expected
@@ -170,7 +187,7 @@ impl Stamp {
     }
 
     /// Resource the stamp is minted for
-    pub fn resource(&self) -> &str {
+    pub fn resource(&self) -> &Resource {
         &self.resource
     }
 
@@ -244,22 +261,12 @@ impl Stamp {
         Ok(time)
     }
 
-    fn parse_resource(values: &str) -> Result<String, ()> {
-        Ok(values.into())
+    fn parse_resource(values: &str) -> Result<Resource, ()> {
+        Resource::from_str(values).or(Err(()))
     }
 
     fn parse_ext(values: &str) -> Result<Extension, ()> {
-        let kv_pairs = values.split(';');
-        let kv_pairs: Vec<Vec<&str>> = kv_pairs.map(|kv| kv.split('=').collect()).collect();
-        let mut ext = Vec::<(String, String)>::new();
-        for kv in kv_pairs {
-            if kv.len() != 2 {
-                return Err(());
-            }
-            ext.push((kv[0].into(), kv[1].into()));
-        }
-        let ext = Extension(ext);
-        Ok(ext)
+        Extension::from_str(values).or(Err(()))
     }
 
     fn parse_rand(values: &str) -> Result<String, ()> {
@@ -298,6 +305,7 @@ impl FromStr for Stamp {
 }
 #[derive(Debug, PartialEq, Eq)]
 struct ParseStampError;
+
 #[derive(Debug, PartialEq, Eq)]
 struct Timestamp(chrono::DateTime<chrono::Utc>);
 impl Timestamp {
@@ -311,8 +319,42 @@ impl Display for Timestamp {
         write!(f, "{date_str}")
     }
 }
+
 #[derive(Debug, PartialEq, Eq)]
-struct Extension(Vec<(String, String)>);
+struct Resource(Destination);
+impl Display for Resource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}({}){}",
+            self.0.base_url(),
+            self.0.port(),
+            self.0.path()
+        )
+    }
+}
+impl FromStr for Resource {
+    type Err = ParseStampError;
+
+    fn from_str(s: &str) -> Result<Self, ParseStampError> {
+        let regex = regex::Regex::new(r"^(?P<host>.+)\((?P<port>\d+)\)(?P<path>/.*)$").unwrap();
+        let (_, [host, port, path]) = regex
+            .captures(s)
+            .map(|c| c.extract())
+            .ok_or(ParseStampError)?;
+        let port = port.parse().or(Err(ParseStampError))?;
+        let destination = Destination::new(host, port, path);
+        Ok(Resource(destination))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct Extension(indexmap::IndexMap<String, String>);
+impl Extension {
+    pub fn empty() -> Self {
+        Extension(indexmap::indexmap![])
+    }
+}
 impl Display for Extension {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ext_str = self
@@ -322,6 +364,26 @@ impl Display for Extension {
             .collect::<Vec<String>>()
             .join(";");
         write!(f, "{ext_str}")
+    }
+}
+impl FromStr for Extension {
+    type Err = ParseStampError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Ok(Extension::empty());
+        }
+        let kv_pairs = s.split(';');
+        let kv_pairs: Vec<Vec<&str>> = kv_pairs.map(|kv| kv.split('=').collect()).collect();
+        let mut ext = indexmap::IndexMap::new();
+        for kv in kv_pairs {
+            if kv.len() != 2 {
+                return Err(ParseStampError);
+            }
+            ext.insert(kv[0].into(), kv[1].into());
+        }
+        let ext = Extension(ext);
+        Ok(ext)
     }
 }
 

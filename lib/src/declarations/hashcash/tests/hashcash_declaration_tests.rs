@@ -122,6 +122,37 @@ pub fn pay_with_invalid_stamp_should_return_error() {
     assert_eq!(error.payment(), &payment);
 }
 
+#[test_case("1:3:260120153000:example(8888)/:suspect.ip=1.2.3.4:xaF/u7xxK4q/PR8s:000000000000000000000000000H" ; "too low difficulty")]
+#[test_case("1:4:260120153000:example(8888)/:suspect.ip=0.0.0.0:vLORtrZJj3brGev6:000000000000000000000000000s" ; "wrong extension")]
+#[test_case("1:4:260120153000:example(8888)/:hello=world:KNCJk/cUp3L/Qf2/:00000000000000000000000000000000003" ; "different extension")]
+#[test_case("1:4:260120153000:example(8888)/::yJpIYAvg9PBnLNaz:0000000000000000000000000000000000000000000002" ; "missing extension")]
+#[test_case("1:4:260120153000:example(1234)/:suspect.ip=1.2.3.4:zMVAqKtfiZt/z83K:0000000000000000000000000005" ; "wrong destination/resource")]
+pub fn paying_with_a_stamp_not_matching_challenge_should_return_error(invalid_stamp: &str) {
+    // Arrange
+    let today = chrono::Utc
+        .with_ymd_and_hms(2026, 1, 20, 16, 30, 0)
+        .unwrap()
+        .to_utc();
+    let expiry = chrono::Duration::days(1);
+    let double_spent_db = DoubleSpentDatabaseImpl::new();
+    let sut = HashcashDeclaration::new(
+        4,
+        expiry,
+        Box::new(FakeDateTimeProvider(today)),
+        Box::new(double_spent_db),
+    );
+    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("example", 8888, "/"));
+    // Act
+    let order_id = OrderIdentifier::new("gate", "order");
+    let toll = sut.declare(suspect.clone(), order_id.clone());
+    let payment = Payment::new(toll, invalid_stamp);
+    let error = sut
+        .pay(payment.clone(), &suspect)
+        .expect_err("Expected InvalidPaymentError, got Visa");
+    // Assert
+    assert_eq!(error.payment(), &payment);
+}
+
 #[test]
 pub fn pay_with_expired_stamp_should_return_error() {
     // Arrange
