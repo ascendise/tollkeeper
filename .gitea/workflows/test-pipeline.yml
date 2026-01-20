@@ -5,6 +5,8 @@ on:
 
 jobs:
   cargo-test:
+    env:
+      RUNNER_TOOL_CACHE: $HOME/.cargo/
     runs-on: ubuntu-latest
     container: 
       image: docker.ascendise.ch/ascendise/cargo-runner:1.1.0-rust1.92
@@ -14,20 +16,8 @@ jobs:
     steps:
       - name: Checkout project
         uses: actions/checkout@v3
-      - name: Cache build output
-        id: build-cache 
-        uses: actions/cache/restore@v4
-        with:
-          path: ./target
-          key: build-output
       - name: Run cargo test
         run: cargo test 
-      - name: Cache build output
-        id: build-cache 
-        uses: actions/cache/save@v4
-        with:
-          path: ./target
-          key: build-output
   cargo-clippy:
     runs-on: ubuntu-latest
     container: 
@@ -38,20 +28,8 @@ jobs:
     steps:
       - name: Checkout project
         uses: actions/checkout@v3
-      - name: Cache build output
-        id: build-cache 
-        uses: actions/cache/restore@v4
-        with:
-          path: ./target
-          key: build-output
       - name: Run cargo clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Cache build output
-        id: build-cache 
-        uses: actions/cache/save@v4
-        with:
-          path: ./target
-          key: build-output
   cargo-fmt:
     runs-on: ubuntu-latest
     container: 
