@@ -20,6 +20,7 @@ destination = "http://localhost/"
 orders = ["hash_cash_order"]
 
 [gates.ext_proxy_gate]
+#internal_destination = "http://localhost/"
 destination = "http://example.com/"
 orders = ["hash_cash_order"]
 

@@ -106,17 +106,17 @@ pub trait ProxyService {
 }
 pub struct ProxyServiceImpl {
     tollkeeper: Arc<Tollkeeper>,
+    url_resolver: Box<dyn UrlResolver + Send + Sync>,
 }
 impl ProxyServiceImpl {
-    pub fn new(tollkeeper: Arc<Tollkeeper>) -> Self {
-        Self { tollkeeper }
-    }
-    fn get_host(request: &Request) -> String {
-        let target = request.absolute_target();
-        let host = target.host_str().unwrap();
-        let port = target.port().unwrap_or(80);
-        let addr = format!("{host}:{port}");
-        addr
+    pub fn new(
+        tollkeeper: Arc<Tollkeeper>,
+        url_resolver: Box<dyn UrlResolver + Send + Sync>,
+    ) -> Self {
+        Self {
+            tollkeeper,
+            url_resolver,
+        }
     }
     fn create_suspect(
         client_addr: &net::SocketAddr,
@@ -136,6 +136,7 @@ impl ProxyServiceImpl {
             destination,
         )
     }
+
     fn extract_visa(headers: &http::request::Headers) -> Option<payment::Visa> {
         let visa_header = headers
             .extension("X-Keeper-Token")
@@ -143,12 +144,35 @@ impl ProxyServiceImpl {
         let visa = payment::Visa::from_http_header(visa_header).ok()?;
         Some(visa)
     }
-    fn send_request_to_proxy(mut req: Request) -> Response {
+
+    fn send_request_to_proxy(&self, mut req: Request) -> Response {
         let addr = Self::get_host(&req);
-        let mut target_conn = net::TcpStream::connect(&addr).unwrap();
+        let url = Self::host_to_url(&addr);
+        let resolved_addr = &self
+            .url_resolver
+            .resolve(&url)
+            .expect("Could not resolve url!"); //TODO: Return Error
+        let resolved_addr = resolved_addr.socket_addrs(|| Some(80)).unwrap();
+        let resolved_addr = resolved_addr
+            .first()
+            .expect("Could not resolve internal url to real target");
+        let mut target_conn = net::TcpStream::connect(resolved_addr).unwrap();
         target_conn.write_all(&req.as_bytes()).unwrap();
 
         Response::parse(target_conn.try_clone().unwrap()).unwrap()
+    }
+
+    fn host_to_url(host: &str) -> url::Url {
+        let url = &format!("http://{}", &host);
+        url::Url::from_str(url).expect("Failed to convert host to url::Url")
+    }
+
+    fn get_host(request: &Request) -> String {
+        let target = request.absolute_target();
+        let host = target.host_str().unwrap();
+        let port = target.port().unwrap_or(80);
+        let addr = format!("{host}:{port}");
+        addr
     }
 }
 impl ProxyService for ProxyServiceImpl {
@@ -161,7 +185,7 @@ impl ProxyService for ProxyServiceImpl {
         let visa = Self::extract_visa(req.headers());
         let visa = visa.map(|v| v.into());
         match self.tollkeeper.check_access(&suspect, &visa) {
-            Ok(()) => Ok(Self::send_request_to_proxy(req)),
+            Ok(()) => Ok(self.send_request_to_proxy(req)),
             Err(access_err) => match access_err {
                 tollkeeper::err::AccessError::AccessDeniedError(toll) => {
                     let toll: Toll = toll.as_ref().into();
@@ -492,5 +516,24 @@ impl From<Recipient> for tollkeeper::descriptions::Suspect {
             url.path(),
         );
         Self::new(recipient.client_ip, recipient.user_agent, destination)
+    }
+}
+
+/// Resolves public url to internal url
+pub trait UrlResolver {
+    fn resolve(&self, public_url: &url::Url) -> Option<url::Url>;
+}
+pub struct UrlResolverImpl {
+    urls: indexmap::IndexMap<url::Url, url::Url>,
+}
+
+impl UrlResolverImpl {
+    pub fn new(urls: indexmap::IndexMap<url::Url, url::Url>) -> Self {
+        Self { urls }
+    }
+}
+impl UrlResolver for UrlResolverImpl {
+    fn resolve(&self, public_url: &url::Url) -> Option<url::Url> {
+        self.urls.get(public_url).cloned()
     }
 }

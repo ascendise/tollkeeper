@@ -2,6 +2,7 @@ use pretty_assertions::assert_eq;
 use std::{
     io::{Read, Write},
     net,
+    str::FromStr,
     sync::Arc,
     thread,
 };
@@ -20,15 +21,24 @@ use crate::{
         response::StatusCode,
         Parse, Request,
     },
-    proxy::{Challenge, OrderId, ProxyService, ProxyServiceImpl, Recipient, Toll},
+    proxy::{Challenge, OrderId, ProxyService, ProxyServiceImpl, Recipient, Toll, UrlResolverImpl},
 };
 
 fn setup_and_get_id(
     requires_challenge: bool,
-    proxy_addr: net::SocketAddr,
+    internal_addr: net::SocketAddr,
+    public_url: Option<url::Url>,
 ) -> (OrderId, ProxyServiceImpl) {
-    let destination =
-        descriptions::Destination::new(proxy_addr.ip().to_string(), proxy_addr.port(), "/");
+    let destination = match &public_url {
+        Some(u) => {
+            descriptions::Destination::new(u.host_str().unwrap(), u.port().unwrap_or(80), u.path())
+        }
+        None => descriptions::Destination::new(
+            internal_addr.ip().to_string(),
+            internal_addr.port(),
+            "/",
+        ),
+    };
     let description = StubDescription {
         is_match: requires_challenge,
     };
@@ -38,17 +48,39 @@ fn setup_and_get_id(
         Box::new(StubTollDeclaration),
     )];
     let order_id = orders[0].id().to_string();
-    let gates = vec![tollkeeper::Gate::new(destination, orders).unwrap()];
+    let gates = vec![tollkeeper::Gate::new(destination.clone(), orders).unwrap()];
     let gate_id = gates[0].id().to_string();
     let secret_key_provider = InMemorySecretKeyProvider::new("Secret key".into());
     let secret_key_provider = Box::new(secret_key_provider);
     let tollkeeper = tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap();
     let order_id = OrderId { gate_id, order_id };
-    (order_id, ProxyServiceImpl::new(Arc::new(tollkeeper)))
+    let internal_addr = to_url(&internal_addr);
+    let public_url = public_url.unwrap_or(internal_addr.clone());
+    let url_resolver = UrlResolverImpl::new(indexmap::indexmap![
+        public_url => internal_addr
+    ]);
+    (
+        order_id,
+        ProxyServiceImpl::new(Arc::new(tollkeeper), Box::new(url_resolver)),
+    )
+}
+
+fn to_url(addr: &net::SocketAddr) -> url::Url {
+    let url = &format!("http://{}", &addr.to_string());
+    url::Url::from_str(url).expect("Failed to convert host to url::Url")
 }
 
 fn setup(requires_challenge: bool, proxy_addr: net::SocketAddr) -> ProxyServiceImpl {
-    let (_, sut) = setup_and_get_id(requires_challenge, proxy_addr);
+    let (_, sut) = setup_and_get_id(requires_challenge, proxy_addr, None);
+    sut
+}
+
+fn setup_with_redirect(
+    requires_challenge: bool,
+    internal_addr: net::SocketAddr,
+    public_url: url::Url,
+) -> ProxyServiceImpl {
+    let (_, sut) = setup_and_get_id(requires_challenge, internal_addr, Some(public_url));
     sut
 }
 
@@ -126,6 +158,26 @@ pub fn proxy_request_should_send_request_to_target_and_return_response(
 }
 
 #[test]
+pub fn proxy_request_should_send_request_to_resolved_target() {
+    // Arrange
+    let proxy_response = b"HTTP/1.1 200 OK\r\n\r\n".as_bytes();
+    let (proxy, internal_addr) = setup_proxy(proxy_response);
+    let public_addr = url::Url::from_str("http://example.ascendise.ch:80").unwrap();
+    let sut = setup_with_redirect(false, internal_addr, public_addr);
+    // Act
+    let mut headers = http::Headers::empty();
+    headers.insert("Host", "example.ascendise.ch");
+    let headers = request::Headers::new(headers).unwrap();
+    let request = Request::new(Method::Get, "/", headers, http::Body::None).unwrap();
+    let response = sut
+        .proxy_request(&client_addr(), request)
+        .expect("Expected response, got denied");
+    // Assert
+    assert_eq!(StatusCode::OK, response.status_code());
+    proxy.join().unwrap();
+}
+
+#[test]
 pub fn proxy_request_should_send_request_to_target_and_return_chunked_response() {
     // Arrange
     let mut proxy_response: Vec<&[u8]> =
@@ -173,7 +225,7 @@ pub fn proxy_request_should_return_error_when_payment_is_required() {
     // Arrange
     let mut target_addr = client_addr();
     target_addr.set_port(80);
-    let (order_id, sut) = setup_and_get_id(true, target_addr);
+    let (order_id, sut) = setup_and_get_id(true, target_addr, None);
     // Act
     let client_addr = client_addr();
     let mut headers = http::Headers::empty();
@@ -230,7 +282,7 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
 ) {
     // Arrange
     let (proxy, proxy_addr) = setup_proxy("HTTP/1.1 200 OK\r\n\r\n".into());
-    let (order_id, sut) = setup_and_get_id(true, proxy_addr);
+    let (order_id, sut) = setup_and_get_id(true, proxy_addr, None);
     // Act
     let mut headers = http::Headers::empty();
     let host = format!("127.0.0.1:{}", proxy_addr.port());

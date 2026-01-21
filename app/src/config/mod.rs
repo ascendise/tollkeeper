@@ -2,6 +2,8 @@ use indexmap::IndexMap;
 use serde::Deserialize;
 use tollkeeper::signatures::InMemorySecretKeyProvider;
 
+use crate::proxy;
+
 #[cfg(test)]
 mod tests;
 
@@ -43,6 +45,22 @@ impl Config {
         let secret_key_provider = self.secret_key_provider.to_entity();
         let tollkeeper = tollkeeper::Tollkeeper::new(gates, secret_key_provider).ok()?;
         Some(tollkeeper)
+    }
+
+    pub fn create_url_resolver(&self) -> proxy::UrlResolverImpl {
+        let mappings: indexmap::IndexMap<url::Url, url::Url> = self
+            .gates
+            .iter()
+            .map(|(_, g)| {
+                (
+                    g.destination.clone(),
+                    g.internal_destination
+                        .clone()
+                        .unwrap_or(g.destination.clone()),
+                )
+            })
+            .collect();
+        proxy::UrlResolverImpl::new(mappings)
     }
 }
 
@@ -96,6 +114,7 @@ impl SecretKeyProvider {
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
 struct Gate {
     destination: url::Url,
+    internal_destination: Option<url::Url>,
     orders: Vec<Ref<Order>>,
 }
 

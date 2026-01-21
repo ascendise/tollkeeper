@@ -2,9 +2,12 @@ use indexmap::IndexMap;
 use pretty_assertions::assert_eq;
 use tollkeeper::AccessPolicy;
 
-use crate::config::{
-    Api, Config, Declaration, Description, Gate, HashcashDeclaration, Order, Ref,
-    SecretKeyProvider, Server, StubDescription,
+use crate::{
+    config::{
+        Api, Config, Declaration, Description, Gate, HashcashDeclaration, Order, Ref,
+        SecretKeyProvider, Server, StubDescription,
+    },
+    proxy::UrlResolver,
 };
 
 #[test]
@@ -48,6 +51,7 @@ toll_declaration = { Hashcash = { expiry = "1h", difficulty = 4}}
         "ext_proxy_gate".into(),
         Gate {
             destination: url("http://example.com:80/"),
+            internal_destination: None,
             orders: vec![Ref::Id("hash_cash_order".into())],
         },
     );
@@ -55,6 +59,7 @@ toll_declaration = { Hashcash = { expiry = "1h", difficulty = 4}}
         "local_proxy_gate".into(),
         Gate {
             destination: url("http://localhost:80/"),
+            internal_destination: None,
             orders: vec![Ref::Id("hash_cash_order".into())],
         },
     );
@@ -103,6 +108,7 @@ pub fn create_tollkeeper_should_create_a_new_tollkeeper_instance_with_given_conf
         "ext_proxy_gate".into(),
         Gate {
             destination: url("http://example.com:80/"),
+            internal_destination: None,
             orders: vec![Ref::Id("hash_cash_order".into())],
         },
     );
@@ -110,6 +116,7 @@ pub fn create_tollkeeper_should_create_a_new_tollkeeper_instance_with_given_conf
         "local_proxy_gate".into(),
         Gate {
             destination: url("http://localhost:80/"),
+            internal_destination: None,
             orders: vec![Ref::Id("hash_cash_order".into())],
         },
     );
@@ -146,4 +153,43 @@ pub fn create_tollkeeper_should_create_a_new_tollkeeper_instance_with_given_conf
         tollkeeper.is_some(),
         "Failed to create a Tollkeeper from given config!"
     );
+}
+
+#[test]
+pub fn create_url_resolver_should_return_url_mappings() {
+    // Arrange
+    let api = Api {
+        base_url: url("http://localhost:9100/"),
+        real_ip_header: None,
+    };
+
+    let mut gates = IndexMap::new();
+    let expected_internal_url = url("http://internal.example.com:80/");
+    gates.insert(
+        "gate".into(),
+        Gate {
+            destination: url("http://example.com:80/"),
+            internal_destination: Some(expected_internal_url.clone()),
+            orders: vec![Ref::Id("hash_cash_order".into())],
+        },
+    );
+    let orders = IndexMap::new();
+    let secret_key_provider = SecretKeyProvider::InMemory("verysecretkey".into());
+    let server = Server {
+        proxy_port: Some(9000),
+        api_port: Some(9100),
+    };
+    let config = Config {
+        server: Some(server),
+        api,
+        secret_key_provider,
+        gates,
+        orders: Some(orders),
+        descriptions: None,
+    };
+    // Act
+    let url_resolver = config.create_url_resolver();
+    let url = url_resolver.resolve(&url("http://example.com:80/"));
+    // Assert
+    assert_eq!(Some(expected_internal_url), url);
 }

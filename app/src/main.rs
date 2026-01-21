@@ -25,6 +25,7 @@ fn main() -> Result<(), io::Error> {
                 .create_tollkeeper()
                 .expect("Failed to create tollkeeper"),
         );
+        let url_resolver = Box::new(config.create_url_resolver());
         let proxy_tollkeeper = tollkeeper.clone();
         let proxy_config = config.api.clone();
         let server_config = config.server();
@@ -33,7 +34,7 @@ fn main() -> Result<(), io::Error> {
             let _span = span!(Level::INFO, "[Proxy]").entered();
             event!(Level::INFO, "Startup on Port {proxy_port}");
             let (mut proxy_server, proxy_server_cancellation) =
-                create_proxy_server(proxy_port, proxy_config, proxy_tollkeeper)
+                create_proxy_server(proxy_port, proxy_config, proxy_tollkeeper, url_resolver)
                     .expect("Error during startup (proxy)");
             proxy_server
                 .start_listening(proxy_server_cancellation)
@@ -80,9 +81,11 @@ fn create_proxy_server(
     port: usize,
     server_config: config::Api,
     tollkeeper: Arc<Tollkeeper>,
+    url_resolver: Box<dyn proxy::UrlResolver + Send + Sync>,
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
     let listener = net::TcpListener::bind(format!("0.0.0.0:{port}"))?;
-    let proxy_service = ProxyServiceImpl::new(tollkeeper);
+
+    let proxy_service = ProxyServiceImpl::new(tollkeeper, url_resolver);
     let exe_root_dir = std::env::current_dir().unwrap().join("app/templates");
     event!(
         Level::INFO,
