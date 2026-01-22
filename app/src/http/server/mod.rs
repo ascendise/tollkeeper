@@ -57,7 +57,7 @@ impl Server {
                         handler.serve_tcp(stream);
                     })); // Keep server alive when a request crashes handler
                     match res {
-                        Ok(_) => event!(Level::TRACE, "Request handled exceptionless!"),
+                        Ok(_) => event!(Level::INFO, "Request handled exceptionless!"),
                         Err(e) => event!(Level::ERROR, panic = ?e, "Request failed"),
                     }
                 });
@@ -187,16 +187,17 @@ fn handle_incoming_request(
     event!(
         Level::INFO,
         "Outgoing Response:  \r\n{response}",
-        response = String::from_utf8(response_raw.clone()).unwrap(),
+        response = String::from_utf8_lossy(&response_raw),
     );
     write_stream.write_all(&response_raw).unwrap();
+    let _span = span!(Level::DEBUG, "Chunked Body");
     if let Body::Stream(body) = response.body() {
         while let Some(chunk) = body.read_chunk() {
             write_stream.write_all(chunk.content()).unwrap();
             event!(
-                Level::INFO,
-                "Chunked Body: \r\n{chunked_body}",
-                chunked_body = String::from_utf8(chunk.content().into()).unwrap()
+                Level::DEBUG,
+                "{chunked_body}",
+                chunked_body = String::from_utf8_lossy(chunk.content())
             );
         }
     }

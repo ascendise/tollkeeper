@@ -165,9 +165,9 @@ impl StreamBody {
         let _ = self
             .stream
             .by_ref()
-            .take(8)
             .read_until(b'\r', &mut chunk_size)
-            .ok()?;
+            .ok()
+            .unwrap();
         self.stream.consume(1); // Remove LF from stream
         let mut chunk_size = String::from_utf8(chunk_size).unwrap();
         chunk_size.pop(); // Remove CR from chunk

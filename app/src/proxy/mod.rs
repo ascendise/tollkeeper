@@ -152,9 +152,10 @@ impl ProxyServiceImpl {
             .url_resolver
             .resolve(&url)
             .expect("Could not resolve url!"); //TODO: Return Error
-        let resolved_addr = resolved_addr.socket_addrs(|| Some(80)).unwrap();
+        let resolved_addr = resolved_addr.socket_addrs(|| None).unwrap();
         let resolved_addr = resolved_addr
-            .first()
+            .iter()
+            .find(|a| a.is_ipv4())
             .expect("Could not resolve internal url to real target");
         let mut target_conn = net::TcpStream::connect(resolved_addr).unwrap();
         target_conn.write_all(&req.as_bytes()).unwrap();
