@@ -1,5 +1,3 @@
-use indexmap::IndexMap;
-
 use crate::http::{Headers, Parse};
 use std::io::{self, BufRead, Read};
 
@@ -9,7 +7,7 @@ impl<T: io::Read> Parse<&mut io::BufReader<T>> for Headers {
     type Err = ParseError;
 
     fn parse(reader: &mut io::BufReader<T>) -> Result<Self, Self::Err> {
-        let mut headers = IndexMap::new();
+        let mut headers = vec![];
         while !is_end_of_headers(reader)? {
             let key = util::get_string_until(reader, b':', ParseError::Header)?;
             if contains_whitespace(&key) {
@@ -21,7 +19,7 @@ impl<T: io::Read> Parse<&mut io::BufReader<T>> for Headers {
             reader
                 .read_exact(&mut newline)
                 .map_err(|e| util::handle_io_error(e, ParseError::Header))?;
-            headers.insert(key, value);
+            headers.push((key, value));
         }
         let headers = Headers::new(headers);
         Ok(headers)

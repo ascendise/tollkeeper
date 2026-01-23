@@ -16,27 +16,31 @@ pub use response::Response;
 /// Key-Value collection with case-insensitve access
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Headers {
-    headers: IndexMap<String, Header>,
+    headers: IndexMap<String, Vec<Header>>,
 }
 impl Headers {
-    pub fn new(headers: IndexMap<String, String>) -> Self {
+    pub fn new(headers: Vec<(String, String)>) -> Self {
         let headers = Self::map_headers_case_insensitive(headers);
         Self { headers }
     }
 
-    fn map_headers_case_insensitive(headers: IndexMap<String, String>) -> IndexMap<String, Header> {
-        headers
-            .iter()
-            .map(|(k, v)| {
-                (
-                    k.to_ascii_lowercase(),
-                    Header {
-                        original_key: k.into(),
-                        value: v.into(),
-                    },
-                )
-            })
-            .collect()
+    fn map_headers_case_insensitive(
+        headers: Vec<(String, String)>,
+    ) -> IndexMap<String, Vec<Header>> {
+        let mut new_headers: IndexMap<String, Vec<Header>> = indexmap::indexmap! {};
+        for (key, value) in headers {
+            let header = Header {
+                original_key: key.clone(),
+                value,
+            };
+            let key = key.to_ascii_lowercase();
+            if !new_headers.contains_key(&key) {
+                new_headers.insert(key.clone(), vec![]);
+            }
+            let bucket = new_headers.get_mut(&key).unwrap();
+            bucket.push(header);
+        }
+        new_headers
     }
 
     pub fn empty() -> Self {
@@ -45,10 +49,25 @@ impl Headers {
         }
     }
 
+    /// Gets the first header found with the same key
     pub fn get(&self, key: &str) -> Option<&str> {
         let key = key.to_ascii_lowercase();
         match self.headers.get(&key) {
-            Some(v) => Some(&v.value),
+            Some(v) => Some(&v.first().unwrap().value),
+            None => None,
+        }
+    }
+
+    /// Returns all headers with the given key.
+    ///
+    /// As most headers are unique, this only applies to exceptions like `Set-Cookie`
+    pub fn get_all(&self, key: &str) -> Option<Vec<&str>> {
+        let key = key.to_ascii_lowercase();
+        match self.headers.get(&key) {
+            Some(v) => {
+                let values = v.iter().map(|v| v.value.as_ref()).collect();
+                Some(values)
+            }
             None => None,
         }
     }
@@ -61,13 +80,19 @@ impl Headers {
             original_key,
             value,
         };
-        self.headers.insert(key.into(), header);
+        if !self.headers.contains_key(key) {
+            self.headers.insert(key.clone(), vec![]);
+        }
+        let bucket = self.headers.get_mut(key).unwrap();
+        bucket.push(header);
     }
 }
 impl Display for Headers {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for header in &self.headers {
-            write!(f, "{}: {}\r\n", header.1.original_key, header.1.value)?
+        for header_bucket in &self.headers {
+            for header in header_bucket.1 {
+                write!(f, "{}: {}\r\n", header.original_key, header.value)?
+            }
         }
         Ok(())
     }
