@@ -199,6 +199,9 @@ fn handle_incoming_request(
                 "{chunked_body}",
                 chunked_body = String::from_utf8_lossy(chunk.content())
             );
+            if chunk.is_eof() {
+                break;
+            }
         }
     }
     Ok(())

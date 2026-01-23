@@ -148,6 +148,10 @@ impl StreamBody {
         }
     }
 
+    /// Reads the next chunk from the stream
+    /// EOF will be signalled by a Chunk with zero size ([Chunk::is_eof]) which should also be
+    /// written to output stream.
+    /// Note: Further reads after EOF will most likely result in blocking
     pub fn read_chunk(&mut self) -> Option<Chunk> {
         let chunk_size = self.read_chunk_size()?;
         if chunk_size == 0 {
@@ -161,20 +165,13 @@ impl StreamBody {
     }
 
     fn read_chunk_size(&mut self) -> Option<usize> {
-        let mut chunk_size = vec![];
-        let _ = self
-            .stream
-            .by_ref()
-            .read_until(b'\r', &mut chunk_size)
-            .ok()
-            .unwrap();
-        self.stream.consume(1); // Remove LF from stream
-        let mut chunk_size = String::from_utf8(chunk_size).unwrap();
-        chunk_size.pop(); // Remove CR from chunk
+        let mut chunk_size = String::new();
+        let _ = self.stream.by_ref().read_line(&mut chunk_size).ok()?;
+        let chunk_size = chunk_size.trim();
         if chunk_size.is_empty() {
             None
         } else {
-            let chunk_size = usize::from_str_radix(&chunk_size, 16).unwrap();
+            let chunk_size = usize::from_str_radix(chunk_size, 16).unwrap();
             Some(chunk_size)
         }
     }
@@ -203,6 +200,10 @@ impl Chunk {
             size: 0,
             content: b"0\r\n\r\n".into(),
         }
+    }
+
+    pub fn is_eof(&self) -> bool {
+        self.size == 0
     }
 
     pub fn content(&self) -> &[u8] {
