@@ -47,7 +47,9 @@ impl Request {
         let mut host_url =
             url::Url::parse(&host_url).map_err(BadRequestError::FailedTargetParse)?;
         let absolute_target = if Self::is_relative(request_target) {
-            host_url.set_path(request_target);
+            let (path, params) = Self::parse_path(request_target);
+            host_url.set_path(path);
+            host_url.set_query(params);
             Ok(host_url)
         } else {
             let target_url = protocol + request_target;
@@ -64,6 +66,14 @@ impl Request {
 
     fn is_relative(request_target: &str) -> bool {
         request_target.starts_with("/")
+    }
+
+    /// Parses path and returns tuple containing the path and query params
+    fn parse_path(request_target: &str) -> (&str, Option<&str>) {
+        request_target
+            .split_once('?')
+            .map(|(path, param)| (path, Some(param)))
+            .unwrap_or((request_target, None))
     }
 
     /// HTTP Protocol version

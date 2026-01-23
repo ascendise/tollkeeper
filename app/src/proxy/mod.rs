@@ -146,7 +146,7 @@ impl ProxyServiceImpl {
     }
 
     fn send_request_to_proxy(&self, mut req: Request) -> Response {
-        let addr = Self::get_host(&req);
+        let addr = Self::get_host_addr(&req);
         let url = Self::host_to_url(&addr);
         let resolved_addr = &self
             .url_resolver
@@ -168,7 +168,7 @@ impl ProxyServiceImpl {
         url::Url::from_str(url).expect("Failed to convert host to url::Url")
     }
 
-    fn get_host(request: &Request) -> String {
+    fn get_host_addr(request: &Request) -> String {
         let target = request.absolute_target();
         let host = target.host_str().unwrap();
         let port = target.port().unwrap_or(80);

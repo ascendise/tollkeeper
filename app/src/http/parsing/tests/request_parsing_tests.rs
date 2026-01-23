@@ -26,6 +26,32 @@ pub fn parse_should_read_minimal_http_request() {
 }
 
 #[test]
+pub fn parse_should_read_request_with_query_params_correctly() {
+    // Arrange
+    let raw_request = concat!(
+        "GET /?hello=world&foo=bar HTTP/1.1\r\n",
+        "Host:localhost\r\n\r\n"
+    );
+    let raw_request = raw_request.as_bytes();
+    // Act
+    let request = Request::parse(raw_request).expect("Failed to parse perfectly valid request");
+    // Assert
+    assert_eq!(Method::Get, *request.method());
+    assert_eq!("/?hello=world&foo=bar", request.request_target());
+    assert_eq!("HTTP/1.1", request.http_version());
+    let mut headers = IndexMap::<String, String>::new();
+    headers.insert("Host".into(), "localhost".into());
+    let expected_headers = http::Headers::new(headers);
+    let expected_headers = Headers::new(expected_headers).unwrap();
+    assert_eq!(expected_headers, *request.headers());
+    let expected_query_params = "hello=world&foo=bar";
+    assert_eq!(
+        Some(expected_query_params),
+        request.absolute_target().query()
+    );
+}
+
+#[test]
 pub fn parse_should_read_http_request_with_body() {
     // Arrange
     let raw_request = concat!(
