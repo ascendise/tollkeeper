@@ -167,6 +167,10 @@ impl StreamBody {
     fn read_chunk_size(&mut self) -> Option<usize> {
         let mut chunk_size = String::new();
         let _ = self.stream.by_ref().read_line(&mut chunk_size).ok()?;
+        if chunk_size.trim().is_empty() {
+            chunk_size.clear();
+            let _ = self.stream.by_ref().read_line(&mut chunk_size).ok()?;
+        }
         let chunk_size = chunk_size.trim();
         if chunk_size.is_empty() {
             None
