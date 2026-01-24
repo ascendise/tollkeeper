@@ -7,6 +7,7 @@ use std::{
 };
 
 use serde_json::json;
+use test_case::test_case;
 use tollkeeper::signatures::Base64;
 
 use crate::{
@@ -121,6 +122,62 @@ pub fn pay_toll_serve_should_return_visa_as_json() {
         }
     });
     assert_body_contains_json(expected_body, response);
+}
+
+#[test_case("<hello>World<hello>" ; "XML")]
+#[test_case(r#"{"hello" = "world"}"# ; "malformed json")]
+pub fn pay_toll_serve_should_return_400_for_non_json_data(non_json_data: &str) {
+    // Arrange
+    let payment_service_stub = || panic!("Malformed request got processed!");
+    let sut = setup(Box::new(payment_service_stub));
+    let client_ip = SocketAddr::V4(SocketAddrV4::from_str("1.2.3.4:42420").unwrap());
+    let body = http::Body::from_string(non_json_data.into());
+    let mut headers = http::Headers::empty();
+    headers.insert("Content-Type", "application/json");
+    headers.insert("Content-Length", non_json_data.len().to_string());
+    headers.insert("Host", "localhost");
+    let headers = http::request::Headers::new(headers).unwrap();
+    let request =
+        http::Request::new(http::request::Method::Post, "/api/pay", headers, body).unwrap();
+    // Act
+    let response = sut.serve_http(&client_ip, request).unwrap();
+    // Assert
+    assert_eq!(
+        http::response::StatusCode::BadRequest,
+        response.status_code()
+    );
+}
+
+#[test]
+pub fn pay_toll_serve_should_return_400_for_invalid_json_data() {
+    // Arrange
+    let payment_service_stub = || panic!("Malformed request got processed!");
+    let sut = setup(Box::new(payment_service_stub));
+    let client_ip = SocketAddr::V4(SocketAddrV4::from_str("1.2.3.4:42420").unwrap());
+    let invalid_json_data = json!({
+        "toll": {},
+        "value": {
+            "challenge_part_1": "My",
+            "challenge_part_2": "Answer"
+        }
+    });
+    let invalid_json_data = invalid_json_data.to_string();
+    let content_len = invalid_json_data.len();
+    let body = http::Body::from_string(invalid_json_data);
+    let mut headers = http::Headers::empty();
+    headers.insert("Content-Type", "application/json");
+    headers.insert("Content-Length", content_len.to_string());
+    headers.insert("Host", "localhost");
+    let headers = http::request::Headers::new(headers).unwrap();
+    let request =
+        http::Request::new(http::request::Method::Post, "/api/pay", headers, body).unwrap();
+    // Act
+    let response = sut.serve_http(&client_ip, request).unwrap();
+    // Assert
+    assert_eq!(
+        http::response::StatusCode::UnprocessableContent,
+        response.status_code()
+    );
 }
 
 #[test]

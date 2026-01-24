@@ -9,7 +9,11 @@ use tollkeeper::signatures::{Base64, Signed};
 use crate::{
     config::{self, Api},
     data_formats::{self, AsHalJson, AsHttpHeader},
-    http::{self, request::body_reader::ReadJson, server::HttpServe},
+    http::{
+        self,
+        request::body_reader::{ReadJson, ReadJsonError},
+        server::HttpServe,
+    },
     proxy::{self},
 };
 
@@ -42,8 +46,10 @@ impl HttpServe for PayTollServe {
         client_addr: &std::net::SocketAddr,
         mut request: http::Request,
     ) -> Result<http::Response, http::server::InternalServerError> {
-        let json = request.read_json().unwrap();
-        let payment: Payment = serde_json::from_value(json.clone()).unwrap();
+        let payment: Payment = match request.read_json_deserialized() {
+            Ok(v) => v,
+            Err(e) => return Self::create_parsing_error_response(&e),
+        };
         let user_agent = request.headers().user_agent().unwrap_or("");
         let recipient = proxy::Recipient::new(
             client_addr.ip().to_string(),
@@ -52,7 +58,7 @@ impl HttpServe for PayTollServe {
         );
         match self.payment_service.pay_toll(recipient, payment) {
             Ok(v) => self.create_visa_response(v),
-            Err(payment_error) => Self::create_error_response(self, payment_error),
+            Err(payment_error) => Self::create_payment_error_response(self, payment_error),
         }
     }
 }
@@ -87,7 +93,7 @@ impl PayTollServe {
         Ok(response)
     }
 
-    fn create_error_response(
+    fn create_payment_error_response(
         &self,
         payment_error: Box<PaymentError>,
     ) -> Result<http::Response, http::server::InternalServerError> {
@@ -105,6 +111,31 @@ impl PayTollServe {
             PaymentError::GatewayError => http::response::StatusCode::Conflict,
         };
 
+        let response = http::Response::new(
+            status_code,
+            Some(status_code.reason_phrase().to_string()),
+            headers,
+            body,
+        );
+        Ok(response)
+    }
+
+    fn create_parsing_error_response(
+        json_error: &ReadJsonError,
+    ) -> Result<http::Response, http::server::InternalServerError> {
+        let error_json = serde_json::json!({
+            "error": json_error.to_string()
+        });
+        let error_json = error_json.to_string();
+        let mut headers = cors_headers("POST");
+        headers.insert("Content-Type", "application/json");
+        headers.insert("Content-Length", error_json.len().to_string());
+        let headers = http::response::Headers::new(headers);
+        let body = http::Body::from_string(error_json);
+        let status_code = match json_error {
+            ReadJsonError::InvalidJsonData(_) => http::response::StatusCode::UnprocessableContent,
+            _ => http::response::StatusCode::BadRequest,
+        };
         let response = http::Response::new(
             status_code,
             Some(status_code.reason_phrase().to_string()),

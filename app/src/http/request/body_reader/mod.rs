@@ -5,11 +5,20 @@ use crate::http;
 mod tests;
 
 pub trait ReadJson {
-    fn read_json(&mut self) -> Result<serde_json::Value, ReadJsonError>;
+    fn read_json_deserialized<T>(&mut self) -> Result<T, ReadJsonError>
+    where
+        T: for<'de> serde::Deserialize<'de>;
+
+    fn read_json(&mut self) -> Result<serde_json::Value, ReadJsonError> {
+        self.read_json_deserialized()
+    }
 }
 
 impl ReadJson for http::Request {
-    fn read_json(&mut self) -> Result<serde_json::Value, ReadJsonError> {
+    fn read_json_deserialized<T>(&mut self) -> Result<T, ReadJsonError>
+    where
+        T: for<'de> serde::Deserialize<'de>,
+    {
         let content_type = self
             .headers
             .content_type()
@@ -26,7 +35,10 @@ impl ReadJson for http::Request {
                 .or(Err(ReadJsonError::IoError))?;
             let json: serde_json::Value =
                 serde_json::from_slice(json.as_slice()).or(Err(ReadJsonError::NonJsonData))?;
-            Ok(json)
+            match serde_json::from_value(json) {
+                Ok(d) => Ok(d),
+                Err(e) => Err(ReadJsonError::InvalidJsonData(e.to_string())),
+            }
         } else {
             Err(ReadJsonError::NonJsonData)
         }
@@ -38,6 +50,7 @@ pub enum ReadJsonError {
     MismatchedContentType(String),
     NonJsonData,
     IoError,
+    InvalidJsonData(String),
 }
 impl Error for ReadJsonError {}
 impl Display for ReadJsonError {
@@ -49,6 +62,7 @@ impl Display for ReadJsonError {
             ),
             ReadJsonError::NonJsonData => write!(f, "Data is not valid JSON!"),
             ReadJsonError::IoError => write!(f, "Failure reading request stream!"),
+            ReadJsonError::InvalidJsonData(e) => write!(f, "Invalid JSON data: {e}"),
         }
     }
 }
