@@ -16,8 +16,8 @@ destination = "http://wtfismyip.com/json"
 orders = [ "hash_cash_order" ]
 
 [gates.local_proxy_gate]
-destination = "http://localhost:8000/"
-internal_destination = "http://ascendev.home:30000/"
+destination = "http://localhost:8000"
+internal_destination = "http://ascendev.home:30000"
 orders = ["hash_cash_order"]
 
 [gates.ext_proxy_gate]

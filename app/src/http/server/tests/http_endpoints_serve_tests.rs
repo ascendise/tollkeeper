@@ -79,6 +79,29 @@ pub fn serve_should_handle_request_on_specific_path() {
     assert_body_contains("Hello!\r\n", response.body());
 }
 
+#[test_case("/hello/", "/hello" ; "missing trailing slash")]
+#[test_case("/hello", "/hello/" ; "additional trailing slash")]
+#[test_case("/hello", "/hello/////" ; "more trailing slashes")]
+pub fn serve_should_handle_missing_or_added_trailing_slashes(
+    endpoint_path: &str,
+    access_path: &str,
+) {
+    // Arrange
+    let hello_handler = Box::new(HelloHandler {
+        body: "Hello!\r\n".into(),
+    });
+    let endpoints = vec![Endpoint::new(Method::Get, endpoint_path, hello_handler)];
+    let sut = setup(endpoints);
+    // Act
+    let mut headers = http::Headers::empty();
+    headers.insert("Host", "localhost");
+    let headers = request::Headers::new(headers).unwrap();
+    let request = Request::new(Method::Get, access_path, headers, http::Body::None).unwrap();
+    let response = sut.serve_http(&client_addr(), request).unwrap();
+    // Assert
+    assert_eq!(StatusCode::OK, response.status_code(), "did not find path");
+}
+
 #[test]
 pub fn serve_should_return_not_found_when_no_matching_endpoint_path_is_found() {
     // Arrange

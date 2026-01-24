@@ -52,12 +52,14 @@ impl Config {
             .gates
             .iter()
             .map(|(_, g)| {
-                (
-                    g.destination.clone(),
-                    g.internal_destination
-                        .clone()
-                        .unwrap_or(g.destination.clone()),
-                )
+                let mut public_host = g.destination.clone();
+                public_host.set_path("");
+                let mut internal_host = g
+                    .internal_destination
+                    .clone()
+                    .unwrap_or(public_host.clone());
+                internal_host.set_path("");
+                (public_host, internal_host)
             })
             .collect();
         proxy::UrlResolverImpl::new(mappings)

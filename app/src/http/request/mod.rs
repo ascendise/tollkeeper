@@ -108,7 +108,9 @@ impl Request {
     }
 
     pub fn matches_path(&self, path: &str) -> bool {
-        self.absolute_target().path() == path
+        let request_path = self.absolute_target.path().trim_end_matches('/');
+        let path = path.trim_end_matches('/');
+        request_path == path
     }
 
     pub fn matches_method(&self, method: &Method) -> bool {
