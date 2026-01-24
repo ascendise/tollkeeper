@@ -11,6 +11,9 @@ use std::{
 
 fn setup(handler: Box<dyn TcpServe + Send + Sync + 'static>) -> (Server, net::SocketAddr) {
     let listener = net::TcpListener::bind("127.0.0.1:0").expect("Failed to open test socket");
+    listener.set_nonblocking(true).unwrap(); //Allows shutting down server as it changes polling
+                                             //from blocking (never getting shutdown signal) to
+                                             //busy loop
     let local_addr = listener
         .local_addr()
         .expect("Failed to retrieve address of test socket");

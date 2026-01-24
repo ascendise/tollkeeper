@@ -40,10 +40,6 @@ impl Server {
     /// Blocks execution and starts listening for connections.
     /// Connections get handled in independent threads
     pub fn start_listening(&mut self, cancel_receiver: CancelReceiver) -> Result<(), StartupError> {
-        match self.listener.set_nonblocking(true) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(StartupError::new(e.to_string())),
-        }?;
         thread::scope(|s| {
             while !cancel_receiver.is_shutting_down() {
                 let stream = match self.listener.accept() {
