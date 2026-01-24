@@ -2,7 +2,10 @@ FROM rust:1.92-alpine AS build
 
 WORKDIR /usr/src/tollkeeper
 COPY . .
-RUN cargo install --path app
+RUN --mount=type=cache,target=target \
+  --mount=type=cache,target=/usr/local/cargo/git/db \
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  cargo install --path app
 
 FROM alpine:3.23
 WORKDIR /usr/local/bin/
