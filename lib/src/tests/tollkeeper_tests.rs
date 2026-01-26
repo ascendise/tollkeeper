@@ -267,6 +267,22 @@ pub fn passing_gate_with_valid_visa_for_resource_should_not_challenge_again_on_s
 }
 
 #[test]
+pub fn passing_gate_with_valid_visa_acquired_from_subresource_access_should_allow_access_to_all_resources_in_gate(
+) {
+    // Arrange
+    let (sut, order_id) = setup(None);
+    // Act
+    let visa_destination = Destination::new("localhost", 80, "/child");
+    let visa_suspect = Suspect::new("1.2.3.4", "Bot", visa_destination);
+    let visa = Visa::new(order_id, visa_suspect.clone(), expires_from_now(1));
+    let visa = Signed::sign(visa, b"Secret key");
+    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost", 80, "/"));
+    let access_result = sut.check_access(&suspect, Some(visa));
+    // Assert
+    assert_is_allowed(&access_result);
+}
+
+#[test]
 pub fn passing_gate_should_include_child_resources_in_access_control() {
     // Arrange
     let (sut, _) = setup(None);

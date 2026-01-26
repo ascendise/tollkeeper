@@ -53,7 +53,7 @@ impl Tollkeeper {
         match self
             .gates
             .iter()
-            .find(|g| g.destination().contains(&access_destination))
+            .find(|g| g.destination().includes(&access_destination))
         {
             Some(g) => Ok(g),
             None => Err(AccessError::DestinationNotFound(Box::new(
@@ -222,6 +222,7 @@ impl Gate {
     /// Examine [Suspect] and check if it has to pay a [Toll]
     fn pass(&self, suspect: &Suspect, visa: Option<&Visa>) -> Option<Toll> {
         for order in &self.orders {
+            let visa = self.check_visa(visa);
             let exam = order.examine(suspect, visa, &self.id);
             if exam.access_granted {
                 return Option::None;
@@ -231,6 +232,17 @@ impl Gate {
             }
         }
         Option::None
+    }
+
+    fn check_visa<'a>(&self, visa: Option<&'a Visa>) -> Option<&'a Visa> {
+        visa.map(|v| {
+            let visa_destination = v.suspect().destination();
+            if self.destination.includes(visa_destination) {
+                Some(v)
+            } else {
+                None
+            }
+        })?
     }
 }
 
@@ -307,7 +319,6 @@ impl Order {
     fn matches_visa(suspect: &Suspect, visa_suspect: &Suspect) -> bool {
         visa_suspect.client_ip() == suspect.client_ip()
             && visa_suspect.user_agent() == suspect.user_agent()
-            && visa_suspect.destination().contains(suspect.destination())
     }
 
     pub fn id(&self) -> &str {

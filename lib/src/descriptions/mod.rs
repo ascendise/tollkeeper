@@ -103,7 +103,7 @@ impl Destination {
     /// Returns true, if the subDestination is a child of this [Destination]
     /// E.g. localhost:80/.contains(localhost:80/child) => true
     /// E.g. localhost:80/root/.contains(localhost:80/) => false
-    pub fn contains(&self, sub_destination: &Destination) -> bool {
+    pub fn includes(&self, sub_destination: &Destination) -> bool {
         let root_path = &self.path;
         let child_path = &sub_destination.path;
         self.base_url == sub_destination.base_url
