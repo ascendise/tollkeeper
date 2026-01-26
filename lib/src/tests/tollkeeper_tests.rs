@@ -1,9 +1,10 @@
 use super::*;
-use crate::{signatures::InMemorySecretKeyProvider, *};
+use crate::{signatures::InMemorySecretKeyProvider, util::FakeDateTimeProvider, *};
+use chrono::TimeZone;
 use pretty_assertions::assert_eq;
 use test_case::test_case;
 
-fn setup() -> (Tollkeeper, OrderIdentifier) {
+fn setup(current_time: Option<chrono::DateTime<chrono::Utc>>) -> (Tollkeeper, OrderIdentifier) {
     let secret_key: Vec<u8> = b"Secret key".into();
     let require_payment_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
@@ -19,18 +20,27 @@ fn setup() -> (Tollkeeper, OrderIdentifier) {
     let order_id = OrderIdentifier::new(gate.id.clone(), order_id);
     let secret_key_provider = InMemorySecretKeyProvider::new(secret_key);
     let secret_key_provider = Box::new(secret_key_provider);
-    let tollkeeper = Tollkeeper::new(vec![gate], secret_key_provider).unwrap();
+    let current_time = current_time.unwrap_or(chrono::Utc::now());
+    let date_time_provider = Box::new(FakeDateTimeProvider(current_time));
+    let tollkeeper = Tollkeeper::new(vec![gate], secret_key_provider, date_time_provider).unwrap();
     (tollkeeper, order_id)
 }
 
-fn setup_gates(gates: Vec<Gate>) -> Tollkeeper {
+fn setup_with_gates(
+    gates: Vec<Gate>,
+    current_time: Option<chrono::DateTime<chrono::Utc>>,
+) -> Tollkeeper {
     let secret_key: Vec<u8> = b"Secret key".into();
     let secret_key_provider = InMemorySecretKeyProvider::new(secret_key);
     let secret_key_provider = Box::new(secret_key_provider);
-    Tollkeeper::new(gates, secret_key_provider).unwrap()
+    let current_time = current_time.unwrap_or(chrono::Utc::now());
+    let date_time_provider = Box::new(FakeDateTimeProvider(current_time));
+    Tollkeeper::new(gates, secret_key_provider, date_time_provider).unwrap()
 }
 
-fn setup_with_payment() -> (Tollkeeper, OrderIdentifier) {
+fn setup_with_payment(
+    current_time: Option<chrono::DateTime<chrono::Utc>>,
+) -> (Tollkeeper, OrderIdentifier) {
     let secret_key: Vec<u8> = b"Secret key".into();
     let require_payment_order = Order::new(
         vec![Box::new(StubDescription::new(true))],
@@ -46,7 +56,9 @@ fn setup_with_payment() -> (Tollkeeper, OrderIdentifier) {
     let order_id = OrderIdentifier::new(gate.id.clone(), order_id);
     let secret_key_provider = InMemorySecretKeyProvider::new(secret_key);
     let secret_key_provider = Box::new(secret_key_provider);
-    let tollkeeper = Tollkeeper::new(vec![gate], secret_key_provider).unwrap();
+    let current_time = current_time.unwrap_or(chrono::Utc::now());
+    let date_time_provider = Box::new(FakeDateTimeProvider(current_time));
+    let tollkeeper = Tollkeeper::new(vec![gate], secret_key_provider, date_time_provider).unwrap();
     (tollkeeper, order_id)
 }
 
@@ -81,8 +93,9 @@ pub fn creating_new_toolkeeper_with_no_gates_should_fail() {
     // Arrange
     let secret_key_provider = InMemorySecretKeyProvider::new("Secret key".into());
     let secret_key_provider = Box::new(secret_key_provider);
+    let date_time_provider = Box::new(FakeDateTimeProvider(chrono::Utc::now()));
     // Act
-    let result = Tollkeeper::new(vec![], secret_key_provider);
+    let result = Tollkeeper::new(vec![], secret_key_provider, date_time_provider);
     // Assert
     assert!(
         result.is_err(),
@@ -110,9 +123,9 @@ pub fn should_require_no_toll_if_not_matching_toll_requirements(
         Box::new(StubDeclaration::new()),
     );
     let gate = Gate::new(Destination::new_base("localhost"), vec![order]).unwrap();
-    let sut = setup_gates(vec![gate]);
+    let sut = setup_with_gates(vec![gate], None);
     // Act
-    let access_result = sut.check_access(&suspect, &Option::None);
+    let access_result = sut.check_access(&suspect, None);
     // Assert
     assert_is_allowed(&access_result);
 }
@@ -133,9 +146,9 @@ pub fn should_require_toll_if_matching_toll_requirement(
         Box::new(StubDeclaration::new()),
     );
     let gate = Gate::new(Destination::new_base("localhost"), vec![order]).unwrap();
-    let sut = setup_gates(vec![gate]);
+    let sut = setup_with_gates(vec![gate], None);
     // Act
-    let access_result = sut.check_access(&suspect, &Option::None);
+    let access_result = sut.check_access(&suspect, None);
     // Assert
     assert_is_denied(&access_result);
 }
@@ -168,9 +181,9 @@ pub fn passing_gate_with_first_matching_order_requiring_toll_should_return_toll(
         vec![first_order, matching_order, last_order],
     )
     .unwrap();
-    let sut = setup_gates(vec![gate]);
+    let sut = setup_with_gates(vec![gate], None);
     // Act
-    let access_result = sut.check_access(&malicious_suspect, &Option::None);
+    let access_result = sut.check_access(&malicious_suspect, None);
     // Assert
     let toll = assert_is_denied(&access_result);
     assert!(
@@ -207,9 +220,9 @@ pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_acces
         vec![first_order, matching_order, last_order],
     )
     .unwrap();
-    let sut = setup_gates(vec![gate]);
+    let sut = setup_with_gates(vec![gate], None);
     // Act
-    let access_result = sut.check_access(&benign_suspect, &Option::None);
+    let access_result = sut.check_access(&benign_suspect, None);
     // Assert
     assert_is_allowed(&access_result);
 }
@@ -217,32 +230,54 @@ pub fn passing_gate_with_first_matching_order_allowing_access_should_allow_acces
 #[test]
 pub fn passing_gate_with_valid_visa_should_allow_access() {
     // Arrange
-    let (sut, order_id) = setup();
+    let (sut, order_id) = setup(None);
     // Act
     let destination = Destination::new_base("localhost");
     let suspect = Suspect::new("1.2.3.4", "Bot", destination);
-    let visa = Visa::new(order_id, suspect.clone());
+    let visa = Visa::new(order_id, suspect.clone(), expires_from_now(1));
     let visa = Signed::sign(visa, b"Secret key");
-    let access_result = sut.check_access(&suspect, &Option::Some(visa));
+    let access_result = sut.check_access(&suspect, Some(visa));
     // Assert
     assert_is_allowed(&access_result);
+}
+
+fn expires_from_now(add_days: u64) -> chrono::DateTime<chrono::Utc> {
+    chrono::Utc::now()
+        .checked_add_days(chrono::Days::new(add_days))
+        .unwrap()
 }
 
 #[test]
 pub fn passing_gate_with_valid_visa_for_resource_should_not_challenge_again_on_subresources() {
     // Arrange
-    let (sut, order_id) = setup();
+    let (sut, order_id) = setup(None);
     // Act
     let visa_destination = Destination::new_base("localhost");
     let visa_suspect = Suspect::new("1.2.3.4", "Bot", visa_destination);
-    let visa = Visa::new(order_id, visa_suspect.clone());
+    let visa = Visa::new(order_id, visa_suspect.clone(), expires_from_now(1));
     let visa = Signed::sign(visa, b"Secret key");
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
         Destination::new("localhost", 80, "/child"),
     );
-    let access_result = sut.check_access(&suspect, &Option::Some(visa));
+    let access_result = sut.check_access(&suspect, Some(visa));
+    // Assert
+    assert_is_allowed(&access_result);
+}
+
+#[test]
+pub fn passing_gate_with_valid_visa_acquired_from_subresource_access_should_allow_access_to_all_resources_in_gate(
+) {
+    // Arrange
+    let (sut, order_id) = setup(None);
+    // Act
+    let visa_destination = Destination::new("localhost", 80, "/child");
+    let visa_suspect = Suspect::new("1.2.3.4", "Bot", visa_destination);
+    let visa = Visa::new(order_id, visa_suspect.clone(), expires_from_now(1));
+    let visa = Signed::sign(visa, b"Secret key");
+    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new("localhost", 80, "/"));
+    let access_result = sut.check_access(&suspect, Some(visa));
     // Assert
     assert_is_allowed(&access_result);
 }
@@ -250,11 +285,11 @@ pub fn passing_gate_with_valid_visa_for_resource_should_not_challenge_again_on_s
 #[test]
 pub fn passing_gate_should_include_child_resources_in_access_control() {
     // Arrange
-    let (sut, _) = setup();
+    let (sut, _) = setup(None);
     // Act
     let destination = Destination::new("localhost", 80, "/child");
     let suspect = Suspect::new("1.2.3.4", "Bot", destination);
-    let access_result = sut.check_access(&suspect, &None);
+    let access_result = sut.check_access(&suspect, None);
     // Assert
     let access_result = access_result.unwrap_err();
     match access_result {
@@ -279,10 +314,10 @@ pub fn passing_gate_should_return_destination_not_found_for_mismatched_paths(
         vec![order],
     )
     .unwrap();
-    let sut = setup_gates(vec![gate]);
+    let sut = setup_with_gates(vec![gate], None);
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bot", destination);
-    let access_result = sut.check_access(&suspect, &None);
+    let access_result = sut.check_access(&suspect, None);
     // Assert
     let access_result = access_result.expect_err("Tollkeeper allowed access to unguarded resource");
     match access_result {
@@ -294,17 +329,37 @@ pub fn passing_gate_should_return_destination_not_found_for_mismatched_paths(
 }
 
 #[test]
+pub fn passing_gate_with_expired_visa_should_return_new_toll() {
+    // Arrange
+    let current_time = chrono::Utc.with_ymd_and_hms(2025, 12, 1, 13, 0, 0).unwrap();
+    let (sut, order_id) = setup(Some(current_time));
+    // Act
+    let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new_base("localhost"));
+    let visa_expiry = current_time - chrono::Duration::seconds(1);
+    let visa = Visa::new(
+        OrderIdentifier::new(order_id.gate_id(), order_id.order_id()),
+        suspect.clone(),
+        visa_expiry,
+    );
+    let visa = Signed::sign(visa, b"Secret key");
+    let access_result = sut.check_access(&suspect, Some(visa));
+    // Assert
+    assert_is_denied(&access_result);
+}
+
+#[test]
 pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
     // Arrange
-    let (sut, order_id) = setup();
+    let (sut, order_id) = setup(None);
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new_base("localhost"));
     let visa = Visa::new(
         OrderIdentifier::new(order_id.gate_id(), "not_an_order_id"),
         suspect.clone(),
+        expires_from_now(1),
     );
     let visa = Signed::sign(visa, b"Secret key");
-    let access_result = sut.check_access(&suspect, &Option::Some(visa));
+    let access_result = sut.check_access(&suspect, Some(visa));
     // Assert
     assert_is_denied(&access_result);
 }
@@ -312,15 +367,16 @@ pub fn passing_gate_with_visa_for_unknown_order_should_return_new_toll() {
 #[test]
 pub fn passing_gate_with_visa_for_different_suspect_should_return_new_toll_for_current_suspect() {
     // Arrange
-    let (sut, order_id) = setup();
+    let (sut, order_id) = setup(None);
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let visa = Visa::new(
         order_id,
         Suspect::new("4.3.2.1", "Alice", Destination::new_base("localhost")),
+        expires_from_now(1),
     );
     let visa = Signed::sign(visa, b"Secret key");
-    let access_result = sut.check_access(&suspect, &Option::Some(visa));
+    let access_result = sut.check_access(&suspect, Some(visa));
     // Assert
     let toll = assert_is_denied(&access_result);
     let (_, toll) = toll.deconstruct();
@@ -330,16 +386,16 @@ pub fn passing_gate_with_visa_for_different_suspect_should_return_new_toll_for_c
 #[test]
 pub fn passing_gate_with_visa_with_invalid_signature_should_reject_with_new_toll() {
     // Arrange
-    let (sut, order_id) = setup();
+    let (sut, order_id) = setup(None);
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bot", Destination::new_base("localhost"));
-    let visa = Visa::new(order_id.clone(), suspect.clone());
+    let visa = Visa::new(order_id.clone(), suspect.clone(), expires_from_now(1));
     let signed_visa = Signed::sign(visa, b"Secret key");
     let signature = signed_visa.signature();
     let forged_suspect = Suspect::new("11.22.33.44", "Bot", Destination::new_base("localhost"));
-    let forged_visa = Visa::new(order_id, forged_suspect.clone());
+    let forged_visa = Visa::new(order_id, forged_suspect.clone(), expires_from_now(1));
     let forged_visa = Signed::new(forged_visa, signature.raw().to_vec());
-    let access_result = sut.check_access(&forged_suspect, &Option::Some(forged_visa));
+    let access_result = sut.check_access(&forged_suspect, Some(forged_visa));
     // Assert
     let _ = assert_is_denied(&access_result);
 }
@@ -347,7 +403,7 @@ pub fn passing_gate_with_visa_with_invalid_signature_should_reject_with_new_toll
 #[test]
 pub fn paying_toll_for_valid_order_with_valid_payment_should_return_visa() {
     // Arrange
-    let (sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment(None);
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(suspect.clone(), order_id, Challenge::new());
@@ -368,7 +424,7 @@ pub fn paying_toll_for_valid_order_with_valid_payment_should_return_visa() {
 #[test]
 pub fn paying_toll_for_valid_order_with_invalid_payment_should_return_error() {
     // Arrange
-    let (sut, order_id) = setup();
+    let (sut, order_id) = setup(None);
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(suspect.clone(), order_id, Challenge::new());
@@ -400,7 +456,7 @@ pub fn paying_toll_for_valid_order_with_invalid_payment_should_return_error() {
 #[test]
 pub fn paying_toll_for_different_suspect_should_return_new_toll_for_current_suspect() {
     // Arrange
-    let (sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment(None);
     // Act
     let suspect_alice = Suspect::new("1.2.3.4", "Alice", Destination::new_base("localhost"));
     let suspect_bob = Suspect::new("90.1.2.6", "Bob", Destination::new_base("localhost"));
@@ -427,7 +483,7 @@ pub fn paying_toll_for_different_suspect_should_return_new_toll_for_current_susp
 #[test]
 pub fn paying_toll_for_unknown_gate_should_return_error() {
     // Arrange
-    let (sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment(None);
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(
@@ -447,7 +503,7 @@ pub fn paying_toll_for_unknown_gate_should_return_error() {
 #[test]
 pub fn paying_toll_for_unknown_order_should_return_error() {
     // Arrange
-    let (sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment(None);
     // Act
     let suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let toll = Toll::new(
@@ -469,7 +525,7 @@ pub fn paying_toll_for_unknown_order_should_return_error() {
 #[test]
 pub fn paying_toll_with_forged_toll_should_return_error_without_new_toll() {
     // Arrange
-    let (sut, order_id) = setup_with_payment();
+    let (sut, order_id) = setup_with_payment(None);
     // Act
     let real_suspect = Suspect::new("1.2.3.4", "Bob", Destination::new_base("localhost"));
     let real_toll = Toll::new(

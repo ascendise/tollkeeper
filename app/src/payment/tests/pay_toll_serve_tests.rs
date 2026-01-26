@@ -1,3 +1,4 @@
+use chrono::TimeZone;
 use pretty_assertions::assert_eq;
 use std::{
     collections::VecDeque,
@@ -92,9 +93,13 @@ pub fn pay_toll_serve_should_return_visa_as_json() {
     let create_visa = move || {
         let recipient = proxy::Recipient::new("1.2.3.4", "Bob", "example.com:80/");
         let order_id = proxy::OrderId::new("gate", "order");
+        let expires = chrono::Utc
+            .with_ymd_and_hms(2030, 12, 24, 12, 30, 15)
+            .unwrap();
         let expected_visa = payment::Visa::new(
             order_id.clone(),
             recipient.clone(),
+            payment::UnixTimestamp(expires),
             Base64::encode(b"real signature ;D"),
         );
         Ok(expected_visa)
@@ -115,7 +120,7 @@ pub fn pay_toll_serve_should_return_visa_as_json() {
         response.headers().content_type()
     );
     let expected_body = json!({
-        "token": "eyJpcCI6IjEuMi4zLjQiLCJ1YSI6IkJvYiIsImRlc3QiOiJleGFtcGxlLmNvbTo4MC8iLCJvcmRlcl9pZCI6ImdhdGUjb3JkZXIifQ==.cmVhbCBzaWduYXR1cmUgO0Q=",
+        "token": "eyJpcCI6IjEuMi4zLjQiLCJ1YSI6IkJvYiIsImRlc3QiOiJleGFtcGxlLmNvbTo4MC8iLCJleHAiOjE5MjQzNDU4MTUsIm9yZGVyX2lkIjoiZ2F0ZSNvcmRlciJ9.cmVhbCBzaWduYXR1cmUgO0Q=",
         "header_name": "X-Keeper-Token",
         "_links": {
             "origin_url": "example.com:80/"

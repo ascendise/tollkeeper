@@ -185,7 +185,7 @@ impl ProxyService for ProxyServiceImpl {
         let suspect = Self::create_suspect(client_addr, &req);
         let visa = Self::extract_visa(req.headers());
         let visa = visa.map(|v| v.into());
-        match self.tollkeeper.check_access(&suspect, &visa) {
+        match self.tollkeeper.check_access(&suspect, visa) {
             Ok(()) => Ok(self.send_request_to_proxy(req)),
             Err(access_err) => match access_err {
                 tollkeeper::err::AccessError::AccessDeniedError(toll) => {

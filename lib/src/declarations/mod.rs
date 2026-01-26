@@ -122,10 +122,19 @@ impl Payment {
 pub struct Visa {
     order_id: OrderIdentifier,
     suspect: Suspect,
+    expires: chrono::DateTime<chrono::Utc>,
 }
 impl Visa {
-    pub fn new(order_id: OrderIdentifier, suspect: Suspect) -> Self {
-        Self { order_id, suspect }
+    pub fn new(
+        order_id: OrderIdentifier,
+        suspect: Suspect,
+        expires: chrono::DateTime<chrono::Utc>,
+    ) -> Self {
+        Self {
+            order_id,
+            suspect,
+            expires,
+        }
     }
 
     /// [super::Order] the [Visa] was issued for
@@ -137,12 +146,17 @@ impl Visa {
     pub fn suspect(&self) -> &Suspect {
         &self.suspect
     }
+
+    pub fn expires(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.expires
+    }
 }
 impl AsBytes for Visa {
     fn as_bytes(&self) -> Vec<u8> {
         let mut data = Vec::new();
         data.append(&mut self.order_id.as_bytes());
         data.append(&mut self.suspect.as_bytes());
+        data.append(&mut self.expires.timestamp().to_le_bytes().into());
         data
     }
 }

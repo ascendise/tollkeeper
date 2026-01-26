@@ -43,7 +43,9 @@ impl Config {
             })
             .collect();
         let secret_key_provider = self.secret_key_provider.to_entity();
-        let tollkeeper = tollkeeper::Tollkeeper::new(gates, secret_key_provider).ok()?;
+        let date_provider = Box::new(tollkeeper::util::DateTimeProviderImpl);
+        let tollkeeper =
+            tollkeeper::Tollkeeper::new(gates, secret_key_provider, date_provider).ok()?;
         Some(tollkeeper)
     }
 

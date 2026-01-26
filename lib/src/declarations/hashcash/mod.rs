@@ -113,7 +113,11 @@ impl HashcashDeclaration {
         match self.double_spent_db.insert(payment.value().into()) {
             Ok(()) => {
                 let order_id = payment.toll.order_id().clone();
-                let visa = Visa::new(order_id, payment.toll.recipient().clone());
+                let visa = Visa::new(
+                    order_id,
+                    payment.toll.recipient().clone(),
+                    self.date_provider.now() + self.expiry,
+                );
                 Ok(visa)
             }
             Err(e) => Err(e),

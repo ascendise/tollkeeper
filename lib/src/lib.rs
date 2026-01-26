@@ -19,16 +19,20 @@ use uuid::Uuid;
 
 use signatures::SecretKeyProvider;
 
+use crate::util::DateTimeProvider;
+
 /// Guards actions against spam by requiring a PoW [challenge](Toll) to be solved before proceeding.
 pub struct Tollkeeper {
     gates: Vec<Gate>,
     secret_key_provider: Box<dyn SecretKeyProvider + Send + Sync>,
+    date_provider: Box<dyn DateTimeProvider + Send + Sync>,
 }
 
 impl Tollkeeper {
     pub fn new(
         gates: Vec<Gate>,
         secret_key_provider: Box<dyn SecretKeyProvider + Send + Sync>,
+        date_provider: Box<dyn util::DateTimeProvider + Send + Sync>,
     ) -> Result<Self, ConfigError> {
         if gates.is_empty() {
             Err(ConfigError::new(
@@ -39,6 +43,7 @@ impl Tollkeeper {
             Ok(Self {
                 gates,
                 secret_key_provider,
+                date_provider,
             })
         }
     }
@@ -48,7 +53,7 @@ impl Tollkeeper {
         match self
             .gates
             .iter()
-            .find(|g| g.destination().contains(&access_destination))
+            .find(|g| g.destination().includes(&access_destination))
         {
             Some(g) => Ok(g),
             None => Err(AccessError::DestinationNotFound(Box::new(
@@ -65,12 +70,13 @@ impl Tollkeeper {
     pub fn check_access(
         &self,
         suspect: &Suspect,
-        visa: &Option<Signed<Visa>>,
+        visa: Option<Signed<Visa>>,
     ) -> Result<(), AccessError> {
         let _span = tracing::info_span!("[Tollkeeper(access_control)]").entered();
         let gate = self.find_matching_gate(suspect)?;
-        let secret_key = self.secret_key_provider.read_secret_key();
-        let result = gate.pass(suspect, visa, secret_key);
+        let visa = self.validate_signature(visa.as_ref());
+        let visa = self.validate_expiry_date(visa);
+        let result = gate.pass(suspect, visa);
         match result {
             Some(toll) => {
                 let secret_key = self.secret_key_provider.read_secret_key();
@@ -78,6 +84,27 @@ impl Tollkeeper {
                 Err(AccessError::AccessDeniedError(Box::new(toll)))
             }
             None => Ok(()),
+        }
+    }
+
+    fn validate_signature<'a>(&self, visa: Option<&'a Signed<Visa>>) -> Option<&'a Visa> {
+        let secret_key = self.secret_key_provider.read_secret_key();
+        match visa {
+            Some(v) => v.verify(secret_key).ok(),
+            None => None,
+        }
+    }
+
+    fn validate_expiry_date<'a>(&self, visa: Option<&'a Visa>) -> Option<&'a Visa> {
+        match visa {
+            Some(v) => {
+                if &self.date_provider.now() < v.expires() {
+                    Some(v)
+                } else {
+                    None
+                }
+            }
+            None => None,
         }
     }
 
@@ -193,14 +220,10 @@ impl Gate {
     }
 
     /// Examine [Suspect] and check if it has to pay a [Toll]
-    fn pass(
-        &self,
-        suspect: &Suspect,
-        visa: &Option<Signed<Visa>>,
-        secret_key: &[u8],
-    ) -> Option<Toll> {
+    fn pass(&self, suspect: &Suspect, visa: Option<&Visa>) -> Option<Toll> {
         for order in &self.orders {
-            let exam = order.examine(suspect, visa, secret_key, &self.id);
+            let visa = self.check_visa(visa);
+            let exam = order.examine(suspect, visa, &self.id);
             if exam.access_granted {
                 return Option::None;
             }
@@ -209,6 +232,17 @@ impl Gate {
             }
         }
         Option::None
+    }
+
+    fn check_visa<'a>(&self, visa: Option<&'a Visa>) -> Option<&'a Visa> {
+        visa.map(|v| {
+            let visa_destination = v.suspect().destination();
+            if self.destination.includes(visa_destination) {
+                Some(v)
+            } else {
+                None
+            }
+        })?
     }
 }
 
@@ -253,17 +287,11 @@ impl Order {
         }
     }
 
-    fn examine(
-        &self,
-        suspect: &Suspect,
-        visa: &Option<Signed<Visa>>,
-        secret_key: &[u8],
-        gate_id: &str,
-    ) -> Examination {
+    fn examine(&self, suspect: &Suspect, visa: Option<&Visa>, gate_id: &str) -> Examination {
         let matches_description = self.is_match(suspect);
         let require_toll = (matches_description && self.access_policy == AccessPolicy::Blacklist)
             || (!matches_description && self.access_policy == AccessPolicy::Whitelist);
-        let toll = if require_toll && !self.has_valid_visa(suspect, visa, secret_key) {
+        let toll = if require_toll && !self.has_valid_visa(suspect, visa) {
             Option::Some(self.toll_declaration.declare(
                 suspect.clone(),
                 OrderIdentifier::new(gate_id, self.id.clone()),
@@ -279,19 +307,11 @@ impl Order {
         self.descriptions.iter().any(|d| d.matches(suspect))
     }
 
-    fn has_valid_visa(
-        &self,
-        suspect: &Suspect,
-        visa: &Option<Signed<Visa>>,
-        secret_key: &[u8],
-    ) -> bool {
+    fn has_valid_visa(&self, suspect: &Suspect, visa: Option<&Visa>) -> bool {
         match visa {
-            Option::Some(v) => match v.verify(secret_key) {
-                Ok(v) => {
-                    v.order_id().order_id() == self.id && Self::matches_visa(suspect, v.suspect())
-                }
-                Err(_) => false,
-            },
+            Option::Some(v) => {
+                v.order_id().order_id() == self.id && Self::matches_visa(suspect, v.suspect())
+            }
             Option::None => false,
         }
     }
@@ -299,7 +319,6 @@ impl Order {
     fn matches_visa(suspect: &Suspect, visa_suspect: &Suspect) -> bool {
         visa_suspect.client_ip() == suspect.client_ip()
             && visa_suspect.user_agent() == suspect.user_agent()
-            && visa_suspect.destination().contains(suspect.destination())
     }
 
     pub fn id(&self) -> &str {

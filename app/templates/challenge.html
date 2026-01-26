@@ -81,7 +81,7 @@
         });
     let visa = await response.json();
     console.log(visa);
-    document.cookie = `${visa.header_name}=${visa.token}`;
+    document.cookie = `${visa.header_name}=${visa.token}; path=/`;
     window.location.href = `http://${visa._links.origin_url}`;
   }
 

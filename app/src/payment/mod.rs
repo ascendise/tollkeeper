@@ -4,6 +4,7 @@ mod tests;
 use std::{error::Error, fmt::Display, str::FromStr, sync::Arc};
 
 use base64::{prelude::BASE64_STANDARD, Engine};
+use chrono::TimeZone;
 use tollkeeper::signatures::{Base64, Signed};
 
 use crate::{
@@ -199,13 +200,20 @@ impl TryFrom<Payment> for tollkeeper::SignedPayment {
 pub struct Visa {
     order_id: proxy::OrderId,
     recipient: proxy::Recipient,
+    expires: UnixTimestamp,
     signature: Base64,
 }
 impl Visa {
-    pub fn new(order_id: proxy::OrderId, recipient: proxy::Recipient, signature: Base64) -> Self {
+    pub fn new(
+        order_id: proxy::OrderId,
+        recipient: proxy::Recipient,
+        expires: UnixTimestamp,
+        signature: Base64,
+    ) -> Self {
         Self {
             order_id,
             recipient,
+            expires,
             signature,
         }
     }
@@ -220,6 +228,11 @@ impl Visa {
         &self.recipient
     }
 
+    /// Unix Timestamp expiry date for visa
+    pub fn expires(&self) -> &UnixTimestamp {
+        &self.expires
+    }
+
     /// Base64 encoded signature
     pub fn signature(&self) -> &Base64 {
         &self.signature
@@ -231,6 +244,7 @@ impl data_formats::AsHttpHeader for Visa {
             "ip": self.recipient().client_ip(),
             "ua": self.recipient().user_agent(),
             "dest": self.recipient().destination(),
+            "exp": self.expires().timestamp(),
             "order_id": self.order_id
         })
         .to_string();
@@ -251,9 +265,10 @@ impl data_formats::FromHttpHeader for Visa {
         let client_ip = visa_json["ip"].as_str().ok_or(())?;
         let user_agent = visa_json["ua"].as_str().ok_or(())?;
         let destination = visa_json["dest"].as_str().ok_or(())?;
+        let expires = visa_json["exp"].as_i64().ok_or(())?;
         let recipient = proxy::Recipient::new(client_ip, user_agent, destination);
         let signature = Base64::from(signature).or(Err(()))?;
-        let visa = Visa::new(order_id, recipient, signature);
+        let visa = Visa::new(order_id, recipient, expires.into(), signature);
         Ok(visa)
     }
 }
@@ -272,19 +287,39 @@ impl data_formats::AsHalJson for Visa {
 }
 impl From<Visa> for Signed<tollkeeper::declarations::Visa> {
     fn from(value: Visa) -> Self {
-        let visa =
-            tollkeeper::declarations::Visa::new(value.order_id.into(), value.recipient.into());
+        let visa = tollkeeper::declarations::Visa::new(
+            value.order_id.into(),
+            value.recipient.into(),
+            value.expires.0,
+        );
         Signed::new(visa, value.signature.decode())
     }
 }
 impl From<Signed<tollkeeper::declarations::Visa>> for Visa {
     fn from(value: Signed<tollkeeper::declarations::Visa>) -> Self {
         let (signature, visa) = value.deconstruct();
+        let expires = visa.expires();
         Visa::new(
             visa.order_id().into(),
             visa.suspect().into(),
+            UnixTimestamp(*expires),
             signature.base64(),
         )
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct UnixTimestamp(pub chrono::DateTime<chrono::Utc>);
+impl UnixTimestamp {
+    /// Returns Unix Timestamp in seconds
+    pub fn timestamp(&self) -> i64 {
+        self.0.timestamp()
+    }
+}
+impl From<i64> for UnixTimestamp {
+    fn from(value: i64) -> Self {
+        let timestamp = chrono::Utc.timestamp_opt(value, 0).unwrap();
+        Self(timestamp)
     }
 }
 

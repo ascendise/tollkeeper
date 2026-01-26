@@ -12,6 +12,7 @@ use tollkeeper::{
     declarations::{self},
     descriptions::{self},
     signatures::{AsBytes, Base64, InMemorySecretKeyProvider},
+    util::FakeDateTimeProvider,
 };
 
 use crate::{
@@ -28,6 +29,7 @@ fn setup_and_get_id(
     requires_challenge: bool,
     internal_addr: net::SocketAddr,
     public_url: Option<url::Url>,
+    current_time: Option<chrono::DateTime<chrono::Utc>>,
 ) -> (OrderId, ProxyServiceImpl) {
     let destination = match &public_url {
         Some(u) => {
@@ -52,7 +54,10 @@ fn setup_and_get_id(
     let gate_id = gates[0].id().to_string();
     let secret_key_provider = InMemorySecretKeyProvider::new("Secret key".into());
     let secret_key_provider = Box::new(secret_key_provider);
-    let tollkeeper = tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap();
+    let current_time = current_time.unwrap_or(chrono::Utc::now());
+    let date_provider = Box::new(FakeDateTimeProvider(current_time));
+    let tollkeeper =
+        tollkeeper::Tollkeeper::new(gates, secret_key_provider, date_provider).unwrap();
     let order_id = OrderId { gate_id, order_id };
     let internal_addr = to_url(&internal_addr);
     let public_url = public_url.unwrap_or(internal_addr.clone());
@@ -70,8 +75,12 @@ fn to_url(addr: &net::SocketAddr) -> url::Url {
     url::Url::from_str(url).expect("Failed to convert host to url::Url")
 }
 
-fn setup(requires_challenge: bool, proxy_addr: net::SocketAddr) -> ProxyServiceImpl {
-    let (_, sut) = setup_and_get_id(requires_challenge, proxy_addr, None);
+fn setup(
+    requires_challenge: bool,
+    proxy_addr: net::SocketAddr,
+    current_time: Option<chrono::DateTime<chrono::Utc>>,
+) -> ProxyServiceImpl {
+    let (_, sut) = setup_and_get_id(requires_challenge, proxy_addr, None, current_time);
     sut
 }
 
@@ -79,8 +88,14 @@ fn setup_with_redirect(
     requires_challenge: bool,
     internal_addr: net::SocketAddr,
     public_url: url::Url,
+    current_time: Option<chrono::DateTime<chrono::Utc>>,
 ) -> ProxyServiceImpl {
-    let (_, sut) = setup_and_get_id(requires_challenge, internal_addr, Some(public_url));
+    let (_, sut) = setup_and_get_id(
+        requires_challenge,
+        internal_addr,
+        Some(public_url),
+        current_time,
+    );
     sut
 }
 
@@ -132,7 +147,7 @@ pub fn proxy_request_should_send_request_to_target_and_return_response(
         proxy_response.extend_from_slice(d)
     };
     let (proxy, proxy_addr) = setup_proxy(proxy_response);
-    let sut = setup(false, proxy_addr);
+    let sut = setup(false, proxy_addr, None);
     // Act
     let mut headers = http::Headers::empty();
     headers.insert("Host", format!("127.0.0.1:{}", proxy_addr.port()));
@@ -163,7 +178,7 @@ pub fn proxy_request_should_send_request_to_resolved_target() {
     let proxy_response = b"HTTP/1.1 200 OK\r\n\r\n".as_bytes();
     let (proxy, internal_addr) = setup_proxy(proxy_response);
     let public_addr = url::Url::from_str("http://example.ascendise.ch:80").unwrap();
-    let sut = setup_with_redirect(false, internal_addr, public_addr);
+    let sut = setup_with_redirect(false, internal_addr, public_addr, None);
     // Act
     let mut headers = http::Headers::empty();
     headers.insert("Host", "example.ascendise.ch");
@@ -196,7 +211,7 @@ pub fn proxy_request_should_send_request_to_target_and_return_chunked_response()
             .collect(),
     );
     let (proxy, proxy_addr) = setup_proxy_with_chunked_response(proxy_response);
-    let sut = setup(false, proxy_addr);
+    let sut = setup(false, proxy_addr, None);
     // Act
     let mut headers = http::Headers::empty();
     headers.insert("Host", format!("127.0.0.1:{}", proxy_addr.port()));
@@ -225,7 +240,7 @@ pub fn proxy_request_should_return_error_when_payment_is_required() {
     // Arrange
     let mut target_addr = client_addr();
     target_addr.set_port(80);
-    let (order_id, sut) = setup_and_get_id(true, target_addr, None);
+    let (order_id, sut) = setup_and_get_id(true, target_addr, None, None);
     // Act
     let client_addr = client_addr();
     let mut headers = http::Headers::empty();
@@ -259,7 +274,7 @@ pub fn proxy_request_should_return_404_response_when_trying_to_access_unknown_ta
     let mut target_addr = client_addr();
     target_addr.set_port(2200);
     //port
-    let sut = setup(false, target_addr);
+    let sut = setup(false, target_addr, None);
     let client_addr = client_addr();
     let mut headers = http::Headers::empty();
     let host = "127.0.0.1:3333";
@@ -282,16 +297,20 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
 ) {
     // Arrange
     let (proxy, proxy_addr) = setup_proxy("HTTP/1.1 200 OK\r\n\r\n".into());
-    let (order_id, sut) = setup_and_get_id(true, proxy_addr, None);
+    let (order_id, sut) = setup_and_get_id(true, proxy_addr, None, None);
     // Act
     let mut headers = http::Headers::empty();
     let host = format!("127.0.0.1:{}", proxy_addr.port());
     headers.insert("Host", host.clone());
+    let expires = chrono::Utc::now()
+        .checked_add_days(chrono::Days::new(1))
+        .unwrap();
     let visa = serde_json::json!({
         "ip": "127.0.0.1",
         "ua": "Yo Mama",
         "dest": format!("{host}/"),
-        "order_id": order_id
+        "order_id": order_id,
+        "exp": expires.timestamp()
     })
     .to_string();
     let signature = tollkeeper::declarations::Visa::new(
@@ -301,6 +320,7 @@ pub fn proxy_request_should_send_request_to_target_if_positive_suspect_has_visa(
             "Yo Mama",
             tollkeeper::descriptions::Destination::new("127.0.0.1", proxy_addr.port(), "/"),
         ),
+        expires,
     );
     let signature = tollkeeper::signatures::Signed::sign(signature, b"Secret key");
     let visa = Base64::encode(visa.as_bytes());
