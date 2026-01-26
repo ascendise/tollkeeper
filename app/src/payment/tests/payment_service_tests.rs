@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use tollkeeper::{
     signatures::{InMemorySecretKeyProvider, Signed},
+    util::FakeDateTimeProvider,
     Declaration,
 };
 
@@ -11,7 +12,11 @@ use crate::{
     proxy::{Recipient, Toll},
 };
 
-fn setup(password: String, recipient: Recipient) -> (Toll, PaymentServiceImpl) {
+fn setup(
+    password: String,
+    recipient: Recipient,
+    current_time: Option<chrono::DateTime<chrono::Utc>>,
+) -> (Toll, PaymentServiceImpl) {
     let destination =
         tollkeeper::descriptions::Destination::new("http://example.ascendise.ch", 80, "/");
     let declaration = FakeTollDeclaration::new(password);
@@ -24,7 +29,10 @@ fn setup(password: String, recipient: Recipient) -> (Toll, PaymentServiceImpl) {
     let gates = vec![tollkeeper::Gate::with_id("gate", destination, orders).unwrap()];
     let secret_key_provider = InMemorySecretKeyProvider::new(b"Secret key".into());
     let secret_key_provider = Box::new(secret_key_provider);
-    let tollkeeper = tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap();
+    let current_time = current_time.unwrap_or(chrono::Utc::now());
+    let date_provider = Box::new(FakeDateTimeProvider(current_time));
+    let tollkeeper =
+        tollkeeper::Tollkeeper::new(gates, secret_key_provider, date_provider).unwrap();
     let toll = declaration.declare(
         recipient.into(),
         tollkeeper::declarations::OrderIdentifier::new("gate", "order"),
@@ -36,6 +44,7 @@ fn setup(password: String, recipient: Recipient) -> (Toll, PaymentServiceImpl) {
 fn setup_unsigned_toll(
     password: String,
     recipient: Recipient,
+    current_time: Option<chrono::DateTime<chrono::Utc>>,
 ) -> (tollkeeper::declarations::Toll, PaymentServiceImpl) {
     let destination =
         tollkeeper::descriptions::Destination::new("http://example.ascendise.ch", 80, "/");
@@ -50,7 +59,10 @@ fn setup_unsigned_toll(
     let gate_id = gates[0].id().to_string();
     let secret_key_provider = InMemorySecretKeyProvider::new(b"Secret key".into());
     let secret_key_provider = Box::new(secret_key_provider);
-    let tollkeeper = tollkeeper::Tollkeeper::new(gates, secret_key_provider).unwrap();
+    let current_time = current_time.unwrap_or(chrono::Utc::now());
+    let date_provider = Box::new(FakeDateTimeProvider(current_time));
+    let tollkeeper =
+        tollkeeper::Tollkeeper::new(gates, secret_key_provider, date_provider).unwrap();
     let toll = declaration.declare(
         recipient.into(),
         tollkeeper::declarations::OrderIdentifier::new(gate_id, order_id),
@@ -62,7 +74,7 @@ fn setup_unsigned_toll(
 pub fn pay_toll_should_return_visa_when_providing_correct_payment() {
     // Arrange
     let recipient = Recipient::new("192.106.12.13", "UnitTest", "example.ascendise.ch:80/hello");
-    let (toll_to_pay, sut) = setup("secret".into(), recipient.clone());
+    let (toll_to_pay, sut) = setup("secret".into(), recipient.clone(), None);
     // Act
     let payment = Payment::new(toll_to_pay, "secret".into());
     let payment_result = sut.pay_toll(recipient, payment);
@@ -81,7 +93,7 @@ pub fn pay_toll_should_return_visa_when_providing_correct_payment() {
 pub fn pay_toll_should_return_error_for_wrong_payment() {
     // Arrange
     let recipient = Recipient::new("192.106.12.13", "UnitTest", "example.ascendise.ch:80/hello");
-    let (toll_to_pay, sut) = setup("secret".into(), recipient.clone());
+    let (toll_to_pay, sut) = setup("secret".into(), recipient.clone(), None);
     // Act
     let payment = Payment::new(toll_to_pay.clone(), "not-the-secret".into());
     let payment_result = sut.pay_toll(recipient, payment);
@@ -96,7 +108,7 @@ pub fn pay_toll_should_return_error_for_mismatched_recipient() {
     // Arrange
     let toll_recipient =
         Recipient::new("192.106.12.13", "UnitTest", "example.ascendise.ch:80/hello");
-    let (toll_to_pay, sut) = setup("secret".into(), toll_recipient.clone());
+    let (toll_to_pay, sut) = setup("secret".into(), toll_recipient.clone(), None);
     // Act
     let payment = Payment::new(toll_to_pay.clone(), "not-the-secret".into());
     let different_recipient =
@@ -121,7 +133,7 @@ pub fn pay_toll_should_return_error_for_mismatched_recipient() {
 pub fn pay_toll_should_return_error_for_forged_payment() {
     // Arrange
     let recipient = Recipient::new("192.106.12.13", "UnitTest", "example.ascendise.ch:80/hello");
-    let (unsigned_toll, sut) = setup_unsigned_toll("secret".into(), recipient.clone());
+    let (unsigned_toll, sut) = setup_unsigned_toll("secret".into(), recipient.clone(), None);
     let forged_toll = Signed::sign(unsigned_toll, b"forged-key");
     let forged_toll: Toll = forged_toll.into();
     // Act
@@ -137,7 +149,7 @@ pub fn pay_toll_should_return_error_for_forged_payment() {
 pub fn pay_toll_should_return_error_for_unknown_order_id() {
     // Arrange
     let recipient = Recipient::new("192.106.12.13", "UnitTest", "example.ascendise.ch:80/hello");
-    let (_, sut) = setup("secret".into(), recipient.clone());
+    let (_, sut) = setup("secret".into(), recipient.clone(), None);
     let toll_to_pay = tollkeeper::declarations::Toll::new(
         recipient.clone().into(),
         tollkeeper::declarations::OrderIdentifier::new("?", "!"), // Simulating an old toll with stale order id
@@ -180,8 +192,12 @@ impl tollkeeper::Declaration for FakeTollDeclaration {
         suspect: &tollkeeper::descriptions::Suspect,
     ) -> Result<tollkeeper::declarations::Visa, tollkeeper::declarations::PaymentError> {
         let order_id = payment.toll().order_id().clone();
+        let expires = chrono::Utc::now()
+            .checked_add_months(chrono::Months::new(12))
+            .unwrap();
         if payment.value() == self.password {
-            let visa = tollkeeper::declarations::Visa::new(order_id.clone(), suspect.clone());
+            let visa =
+                tollkeeper::declarations::Visa::new(order_id.clone(), suspect.clone(), expires);
             Ok(visa)
         } else {
             let error = tollkeeper::declarations::PaymentError::new(

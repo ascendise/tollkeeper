@@ -71,15 +71,19 @@ pub fn declare_should_return_new_toll_for_suspect() {
     expected_challenge.insert("resource".into(), "example.com(8888)/hello".into());
     expected_challenge.insert("ext".into(), "suspect.ip=1.2.3.4".into());
     // Assert
-    assert_eq!(toll.recipient(), &suspect);
-    assert_eq!(toll.order_id(), &order_id);
-    assert_eq!(toll.challenge(), &expected_challenge);
+    assert_eq!(&suspect, toll.recipient());
+    assert_eq!(&order_id, toll.order_id());
+    assert_eq!(&expected_challenge, toll.challenge());
 }
 
 #[test]
 pub fn pay_with_valid_payment_should_return_visa() {
     // Arrange
-    let sut = setup();
+    let today = chrono::Utc
+        .with_ymd_and_hms(2025, 5, 6, 20, 24, 6)
+        .unwrap()
+        .to_utc();
+    let sut = setup_with_date(today); //Expiry duration set to 1 Day
     let suspect = Suspect::new(
         "1.2.3.4",
         "Bot",
@@ -94,8 +98,10 @@ pub fn pay_with_valid_payment_should_return_visa() {
         .pay(payment, &suspect)
         .expect("Expected Visa, got InvalidPaymentError");
     // Assert
-    assert_eq!(visa.suspect(), &suspect);
-    assert_eq!(visa.order_id(), &order_id);
+    let expected_expiry_date = today + chrono::Duration::days(1);
+    assert_eq!(&suspect, visa.suspect());
+    assert_eq!(&order_id, visa.order_id());
+    assert_eq!(&expected_expiry_date, visa.expires());
     assert!(sut.double_spent_db.stamps().contains(stamp));
 }
 
@@ -150,7 +156,7 @@ pub fn paying_with_a_stamp_not_matching_challenge_should_return_error(invalid_st
         .pay(payment.clone(), &suspect)
         .expect_err("Expected InvalidPaymentError, got Visa");
     // Assert
-    assert_eq!(error.payment(), &payment);
+    assert_eq!(&payment, error.payment());
 }
 
 #[test]
@@ -174,7 +180,7 @@ pub fn pay_with_expired_stamp_should_return_error() {
         .pay(payment.clone(), &suspect)
         .expect_err("Expected InvalidPaymentError, got Visa");
     // Assert
-    assert_eq!(error.payment(), &payment);
+    assert_eq!(&payment, error.payment());
 }
 
 #[test]
@@ -248,5 +254,5 @@ pub fn pay_with_duplicate_stamp_should_return_error() {
         .pay(payment.clone(), &suspect)
         .expect_err("Expected InvalidPaymentError, got Visa");
     // Assert
-    assert_eq!(error.payment(), &payment);
+    assert_eq!(&payment, error.payment());
 }

@@ -40,8 +40,11 @@ impl Declaration for StubDeclaration {
 
     fn pay(&self, payment: Payment, suspect: &Suspect) -> Result<Visa, PaymentError> {
         let order_id = payment.toll().order_id();
+        let expires = chrono::Utc::now()
+            .checked_add_months(chrono::Months::new(12))
+            .unwrap();
         if self.accept_payment {
-            let visa = Visa::new(order_id.clone(), suspect.clone());
+            let visa = Visa::new(order_id.clone(), suspect.clone(), expires);
             Result::Ok(visa)
         } else {
             let new_toll = self.declare(suspect.clone(), order_id.clone());
