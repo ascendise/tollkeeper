@@ -4,8 +4,8 @@ use tollkeeper::AccessPolicy;
 
 use crate::{
     config::{
-        Api, Config, Declaration, Description, Gate, HashcashDeclaration, Order, Ref,
-        SecretKeyProvider, Server, StubDescription,
+        Api, Config, Declaration, Description, DoubleSpentDatabase, Gate, HashcashDeclaration,
+        Order, Ref, SecretKeyProvider, Server, StubDescription,
     },
     proxy::UrlResolver,
 };
@@ -73,6 +73,7 @@ toll_declaration = { Hashcash = { expiry = "1h", difficulty = 4}}
             toll_declaration: Declaration::Hashcash(HashcashDeclaration {
                 difficulty: 4,
                 expiry: "1h".into(),
+                double_spent_db: DoubleSpentDatabase::default(),
             }),
         },
     );
@@ -130,6 +131,7 @@ pub fn create_tollkeeper_should_create_a_new_tollkeeper_instance_with_given_conf
             toll_declaration: Declaration::Hashcash(HashcashDeclaration {
                 difficulty: 4,
                 expiry: "10h".into(),
+                double_spent_db: DoubleSpentDatabase::default(),
             }),
         },
     );

@@ -250,12 +250,12 @@ impl Declaration {
 struct HashcashDeclaration {
     difficulty: u8,
     expiry: String,
+    double_spent_db: DoubleSpentDatabase,
 }
 impl HashcashDeclaration {
     fn to_entity(&self) -> tollkeeper::declarations::hashcash::HashcashDeclaration {
         let date_provider = tollkeeper::util::DateTimeProviderImpl;
-        let double_spent_db =
-            tollkeeper::declarations::hashcash::DoubleSpentDatabaseImpl::new(None);
+        let double_spent_db = self.double_spent_db.to_entity();
         tollkeeper::declarations::hashcash::HashcashDeclaration::new(
             self.difficulty,
             self.expiry(),
@@ -276,5 +276,14 @@ impl HashcashDeclaration {
             'd' => chrono::Duration::days(time),
             _ => panic!("Unexpected time format: {format}"),
         }
+    }
+}
+#[derive(Deserialize, Debug, Default, PartialEq, Eq, Clone)]
+struct DoubleSpentDatabase {
+    stamp_limit: Option<usize>,
+}
+impl DoubleSpentDatabase {
+    fn to_entity(&self) -> tollkeeper::declarations::hashcash::DoubleSpentDatabaseImpl {
+        tollkeeper::declarations::hashcash::DoubleSpentDatabaseImpl::new(self.stamp_limit)
     }
 }
