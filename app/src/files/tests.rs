@@ -47,6 +47,29 @@ pub fn file_serve_should_return_requested_file() {
     assert_eq!(&content, body.data());
 }
 
+#[test]
+pub fn file_serve_should_return_404_if_file_does_not_exist() {
+    // Arrange
+    let content: VecDeque<u8> = String::from("Hello, World!").into_bytes().into();
+    let file_reader = FakeFileReader::new(indexmap::indexmap![
+        "/assets/file.txt".into() => content.clone()
+    ]);
+    let sut = FileServe::new(PathBuf::from("/assets/file.txt"), Box::new(file_reader));
+    // Act
+    let headers =
+        request::Headers::new(Headers::new(vec![("Host".into(), "localhost".into())])).unwrap();
+    let request = Request::new(Method::Get, "/etc/passwd", headers, Body::None).unwrap();
+    let mut response = sut
+        .serve_http(&addr(), request)
+        .expect("valid request failed");
+    // Assert
+    assert_eq!(StatusCode::NotFound, response.status_code());
+    let expected_headers = Headers::empty();
+    let expected_headers = response::Headers::new(expected_headers);
+    assert_eq!(&expected_headers, response.headers());
+    assert!(!response.body().has_body());
+}
+
 fn addr() -> SocketAddr {
     SocketAddr::from_str("192.168.1.2:1234").unwrap()
 }

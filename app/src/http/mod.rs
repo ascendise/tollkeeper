@@ -138,7 +138,7 @@ impl Body {
         match self {
             Body::Buffer(_) => true,
             Body::Stream(_) => true,
-            Body::None => true,
+            Body::None => false,
         }
     }
 }

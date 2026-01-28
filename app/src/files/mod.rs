@@ -23,12 +23,12 @@ impl FileServe {
         Self { path, file_reader }
     }
 
-    fn read_file_content(&self, path: &Path) -> VecDeque<u8> {
-        let mut file = self.file_reader.read(path).unwrap(); //TODO: Handle missing files
+    fn read_file_content(&self, path: &Path) -> Option<VecDeque<u8>> {
+        let mut file = self.file_reader.read(path).ok()?;
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
         let content: VecDeque<u8> = content.into_bytes().into();
-        content
+        Some(content)
     }
 }
 impl HttpServe for FileServe {
@@ -39,7 +39,10 @@ impl HttpServe for FileServe {
     ) -> Result<crate::http::Response, crate::http::server::InternalServerError> {
         let path = request.absolute_target().path();
         let path = PathBuf::from(path);
-        let content = self.read_file_content(&path);
+        let content = match self.read_file_content(&path) {
+            Some(c) => c,
+            None => return Ok(Response::not_found()),
+        };
         let headers = Headers::new(vec![("Content-Length".into(), content.len().to_string())]);
         let headers = response::Headers::new(headers);
         let body = Body::Buffer(BufferBody::new(content));
