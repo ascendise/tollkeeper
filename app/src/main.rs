@@ -70,7 +70,13 @@ fn setup_logging() {
 }
 
 fn read_config() -> config::Config {
-    let config_path = std::env::current_dir().unwrap().join("app/config.toml");
+    let env = std::env::var("RUST_ENV").unwrap_or("".into());
+    let config_path = if env.is_empty() {
+        String::from("app/config.toml")
+    } else {
+        format!("app/config.{}.toml", env)
+    };
+    let config_path = std::env::current_dir().unwrap().join(config_path);
     event!(Level::INFO, "Read config from {}", config_path.display());
     let config = fs::read_to_string(config_path.clone())
         .unwrap_or_else(|_| panic!("Cannot find config file at {}", config_path.display()));
