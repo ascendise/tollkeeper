@@ -9,6 +9,7 @@ use crate::templates::{handlebars::HandlebarTemplateRenderer, FileTemplateStore}
 
 mod config;
 mod data_formats;
+mod files;
 #[allow(dead_code)]
 mod http;
 mod payment;
