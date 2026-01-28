@@ -254,7 +254,8 @@ struct HashcashDeclaration {
 impl HashcashDeclaration {
     fn to_entity(&self) -> tollkeeper::declarations::hashcash::HashcashDeclaration {
         let date_provider = tollkeeper::util::DateTimeProviderImpl;
-        let double_spent_db = tollkeeper::declarations::hashcash::DoubleSpentDatabaseImpl::new();
+        let double_spent_db =
+            tollkeeper::declarations::hashcash::DoubleSpentDatabaseImpl::new(None);
         tollkeeper::declarations::hashcash::HashcashDeclaration::new(
             self.difficulty,
             self.expiry(),

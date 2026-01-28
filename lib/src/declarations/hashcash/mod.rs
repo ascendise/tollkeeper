@@ -1,9 +1,10 @@
 #[cfg(test)]
 mod tests;
 
-use std::{collections::HashSet, str::FromStr, sync::Mutex};
+use std::{str::FromStr, sync::Mutex};
 
 use chrono::TimeZone;
+use ringmap::RingSet;
 use sha1::Digest;
 
 use crate::{descriptions::Destination, util::DateTimeProvider};
@@ -109,7 +110,7 @@ impl HashcashDeclaration {
             && matches_suspect_ip
     }
 
-    fn try_create_visa(&self, payment: &Payment) -> Result<Visa, DuplicateStampError> {
+    fn try_create_visa(&self, payment: &Payment) -> Result<Visa, StampError> {
         match self.double_spent_db.insert(payment.value().into()) {
             Ok(()) => {
                 let order_id = payment.toll.order_id().clone();
@@ -392,11 +393,25 @@ impl FromStr for Extension {
 }
 
 pub trait DoubleSpentDatabase {
-    fn insert(&self, stamp: String) -> Result<(), DuplicateStampError>;
+    fn insert(&self, stamp: String) -> Result<(), StampError>;
     fn is_spent(&self, stamp: &str) -> bool;
-    fn stamps(&self) -> HashSet<String>;
+    fn stamps(&self) -> RingSet<String>;
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum StampError {
+    DuplicateStamp(DuplicateStampError),
+    StampTooLong,
+}
+impl Error for StampError {}
+impl Display for StampError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StampError::DuplicateStamp(e) => write!(f, "{e}"),
+            StampError::StampTooLong => write!(f, "Stamp too long"),
+        }
+    }
+}
 #[derive(Debug, PartialEq, Eq)]
 pub struct DuplicateStampError {
     stamp: String,
@@ -420,34 +435,56 @@ impl Display for DuplicateStampError {
 
 /// An in-memory implementation of a [DoubleSpentDatabase]
 pub struct DoubleSpentDatabaseImpl {
-    stamps: Mutex<HashSet<String>>,
+    stamps: Mutex<RingSet<String>>,
+    stamp_limit: usize,
 }
 impl Default for DoubleSpentDatabaseImpl {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
 impl DoubleSpentDatabaseImpl {
-    pub fn new() -> Self {
-        Self {
-            stamps: Mutex::new(HashSet::<String>::new()),
-        }
+    const STAMP_SIZE_LIMIT: usize = 255;
+    const STAMP_COUNT_LIMIT: usize = 10000;
+
+    pub fn new(stamp_limit: Option<usize>) -> Self {
+        Self::init(RingSet::new(), stamp_limit)
     }
-    pub fn init(stamps: HashSet<String>) -> Self {
+    pub fn init(stamps: RingSet<String>, stamp_limit: Option<usize>) -> Self {
+        let stamp_limit = stamp_limit.unwrap_or(Self::STAMP_COUNT_LIMIT);
         Self {
             stamps: Mutex::new(stamps),
+            stamp_limit,
+        }
+    }
+
+    fn assert_stamp_size(stamp: &str) -> Result<(), StampError> {
+        if stamp.len() <= Self::STAMP_SIZE_LIMIT {
+            Ok(())
+        } else {
+            tracing::debug!("Oversized stamp! ({})", stamp.len());
+            Err(StampError::StampTooLong)
+        }
+    }
+
+    fn cleanup_old_stamps(&self, stamps: &mut RingSet<String>) {
+        while stamps.len() > self.stamp_limit {
+            stamps.pop_front();
         }
     }
 }
 impl DoubleSpentDatabase for DoubleSpentDatabaseImpl {
-    fn insert(&self, stamp: String) -> Result<(), DuplicateStampError> {
+    fn insert(&self, stamp: String) -> Result<(), StampError> {
+        Self::assert_stamp_size(&stamp)?;
         let mut stamps = self.stamps.lock().unwrap();
         let is_new_stamp = stamps.insert(stamp.clone());
         if is_new_stamp {
+            self.cleanup_old_stamps(&mut stamps);
             Ok(())
         } else {
-            Err(DuplicateStampError::new(stamp))
+            let err = StampError::DuplicateStamp(DuplicateStampError::new(stamp));
+            Err(err)
         }
     }
 
@@ -456,7 +493,7 @@ impl DoubleSpentDatabase for DoubleSpentDatabaseImpl {
         stamps.contains(stamp)
     }
 
-    fn stamps(&self) -> HashSet<String> {
+    fn stamps(&self) -> RingSet<String> {
         let stamps = self.stamps.lock().unwrap();
         stamps.clone()
     }

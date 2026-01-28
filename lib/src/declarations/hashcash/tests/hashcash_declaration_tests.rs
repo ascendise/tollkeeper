@@ -9,9 +9,8 @@ use crate::{
 };
 use chrono::TimeZone;
 use pretty_assertions::assert_eq;
+use ringmap::RingSet;
 use test_case::test_case;
-
-use std::collections::HashSet;
 
 fn setup() -> HashcashDeclaration {
     let today = chrono::Utc
@@ -19,7 +18,7 @@ fn setup() -> HashcashDeclaration {
         .unwrap()
         .to_utc();
     let expiry = chrono::Duration::days(1);
-    let double_spent_db = DoubleSpentDatabaseImpl::new();
+    let double_spent_db = DoubleSpentDatabaseImpl::new(None);
     HashcashDeclaration::new(
         4,
         expiry,
@@ -29,7 +28,7 @@ fn setup() -> HashcashDeclaration {
 }
 fn setup_with_date(date: chrono::DateTime<chrono::Utc>) -> HashcashDeclaration {
     let expiry = chrono::Duration::days(1);
-    let double_spent_db = DoubleSpentDatabaseImpl::new();
+    let double_spent_db = DoubleSpentDatabaseImpl::new(None);
     HashcashDeclaration::new(
         4,
         expiry,
@@ -37,13 +36,13 @@ fn setup_with_date(date: chrono::DateTime<chrono::Utc>) -> HashcashDeclaration {
         Box::new(double_spent_db),
     )
 }
-fn setup_with_init_db(stamps: HashSet<String>) -> HashcashDeclaration {
+fn setup_with_init_db(stamps: RingSet<String>) -> HashcashDeclaration {
     let today = chrono::Utc
         .with_ymd_and_hms(2025, 5, 6, 20, 24, 6)
         .unwrap()
         .to_utc();
     let expiry = chrono::Duration::days(1);
-    let double_spent_db = DoubleSpentDatabaseImpl::init(stamps);
+    let double_spent_db = DoubleSpentDatabaseImpl::init(stamps, None);
     HashcashDeclaration::new(
         4,
         expiry,
@@ -140,7 +139,7 @@ pub fn paying_with_a_stamp_not_matching_challenge_should_return_error(invalid_st
         .unwrap()
         .to_utc();
     let expiry = chrono::Duration::days(1);
-    let double_spent_db = DoubleSpentDatabaseImpl::new();
+    let double_spent_db = DoubleSpentDatabaseImpl::new(None);
     let sut = HashcashDeclaration::new(
         4,
         expiry,
@@ -237,7 +236,7 @@ pub fn pay_with_expired_stamp_should_allow_grace_period_for_desyncs(stamp: &str)
 pub fn pay_with_duplicate_stamp_should_return_error() {
     // Arrange
     let stamp = String::from("1:4:250506202406:example.com(8888)/hello:suspect.ip=1.2.3.4:kuwuD8w8/fkWCM+K:0000000000000000006");
-    let mut stamps = HashSet::<String>::new();
+    let mut stamps = RingSet::<String>::new();
     stamps.insert(stamp.clone());
     let sut = setup_with_init_db(stamps);
     // Act
