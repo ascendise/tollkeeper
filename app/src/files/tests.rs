@@ -18,25 +18,34 @@ use crate::{
         Body, Headers, Request,
     },
 };
+use test_case::test_case;
 
-#[test]
-pub fn file_serve_should_return_requested_file() {
+#[test_case("file.txt", "text/plain")]
+#[test_case("file.js", "text/javascript")]
+#[test_case("file.html", "text/html")]
+#[test_case("file.css", "text/css")]
+#[test_case("file.senta", "text/plain" ; "unknown file type")]
+pub fn file_serve_should_return_requested_file(file_name: &str, expected_content_type: &str) {
     // Arrange
     let content: VecDeque<u8> = String::from("Hello, World!").into_bytes().into();
+    let server_file = format!("/assets/{file_name}");
     let file_reader = FakeFileReader::new(indexmap::indexmap![
-        "/assets/file.txt".into() => content.clone()
+        server_file.clone() => content.clone()
     ]);
-    let sut = FileServe::new(PathBuf::from("/assets/file.txt"), Box::new(file_reader));
+    let sut = FileServe::new(PathBuf::from(server_file.clone()), Box::new(file_reader));
     // Act
     let headers =
         request::Headers::new(Headers::new(vec![("Host".into(), "localhost".into())])).unwrap();
-    let request = Request::new(Method::Get, "/assets/file.txt", headers, Body::None).unwrap();
+    let request = Request::new(Method::Get, server_file, headers, Body::None).unwrap();
     let mut response = sut
         .serve_http(&addr(), request)
         .expect("valid request failed");
     // Assert
     assert_eq!(StatusCode::OK, response.status_code());
-    let expected_headers = Headers::new(vec![("Content-Length".into(), content.len().to_string())]);
+    let expected_headers = Headers::new(vec![
+        ("Content-Length".into(), content.len().to_string()),
+        ("Content-Type".into(), expected_content_type.into()),
+    ]);
     let expected_headers = response::Headers::new(expected_headers);
     assert_eq!(&expected_headers, response.headers());
     let body = match response.body() {

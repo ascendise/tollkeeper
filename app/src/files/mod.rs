@@ -10,8 +10,8 @@ use std::{
 
 use crate::http::{
     response::{self, StatusCode},
-    server::HttpServe,
-    Body, BufferBody, Headers, Response,
+    server::{HttpServe, InternalServerError},
+    Body, BufferBody, Headers, Request, Response,
 };
 
 pub struct FileServe {
@@ -30,20 +30,38 @@ impl FileServe {
         let content: VecDeque<u8> = content.into_bytes().into();
         Some(content)
     }
+
+    fn get_content_type(&self, file: &Path) -> Option<String> {
+        let extension = file.extension()?.to_str()?;
+        let mime = match extension {
+            "html" => "text/html",
+            "css" => "text/css",
+            "js" => "text/javascript",
+            "txt" => "text/plain",
+            _ => return None,
+        };
+        Some(mime.to_string())
+    }
 }
 impl HttpServe for FileServe {
     fn serve_http(
         &self,
         _: &std::net::SocketAddr,
-        request: crate::http::Request,
-    ) -> Result<crate::http::Response, crate::http::server::InternalServerError> {
+        request: Request,
+    ) -> Result<Response, InternalServerError> {
         let path = request.absolute_target().path();
         let path = PathBuf::from(path);
         let content = match self.read_file_content(&path) {
             Some(c) => c,
             None => return Ok(Response::not_found()),
         };
-        let headers = Headers::new(vec![("Content-Length".into(), content.len().to_string())]);
+        let content_type = self
+            .get_content_type(&path)
+            .unwrap_or(String::from("text/plain"));
+        let headers = Headers::new(vec![
+            ("Content-Length".into(), content.len().to_string()),
+            ("Content-Type".into(), content_type),
+        ]);
         let headers = response::Headers::new(headers);
         let body = Body::Buffer(BufferBody::new(content));
         let response = Response::new(StatusCode::OK, None, headers, body);
