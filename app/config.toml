@@ -21,7 +21,7 @@ descriptions = [{Stub = {is_match = true}}]
 access_policy = "Blacklist"
 toll_declaration = { Hashcash = {
     expiry = "1h", 
-    difficulty = 8
+    difficulty = 8,
     double_spent_db = { stamp_limit = 10000 }
   }
 }
