@@ -250,11 +250,13 @@ impl Declaration {
 struct HashcashDeclaration {
     difficulty: u8,
     expiry: String,
+    #[serde(default)]
     double_spent_db: DoubleSpentDatabase,
 }
 impl HashcashDeclaration {
     fn to_entity(&self) -> tollkeeper::declarations::hashcash::HashcashDeclaration {
         let date_provider = tollkeeper::util::DateTimeProviderImpl;
+        //let double_spent_db = &self.double_spent_db.clone().unwrap_or_default();
         let double_spent_db = self.double_spent_db.to_entity();
         tollkeeper::declarations::hashcash::HashcashDeclaration::new(
             self.difficulty,
@@ -279,6 +281,7 @@ impl HashcashDeclaration {
     }
 }
 #[derive(Deserialize, Debug, Default, PartialEq, Eq, Clone)]
+#[serde(default)]
 struct DoubleSpentDatabase {
     stamp_limit: Option<usize>,
 }
