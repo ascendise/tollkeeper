@@ -4,14 +4,14 @@ mod tests;
 use std::{
     collections::VecDeque,
     fs::File,
-    io::{self, Read},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 
 use crate::http::{
     response::{self, StatusCode},
     server::{HttpServe, InternalServerError},
-    Body, BufferBody, Headers, Request, Response,
+    Body, BufferBody, Chunk, Headers, Request, Response, StreamBody,
 };
 
 pub struct FileServe {
@@ -23,12 +23,11 @@ impl FileServe {
         Self { path, file_reader }
     }
 
-    fn read_file_content(&self, path: &Path) -> Option<VecDeque<u8>> {
-        let mut file = self.file_reader.read(path).ok()?;
-        let mut content = String::new();
-        file.read_to_string(&mut content).unwrap();
-        let content: VecDeque<u8> = content.into_bytes().into();
-        Some(content)
+    fn read_file_content(&self, path: &Path) -> Option<StreamBody> {
+        let file = self.file_reader.read(path).ok()?;
+        let stream = FileChunkStream { file };
+        let body = StreamBody::new(Box::new(stream));
+        Some(body)
     }
 
     fn get_content_type(&self, file: &Path) -> Option<String> {
@@ -59,11 +58,11 @@ impl HttpServe for FileServe {
             .get_content_type(&path)
             .unwrap_or(String::from("text/plain"));
         let headers = Headers::new(vec![
-            ("Content-Length".into(), content.len().to_string()),
+            ("Transfer-Encoding".into(), "chunked".into()),
             ("Content-Type".into(), content_type),
         ]);
         let headers = response::Headers::new(headers);
-        let body = Body::Buffer(BufferBody::new(content));
+        let body = Body::Stream(content);
         let response = Response::new(StatusCode::OK, None, headers, body);
         Ok(response)
     }
@@ -76,5 +75,23 @@ pub struct FileReaderImpl;
 impl FileReader for FileReaderImpl {
     fn read(&self, path: &Path) -> io::Result<Box<dyn Read>> {
         File::open(path).map(|f| Box::new(f) as Box<dyn Read>)
+    }
+}
+
+struct FileChunkStream {
+    file: Box<dyn Read>,
+}
+impl FileChunkStream {
+    const MAX_CHUNK_SIZE: usize = 1024 * 1024; //1MB
+}
+impl Read for FileChunkStream {
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+        let mut chunk_buf = vec![0u8; Self::MAX_CHUNK_SIZE];
+        let size = self.file.read(chunk_buf.as_mut())?;
+        let chunk = Chunk::new(size, chunk_buf);
+        let chunk = chunk.into_bytes();
+        println!("Size: {}", chunk.len());
+        println!("Data: {}", String::from_utf8_lossy(&chunk));
+        buf.write(&chunk)
     }
 }

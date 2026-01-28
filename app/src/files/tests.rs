@@ -43,17 +43,19 @@ pub fn file_serve_should_return_requested_file(file_name: &str, expected_content
     // Assert
     assert_eq!(StatusCode::OK, response.status_code());
     let expected_headers = Headers::new(vec![
-        ("Content-Length".into(), content.len().to_string()),
+        ("Transfer-Encoding".into(), "chunked".into()),
         ("Content-Type".into(), expected_content_type.into()),
     ]);
     let expected_headers = response::Headers::new(expected_headers);
     assert_eq!(&expected_headers, response.headers());
     let body = match response.body() {
-        Body::Buffer(buffer_body) => buffer_body,
-        Body::Stream(_) => panic!(),
+        Body::Buffer(_) => panic!("Expected chunked response!"),
+        Body::Stream(b) => b,
         Body::None => panic!("File was sent without body!"),
     };
-    assert_eq!(&content, body.data());
+    let body = body.read_chunk().unwrap();
+    let expected_body = "d\r\nHello, World!\r\n";
+    assert_eq!(expected_body, String::from_utf8_lossy(body.content()));
 }
 
 #[test]

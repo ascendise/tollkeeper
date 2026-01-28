@@ -242,4 +242,12 @@ impl Chunk {
     pub fn size(&self) -> usize {
         self.size
     }
+
+    pub fn into_bytes(mut self) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.append(&mut format!("{:x}\r\n", self.size).into_bytes());
+        data.append(&mut self.content);
+        data.append(&mut vec![b'\r', b'\n']);
+        data
+    }
 }
