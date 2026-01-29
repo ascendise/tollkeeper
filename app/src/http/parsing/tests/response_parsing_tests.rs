@@ -59,7 +59,7 @@ pub fn parse_should_include_body() {
 #[test]
 pub fn parse_should_include_chunked_body() {
     // Arrange
-    let expected_body = vec![
+    let expected_body = [
         "3\r\nHel\r\n",
         "6\r\nlo, Wo\r\n",
         "4\r\nrld!\r\n",
@@ -76,12 +76,10 @@ pub fn parse_should_include_chunked_body() {
             panic!("Got streamed content as fixed sized content");
         }
         Body::Stream(body) => {
-            let mut actual_body: Vec<String> = Vec::new();
-            while let Some(chunk) = body.read_chunk() {
-                let chunk = String::from_utf8(chunk.content().into()).unwrap();
-                actual_body.push(chunk);
-            }
-            assert_eq!(expected_body, actual_body);
+            let mut buf = vec![];
+            body.read_to_end(&mut buf).unwrap();
+            let actual_body = String::from_utf8_lossy(&buf).to_string();
+            assert_eq!(expected_body.join(""), actual_body);
         }
         Body::None => panic!("Expected body but none was sent"),
     }

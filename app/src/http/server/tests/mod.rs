@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    net,
+    io, net,
     sync::{Arc, Mutex},
 };
 
@@ -8,7 +8,7 @@ use crate::http::{
     self,
     response::{self, StatusCode},
     server::{HttpServe, InternalServerError},
-    BufferBody, Request, Response, StreamBody,
+    BufferBody, ChunkedTcpStream, Request, Response, StreamBody,
 };
 
 use pretty_assertions::assert_eq;
@@ -41,7 +41,8 @@ impl HttpServe for ChunkedHandler {
         headers.insert("Transfer-Encoding", "chunked");
         let headers = response::Headers::new(headers);
         let data: VecDeque<u8> = self.chunked_body.clone().into();
-        let body = StreamBody::new(Box::new(data));
+        let stream = ChunkedTcpStream::new(Box::new(io::BufReader::new(data)));
+        let body = StreamBody::new(Box::new(stream));
         let body = http::Body::Stream(body);
         let response = Response::new(StatusCode::OK, Some("OK".into()), headers, body);
         Ok(response)

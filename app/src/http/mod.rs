@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 use std::collections::VecDeque;
-use std::io::{BufRead, Read};
+use std::io::{BufRead, BufReader, Read};
 use std::{fmt::Display, io, str::FromStr};
 
 #[cfg(test)]
@@ -123,7 +123,8 @@ impl Body {
                 Body::Buffer(body)
             }
             None => {
-                let body = StreamBody::new(stream);
+                let stream = ChunkedTcpStream::new(Box::new(BufReader::new(stream)));
+                let body = StreamBody::new(Box::new(stream));
                 Body::Stream(body)
             }
         }
@@ -138,7 +139,7 @@ impl Body {
         match self {
             Body::Buffer(_) => true,
             Body::Stream(_) => true,
-            Body::None => true,
+            Body::None => false,
         }
     }
 }
@@ -164,19 +165,91 @@ impl io::Read for BufferBody {
 
 /// HTTP Body with data stream
 pub struct StreamBody {
-    stream: io::BufReader<Box<dyn io::Read>>,
+    stream: Box<dyn ChunkedStream>,
+    current_chunk: Option<BufReader<VecDeque<u8>>>,
+    bytes_read: usize,
+    next_chunk: usize,
 }
 impl StreamBody {
-    pub fn new(stream: Box<dyn io::Read>) -> Self {
+    pub fn new(stream: Box<dyn ChunkedStream>) -> Self {
         Self {
-            stream: io::BufReader::new(stream),
+            stream,
+            current_chunk: None,
+            bytes_read: 0,
+            next_chunk: 0,
+        }
+    }
+}
+impl Read for StreamBody {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.current_chunk.is_none() {
+            let chunk = match self.stream.next_chunk() {
+                Some(c) => c,
+                None => return Ok(0),
+            };
+            let chunk = chunk.into_bytes();
+            let chunk_len = chunk.len();
+            self.current_chunk = Some(BufReader::new(chunk.into()));
+            self.next_chunk += chunk_len;
+        }
+        let reader = self.current_chunk.as_mut().unwrap();
+        let res = reader.read(buf)?;
+        self.bytes_read += res;
+        if self.bytes_read >= self.next_chunk {
+            self.current_chunk = None;
+        }
+        Ok(res)
+    }
+}
+#[derive(Debug, PartialEq, Eq)]
+pub struct Chunk {
+    size: usize,
+    content: Vec<u8>,
+}
+impl Chunk {
+    pub fn new(size: usize, content: Vec<u8>) -> Self {
+        Self { size, content }
+    }
+
+    pub fn eof() -> Self {
+        Self {
+            size: 0,
+            content: vec![],
         }
     }
 
-    /// Reads the next chunk from the stream
-    /// EOF will be signalled by a Chunk with zero size ([Chunk::is_eof]) which should also be
-    /// written to output stream.
-    /// Note: Further reads after EOF will most likely result in blocking
+    pub fn is_eof(&self) -> bool {
+        self.size == 0
+    }
+
+    pub fn content(&self) -> &[u8] {
+        &self.content
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    pub fn into_bytes(mut self) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.append(&mut format!("{:x}\r\n", self.size).into_bytes());
+        data.append(&mut self.content);
+        data.append(&mut vec![b'\r', b'\n']);
+        data
+    }
+}
+pub trait ChunkedStream {
+    fn next_chunk(&mut self) -> Option<Chunk>;
+}
+
+pub struct ChunkedTcpStream {
+    stream: Box<io::BufReader<dyn io::Read>>,
+}
+impl ChunkedTcpStream {
+    pub fn new(stream: Box<io::BufReader<dyn io::Read>>) -> Self {
+        Self { stream }
+    }
+
     pub fn read_chunk(&mut self) -> Option<Chunk> {
         let chunk_size = self.read_chunk_size()?;
         if chunk_size == 0 {
@@ -206,40 +279,14 @@ impl StreamBody {
     }
 
     fn read_chunk_content(&mut self, chunk_size: usize) -> Option<Vec<u8>> {
-        let mut content: Vec<u8> = format!("{chunk_size:x}\r\n").into_bytes();
-        let mut content_buff = vec![0; chunk_size];
-        self.stream.read_exact(&mut content_buff).ok()?;
-        content.append(&mut content_buff);
-        content.append(&mut vec![b'\r', b'\n']);
+        let mut content = vec![0; chunk_size];
+        self.stream.read_exact(&mut content).ok()?;
         self.stream.consume(2); // Remove CRLF from stream
         Some(content)
     }
 }
-pub struct Chunk {
-    size: usize,
-    content: Vec<u8>,
-}
-impl Chunk {
-    pub fn new(size: usize, content: Vec<u8>) -> Self {
-        Self { size, content }
-    }
-
-    pub fn eof() -> Self {
-        Self {
-            size: 0,
-            content: b"0\r\n\r\n".into(),
-        }
-    }
-
-    pub fn is_eof(&self) -> bool {
-        self.size == 0
-    }
-
-    pub fn content(&self) -> &[u8] {
-        &self.content
-    }
-
-    pub fn size(&self) -> usize {
-        self.size
+impl ChunkedStream for ChunkedTcpStream {
+    fn next_chunk(&mut self) -> Option<Chunk> {
+        self.read_chunk()
     }
 }

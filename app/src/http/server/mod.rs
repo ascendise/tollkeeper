@@ -13,13 +13,13 @@ use super::{
     response::Response,
     Parse,
 };
-use std::net;
 use std::{
     error::Error,
     fmt::Display,
     io::{self, Write},
     panic, thread,
 };
+use std::{io::Read, net};
 
 pub struct Server {
     listener: net::TcpListener,
@@ -188,16 +188,17 @@ fn handle_incoming_request(
     write_stream.write_all(&response_raw).unwrap();
     let _span = span!(Level::DEBUG, "Chunked Body");
     if let Body::Stream(body) = response.body() {
-        while let Some(chunk) = body.read_chunk() {
-            write_stream.write_all(chunk.content()).unwrap();
+        let mut buf = Vec::new();
+        while let Ok(size) = body.read_to_end(&mut buf) {
+            if size == 0 {
+                break;
+            }
             event!(
                 Level::DEBUG,
                 "{chunked_body}",
-                chunked_body = String::from_utf8_lossy(chunk.content())
+                chunked_body = String::from_utf8_lossy(&buf)
             );
-            if chunk.is_eof() {
-                break;
-            }
+            write_stream.write_all(&buf).unwrap();
         }
     }
     Ok(())
@@ -210,7 +211,7 @@ fn send_response(mut stream: &net::TcpStream, mut response: Response) {
 
 /// Return this error in case an unrecoverable error happened
 #[derive(Debug, PartialEq, Eq)]
-pub struct InternalServerError {}
+pub struct InternalServerError;
 impl InternalServerError {
     pub fn new() -> Self {
         Self {}

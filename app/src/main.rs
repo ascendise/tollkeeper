@@ -1,14 +1,25 @@
 use http::server::*;
 use proxy::{ProxyServe, ProxyServiceImpl};
-use std::{fs, io, net, sync::Arc, thread};
+use std::{
+    fs, io, net,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+    thread,
+};
 use tollkeeper::Tollkeeper;
 use tracing::{event, span, Level};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::templates::{handlebars::HandlebarTemplateRenderer, FileTemplateStore};
+use crate::{
+    files::{FileReaderImpl, FileServe},
+    http::request::Method,
+    templates::{handlebars::HandlebarTemplateRenderer, FileTemplateStore},
+};
 
 mod config;
 mod data_formats;
+mod files;
 #[allow(dead_code)]
 mod http;
 mod payment;
@@ -117,15 +128,61 @@ fn create_api_server(
 ) -> Result<(Server, cancellation_token::CancelReceiver), io::Error> {
     let listener = net::TcpListener::bind(format!("0.0.0.0:{port}"))?;
     let payment_service = payment::PaymentServiceImpl::new(tollkeeper);
-    let payment_endpoints = payment::create_pay_toll_endpoint(
+    let mut api_endpoints = vec![];
+    let mut payment_endpoints = payment::create_pay_toll_endpoint(
         "/api/pay/",
         server_config.clone(),
         Box::new(payment_service),
     );
-    let http_endpoints = HttpEndpointsServe::new(payment_endpoints, server_config.real_ip_header);
+    api_endpoints.append(&mut payment_endpoints);
+    api_endpoints.append(&mut create_file_endpoints("app/assets", "app/"));
+    let http_endpoints = HttpEndpointsServe::new(api_endpoints, server_config.real_ip_header);
     let server = Server::new(listener, Box::new(http_endpoints));
     let (_, receiver) = cancellation_token::create_cancellation_token();
     Ok((server, receiver))
+}
+
+fn create_file_endpoints(fs_dir: &str, path_prefix: &str) -> Vec<Endpoint> {
+    let mut endpoints = vec![];
+    let path = PathBuf::from_str(fs_dir).unwrap();
+    let files = find_files(&path);
+    for file in files {
+        let endpoint = create_file_endpoint(file, path_prefix);
+        endpoints.push(endpoint);
+    }
+    endpoints
+}
+
+fn find_files(path: &Path) -> Vec<PathBuf> {
+    let mut all_entries = vec![];
+    let entries = fs::read_dir(path).unwrap();
+    for entry in entries {
+        let entry = entry.unwrap();
+        if entry.path().is_dir() {
+            let mut subentries = find_files(&entry.path());
+            all_entries.append(&mut subentries);
+        }
+        all_entries.push(entry.path());
+    }
+    all_entries
+}
+
+fn create_file_endpoint(file: PathBuf, path_prefix: &str) -> Endpoint {
+    let mut api_path = PathBuf::from_str("/").unwrap();
+    let api_file = file.strip_prefix(path_prefix).unwrap();
+    api_path.push(api_file);
+    tracing::info!(
+        "Serving file {} from {}",
+        api_path.display(),
+        file.display()
+    );
+    let mut file_serve = FileServe::new(api_path.clone(), Box::new(FileReaderImpl));
+    file_serve.set_fs_path(file);
+    Endpoint::new(
+        Method::Get,
+        api_path.to_string_lossy(),
+        Box::new(file_serve),
+    )
 }
 
 struct StubDescription {

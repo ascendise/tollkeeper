@@ -223,16 +223,13 @@ pub fn proxy_request_should_send_request_to_target_and_return_chunked_response()
     // Assert
     assert_eq!(StatusCode::OK, response.status_code());
     if let http::Body::Stream(body) = response.body() {
-        let mut actual_body: Vec<String> = Vec::new();
-        while let Some(chunk) = body.read_chunk() {
-            let chunk = String::from_utf8(chunk.content().into()).unwrap();
-            actual_body.push(chunk);
-        }
-        assert_eq!(expected_body, actual_body);
-        proxy.join().unwrap();
+        let mut actual_body = String::new();
+        body.read_to_string(&mut actual_body).unwrap();
+        assert_eq!(expected_body.join(""), actual_body);
     } else {
         panic!("unexpected body");
     }
+    proxy.join().unwrap();
 }
 
 #[test]
