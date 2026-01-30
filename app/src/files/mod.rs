@@ -73,7 +73,7 @@ impl HttpServe for FileServe {
             ("Transfer-Encoding".into(), "chunked".into()),
             ("Content-Type".into(), content_type),
         ]);
-        let headers = response::Headers::new(headers);
+        let headers = response::Headers::with_cors(headers, Some(&[http::Method::Get]));
         let body = Body::Stream(content);
         let response = Response::new(StatusCode::OK, None, headers, body);
         Ok(response)

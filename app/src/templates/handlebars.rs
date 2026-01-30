@@ -13,7 +13,7 @@ impl HandlebarTemplateRenderer {
 impl TemplateRenderer for HandlebarTemplateRenderer {
     fn render(&self, template_name: &str, data: &SerializedData) -> Result<String, TemplateError> {
         let mut handlebars = ::handlebars::Handlebars::new();
-        handlebars.register_helper("js", Box::new(JSObjectHelper));
+        handlebars.register_helper("json", Box::new(JsonHelper));
         let template = self
             .template_store
             .read(template_name)
@@ -36,11 +36,11 @@ impl From<::handlebars::RenderError> for TemplateError {
     }
 }
 
-/// Turns value into a Javascript Object through JSON.parse()
+/// Turns value into a plain JSON string
 #[derive(Clone, Copy)]
-struct JSObjectHelper;
+struct JsonHelper;
 
-impl HelperDef for JSObjectHelper {
+impl HelperDef for JsonHelper {
     fn call<'reg: 'rc, 'rc>(
         &self,
         h: &::handlebars::Helper<'rc>,
@@ -49,14 +49,13 @@ impl HelperDef for JSObjectHelper {
         _: &mut ::handlebars::RenderContext<'reg, 'rc>,
         out: &mut dyn ::handlebars::Output,
     ) -> ::handlebars::HelperResult {
-        let js_template = r#"JSON.parse('[data]')"#;
         let data = h
             .param(0)
             .ok_or(::handlebars::RenderErrorReason::ParamNotFoundForIndex(
                 "js", 0,
             ))?;
         let json = data.value();
-        let content = js_template.replace("[data]", &json.to_string());
+        let content = json.to_string();
         out.write(&content)?;
         Ok(())
     }

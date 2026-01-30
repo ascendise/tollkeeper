@@ -24,16 +24,10 @@ pub fn create_pay_toll_endpoint(
     payment_service: Box<dyn PaymentService + Send + Sync>,
 ) -> Vec<http::server::Endpoint> {
     let pay_toll_handler = PayTollServe::new(config, payment_service);
-    let pay_post_endpoint = http::server::Endpoint::new(
-        http::request::Method::Post,
-        path,
-        Box::new(pay_toll_handler),
-    );
-    let pay_options_endpoint = http::server::Endpoint::new(
-        http::request::Method::Options,
-        path,
-        Box::new(PayTollOptionsServe),
-    );
+    let pay_post_endpoint =
+        http::server::Endpoint::new(http::Method::Post, path, Box::new(pay_toll_handler));
+    let pay_options_endpoint =
+        http::server::Endpoint::new(http::Method::Options, path, Box::new(PayTollOptionsServe));
     vec![pay_post_endpoint, pay_options_endpoint]
 }
 
@@ -80,10 +74,10 @@ impl PayTollServe {
     ) -> Result<http::Response, http::server::InternalServerError> {
         let visa_json = visa.as_hal_json(&self.config.base_url);
         let visa_json = visa_json.to_string();
-        let mut headers = cors_headers("POST");
+        let mut headers = http::Headers::empty();
         headers.insert("Content-Type", "application/hal+json");
         headers.insert("Content-Length", visa_json.len().to_string());
-        let headers = http::response::Headers::new(headers);
+        let headers = http::response::Headers::with_cors(headers, Some(&[http::Method::Post]));
         let body = http::Body::from_string(visa_json);
         let response = http::Response::new(
             http::response::StatusCode::OK,
@@ -100,10 +94,10 @@ impl PayTollServe {
     ) -> Result<http::Response, http::server::InternalServerError> {
         let error_json = payment_error.as_hal_json(&self.config.base_url);
         let error_json = error_json.to_string();
-        let mut headers = cors_headers("POST");
+        let mut headers = http::Headers::empty();
         headers.insert("Content-Type", "application/hal+json");
         headers.insert("Content-Length", error_json.len().to_string());
-        let headers = http::response::Headers::new(headers);
+        let headers = http::response::Headers::with_cors(headers, Some(&[http::Method::Post]));
         let body = http::Body::from_string(error_json);
         let status_code = match *payment_error {
             PaymentError::ChallengeFailed(_, _) => http::response::StatusCode::BadRequest,
@@ -128,10 +122,10 @@ impl PayTollServe {
             "error": json_error.to_string()
         });
         let error_json = error_json.to_string();
-        let mut headers = cors_headers("POST");
+        let mut headers = http::Headers::empty();
         headers.insert("Content-Type", "application/json");
         headers.insert("Content-Length", error_json.len().to_string());
-        let headers = http::response::Headers::new(headers);
+        let headers = http::response::Headers::with_cors(headers, Some(&[http::Method::Post]));
         let body = http::Body::from_string(error_json);
         let status_code = match json_error {
             ReadJsonError::InvalidJsonData(_) => http::response::StatusCode::UnprocessableContent,
@@ -424,10 +418,10 @@ impl HttpServe for PayTollOptionsServe {
         _: &std::net::SocketAddr,
         _: http::Request,
     ) -> Result<http::Response, http::server::InternalServerError> {
-        let mut headers = cors_headers("POST");
+        let mut headers = http::Headers::empty();
         headers.insert("Accept", "application/json");
         headers.insert("Allow", "POST");
-        let headers = http::response::Headers::new(headers);
+        let headers = http::response::Headers::with_cors(headers, Some(&[http::Method::Post]));
         let response = http::Response::new(
             http::response::StatusCode::NoContent,
             None,
@@ -436,12 +430,4 @@ impl HttpServe for PayTollOptionsServe {
         );
         Ok(response)
     }
-}
-
-fn cors_headers(methods: impl Into<String>) -> http::Headers {
-    let mut headers = http::Headers::empty();
-    headers.insert("Access-Control-Allow-Headers", "*");
-    headers.insert("Access-Control-Allow-Methods", methods);
-    headers.insert("Access-Control-Allow-Origin", "*");
-    headers
 }

@@ -64,16 +64,13 @@ pub fn render_should_return_error_when_template_is_faulty() {
 pub fn render_should_handle_helper_for_js_object_parsing() {
     // Arrange
     let mut templates = HashMap::new();
-    templates.insert(
-        "html/my_template.html".into(),
-        "const obj = {{js data}}".into(),
-    );
+    templates.insert("html/my_template.html".into(), "{{json data}}".into());
     let template_store = InMemoryTemplateStore::new(templates);
     let sut = setup(Box::new(template_store));
     let data = SerializedData::new(json!({"data": {"Hello": {"Planet": "Earth"}}}));
     // Act
     let result = sut.render("html/my_template.html", &data);
     // Assert
-    let expected = String::from(r#"const obj = JSON.parse('{"Hello":{"Planet":"Earth"}}')"#);
+    let expected = String::from(r#"{"Hello":{"Planet":"Earth"}}"#);
     assert_eq!(Ok(expected), result);
 }

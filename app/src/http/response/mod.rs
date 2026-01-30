@@ -3,7 +3,7 @@ mod tests;
 
 use std::fmt::Display;
 
-use crate::http;
+use crate::http::{self};
 
 use super::Body;
 
@@ -276,6 +276,34 @@ impl Headers {
     pub fn empty() -> Self {
         Self(http::Headers::empty())
     }
+
+    /// Creates new [Headers] including cors control headers
+    /// If no [http::Method] are specified, all [http::Method] are allowed!
+    pub fn with_cors(mut headers: http::Headers, allow_methods: Option<&[http::Method]>) -> Self {
+        headers.insert("Access-Control-Allow-Headers", "*");
+        let methods = Self::methods_to_header(allow_methods);
+        headers.insert("Access-Control-Allow-Methods", methods);
+        headers.insert("Access-Control-Allow-Origin", "*");
+        Self::new(headers)
+    }
+
+    fn methods_to_header(allow_methods: Option<&[http::Method]>) -> String {
+        let methods = match allow_methods {
+            Some(m) => m
+                .iter()
+                .map(|m| m.to_string())
+                .fold(String::new(), |mut acc, e| {
+                    if !acc.is_empty() {
+                        acc.push_str(", ")
+                    };
+                    acc.push_str(&e);
+                    acc
+                }),
+            None => String::from("*"),
+        };
+        methods
+    }
+
     pub fn content_length(&self) -> Option<usize> {
         self.0.get("Content-Length").map(|v| v.parse().unwrap())
     }

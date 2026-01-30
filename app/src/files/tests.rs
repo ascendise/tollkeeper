@@ -12,6 +12,7 @@ use indexmap::IndexMap;
 use crate::{
     files::{FileReader, FileServe},
     http::{
+        self,
         request::{self, Method},
         response::{self, StatusCode},
         server::HttpServe,
@@ -46,7 +47,8 @@ pub fn file_serve_should_return_requested_file(file_name: &str, expected_content
         ("Transfer-Encoding".into(), "chunked".into()),
         ("Content-Type".into(), expected_content_type.into()),
     ]);
-    let expected_headers = response::Headers::new(expected_headers);
+    let expected_headers =
+        response::Headers::with_cors(expected_headers, Some(&[http::Method::Get]));
     assert_eq!(&expected_headers, response.headers());
     let body = match response.body() {
         Body::Buffer(_) => panic!("Expected chunked response!"),

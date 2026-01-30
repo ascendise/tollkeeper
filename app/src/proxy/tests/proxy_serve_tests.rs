@@ -6,7 +6,6 @@ use std::net;
 use tollkeeper::signatures::Base64;
 
 use crate::config;
-use crate::http::request::Method;
 use crate::http::response::{self, StatusCode};
 use crate::http::server::HttpServe;
 use crate::http::{self, request, Body, Headers, Request};
@@ -102,7 +101,7 @@ pub fn serve_should_return_response_of_target() {
     let mut headers = Headers::empty();
     headers.insert("Host", "127.0.0.1:65000");
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/", headers, Body::None).unwrap();
+    let request = Request::new(http::Method::Get, "/", headers, Body::None).unwrap();
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(response.is_ok());
@@ -124,7 +123,7 @@ pub fn serve_should_pass_real_ip_from_header_if_specified(real_ip_header_name: &
     headers.insert("Host", "127.0.0.1:65000");
     headers.insert(real_ip_header_name, "1.2.3.4");
     let headers = request::Headers::new(headers).unwrap();
-    let request = Request::new(Method::Get, "/", headers.clone(), Body::None).unwrap();
+    let request = Request::new(http::Method::Get, "/", headers.clone(), Body::None).unwrap();
     let _ = sut.serve_http(&client_addr(), request);
     // Assert
     let expected_calls = vec![ProxyRequestCall {
@@ -144,7 +143,7 @@ pub fn serve_should_return_payment_required_if_access_is_denied() {
     headers.insert("Content-Length", "16");
     let headers = request::Headers::new(headers).unwrap();
     let body = http::Body::from_string("Hello, Server!\r\n".into());
-    let request = Request::new(Method::Get, "/", headers, body).unwrap();
+    let request = Request::new(http::Method::Get, "/", headers, body).unwrap();
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(response.is_ok());
@@ -203,7 +202,7 @@ pub fn serve_should_return_challenge_html_page_if_request_accepts_html(accept_he
     headers.insert("Accept", accept_header);
     let headers = request::Headers::new(headers).unwrap();
     let body = Body::from_string("Hello, Server!\r\n".into());
-    let request = Request::new(Method::Get, "/", headers, body).unwrap();
+    let request = Request::new(http::Method::Get, "/", headers, body).unwrap();
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(response.is_ok());
@@ -239,7 +238,7 @@ pub fn serve_should_return_internal_server_error_on_render_failure() {
     headers.insert("Accept", "text/html");
     let headers = request::Headers::new(headers).unwrap();
     let body = Body::from_string("Hello, Server!\r\n".into());
-    let request = Request::new(Method::Get, "/", headers, body).unwrap();
+    let request = Request::new(http::Method::Get, "/", headers, body).unwrap();
     let response = sut.serve_http(&client_addr(), request);
     // Assert
     assert!(

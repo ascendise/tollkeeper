@@ -78,13 +78,7 @@ fn setup_payment_request(recipient: proxy::Recipient, order_id: proxy::OrderId) 
     headers.insert("Content-Type", "application/json");
     headers.insert("Content-Length", content_length.to_string());
     let headers = http::request::Headers::new(headers).unwrap();
-    http::Request::new(
-        http::request::Method::Post,
-        "/payment-endpoint",
-        headers,
-        body,
-    )
-    .unwrap()
+    http::Request::new(http::Method::Post, "/payment-endpoint", headers, body).unwrap()
 }
 
 #[test]
@@ -142,8 +136,7 @@ pub fn pay_toll_serve_should_return_400_for_non_json_data(non_json_data: &str) {
     headers.insert("Content-Length", non_json_data.len().to_string());
     headers.insert("Host", "localhost");
     let headers = http::request::Headers::new(headers).unwrap();
-    let request =
-        http::Request::new(http::request::Method::Post, "/api/pay", headers, body).unwrap();
+    let request = http::Request::new(http::Method::Post, "/api/pay", headers, body).unwrap();
     // Act
     let response = sut.serve_http(&client_ip, request).unwrap();
     // Assert
@@ -174,8 +167,7 @@ pub fn pay_toll_serve_should_return_400_for_invalid_json_data() {
     headers.insert("Content-Length", content_len.to_string());
     headers.insert("Host", "localhost");
     let headers = http::request::Headers::new(headers).unwrap();
-    let request =
-        http::Request::new(http::request::Method::Post, "/api/pay", headers, body).unwrap();
+    let request = http::Request::new(http::Method::Post, "/api/pay", headers, body).unwrap();
     // Act
     let response = sut.serve_http(&client_ip, request).unwrap();
     // Assert

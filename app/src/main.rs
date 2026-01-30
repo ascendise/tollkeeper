@@ -13,7 +13,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
     files::{FileReaderImpl, FileServe},
-    http::request::Method,
     templates::{handlebars::HandlebarTemplateRenderer, FileTemplateStore},
 };
 
@@ -135,7 +134,7 @@ fn create_api_server(
         Box::new(payment_service),
     );
     api_endpoints.append(&mut payment_endpoints);
-    api_endpoints.append(&mut create_file_endpoints("app/assets", "app/"));
+    api_endpoints.append(&mut create_file_endpoints("app/assets", "app/assets/"));
     let http_endpoints = HttpEndpointsServe::new(api_endpoints, server_config.real_ip_header);
     let server = Server::new(listener, Box::new(http_endpoints));
     let (_, receiver) = cancellation_token::create_cancellation_token();
@@ -179,7 +178,7 @@ fn create_file_endpoint(file: PathBuf, path_prefix: &str) -> Endpoint {
     let mut file_serve = FileServe::new(api_path.clone(), Box::new(FileReaderImpl));
     file_serve.set_fs_path(file);
     Endpoint::new(
-        Method::Get,
+        http::Method::Get,
         api_path.to_string_lossy(),
         Box::new(file_serve),
     )
