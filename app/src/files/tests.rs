@@ -46,6 +46,7 @@ pub fn file_serve_should_return_requested_file(file_name: &str, expected_content
     let expected_headers = Headers::new(vec![
         ("Transfer-Encoding".into(), "chunked".into()),
         ("Content-Type".into(), expected_content_type.into()),
+        ("Cache-Control".into(), "public, max-age=31536000".into()),
     ]);
     let expected_headers =
         response::Headers::with_cors(expected_headers, Some(&[http::Method::Get]));

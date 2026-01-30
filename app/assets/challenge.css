@@ -1,16 +1,3 @@
-/* TODO: Enable caching/compression for faster loading of custom fonts
-@font-face {
-  font-family: ComicShanns;
-  src: url('http://localhost:8080/ComicShannsMonoNerdFont-Regular.otf')
-}
-
-@font-face {
-  font-family: ComicShanns;
-  font-weight: bold;
-  src: url('http://localhost:8080/ComicShannsMonoNerdFont-Bold.otf')
-}
-*/
-
 html {
   font-size: 32px
 }
@@ -23,8 +10,7 @@ body {
   background-color: #858375;
   height: 100vh;
   width: 100%;
-  /*font-family: ComicShanns*/
-  font-family: "Comic Sans MS", "Comic Sans";
+  font-family: ComicShanns;
 }
 
 .main {

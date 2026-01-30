@@ -55,6 +55,7 @@ impl ProxyServe {
     fn toll_to_html_response(&self, toll: &Toll) -> Result<Response, InternalServerError> {
         let base_url = &self.config.base_url;
         let toll = toll.as_hal_json(base_url);
+        let toll = self.add_app_metadata(toll);
         let page_html = self
             .template_renderer
             .render("challenge.html", &SerializedData::new(toll))
@@ -66,6 +67,20 @@ impl ProxyServe {
         let page_html_stream = page_html;
         let body = http::Body::from_string(page_html_stream);
         Ok(Response::payment_required(headers, body))
+    }
+
+    fn add_app_metadata(&self, toll: serde_json::Value) -> serde_json::Value {
+        let version = env!("CARGO_PKG_VERSION");
+        let api_base_url = self.config.base_url.to_string();
+        let api_base_url = api_base_url.strip_suffix('/').unwrap();
+        match toll {
+            serde_json::Value::Object(mut obj) => {
+                obj.insert("app_version".into(), version.into());
+                obj.insert("api_base_url".into(), api_base_url.into());
+                serde_json::Value::Object(obj)
+            }
+            _ => panic!("unexpected json structure!"),
+        }
     }
 }
 impl HttpServe for ProxyServe {

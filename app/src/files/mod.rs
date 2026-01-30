@@ -72,6 +72,7 @@ impl HttpServe for FileServe {
         let headers = Headers::new(vec![
             ("Transfer-Encoding".into(), "chunked".into()),
             ("Content-Type".into(), content_type),
+            ("Cache-Control".into(), "public, max-age=31536000".into()), // Cache one year
         ]);
         let headers = response::Headers::with_cors(headers, Some(&[http::Method::Get]));
         let body = Body::Stream(content);

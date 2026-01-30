@@ -2,8 +2,19 @@
 <html>
 
 <head>
-  <link rel="stylesheet" href='http://localhost:8080/challenge.css'>
-  </link>
+  <link rel="stylesheet" href='http://localhost:8080/challenge.css?{{app_version}}' />
+  <style>
+    @font-face {
+      font-family: ComicShanns;
+      src: url('{{api_base_url}}/ComicShannsMonoNerdFont-Regular.otf')
+    }
+
+    @font-face {
+      font-family: ComicShanns;
+      font-weight: bold;
+      src: url('{{api_base_url}}/ComicShannsMonoNerdFont-Bold.otf')
+    }
+  </style>
 </head>
 
 <body>
@@ -25,9 +36,9 @@
     <p>
       Guarded by <a href="https://gitea.ascendise.ch/ascendise/tollkeeper">tollkeeper</a>
     </p>
-    <p><a href="https://localhost:8080/LICENSE">LICENSE</a></p>
+    <p><a href="https://localhost:8080/LICENSE?{{app_version}}">LICENSE</a></p>
   </footer>
-  <script src='http://localhost:8080/challenge.js'></script>
+  <script src='http://localhost:8080/challenge.js?{{app_version}}'></script>
 </body>
 
 </html>
