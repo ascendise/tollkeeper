@@ -55,7 +55,7 @@ pub fn file_serve_should_return_requested_file(file_name: &str, expected_content
     };
     let mut actual_body = String::new();
     body.read_to_string(&mut actual_body).unwrap();
-    let expected_body = "d\r\nHello, World!\r\n";
+    let expected_body = "d\r\nHello, World!\r\n0\r\n\r\n";
     assert_eq!(expected_body, actual_body);
 }
 

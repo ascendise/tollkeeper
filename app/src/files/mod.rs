@@ -35,7 +35,7 @@ impl FileServe {
 
     fn read_file_content(&self) -> Option<StreamBody> {
         let file = self.file_reader.read(&self.fs_path).ok()?;
-        let stream = ChunkedFileStream { file };
+        let stream = ChunkedFileStream::new(file);
         let body = StreamBody::new(Box::new(stream));
         Some(body)
     }
@@ -92,16 +92,28 @@ impl FileReader for FileReaderImpl {
 
 struct ChunkedFileStream {
     file: Box<dyn Read>,
+    is_eof: bool,
 }
 impl ChunkedFileStream {
     const MAX_CHUNK_SIZE: usize = 1024 * 1024; //1MB
+
+    pub fn new(file: Box<dyn Read>) -> Self {
+        ChunkedFileStream {
+            file,
+            is_eof: false,
+        }
+    }
 }
 impl http::ChunkedStream for ChunkedFileStream {
     fn next_chunk(&mut self) -> Option<Chunk> {
+        if self.is_eof {
+            return None;
+        }
         let mut chunk_buf = vec![0u8; Self::MAX_CHUNK_SIZE];
         let size = self.file.read(chunk_buf.as_mut()).ok()?;
         if size == 0 {
-            return None;
+            self.is_eof = true;
+            return Some(Chunk::eof());
         }
         chunk_buf.resize(size, 0);
         let chunk = Chunk::new(size, chunk_buf);
