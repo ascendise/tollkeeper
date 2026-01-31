@@ -109,7 +109,8 @@ fn create_proxy_server(
         exe_root_dir.display()
     );
     let template_store = FileTemplateStore::new(exe_root_dir);
-    let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
+    let template_renderer =
+        HandlebarTemplateRenderer::new(Box::new(template_store), server_config.base_url.clone());
     let proxy_handler = ProxyServe::new(
         server_config,
         Box::new(proxy_service),

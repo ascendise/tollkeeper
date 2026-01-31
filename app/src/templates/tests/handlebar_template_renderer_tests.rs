@@ -9,7 +9,10 @@ use crate::templates::{
 };
 
 fn setup(template_store: Box<dyn TemplateStore + Send + Sync>) -> HandlebarTemplateRenderer {
-    HandlebarTemplateRenderer::new(template_store)
+    HandlebarTemplateRenderer::new(
+        template_store,
+        url::Url::parse("http://localhost/").unwrap(),
+    )
 }
 
 #[test]

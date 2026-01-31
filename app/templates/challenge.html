@@ -2,25 +2,25 @@
 <html>
 
 <head>
-  <link rel="stylesheet" href='http://localhost:8080/challenge.css?{{app_version}}' />
+  <link rel='stylesheet' href='{{asset challenge.css}}' />
   <style>
     @font-face {
       font-family: ComicShanns;
-      src: url('{{api_base_url}}/ComicShannsMonoNerdFont-Regular.otf')
+      src: url('{{asset ComicShannsMonoNerdFont-Regular.otf const}}')
     }
 
     @font-face {
       font-family: ComicShanns;
       font-weight: bold;
-      src: url('{{api_base_url}}/ComicShannsMonoNerdFont-Bold.otf')
+      src: url('{{asset ComicShannsMonoNerdFont-Bold.otf const}}')
     }
   </style>
 </head>
 
 <body>
-  <div class="main">
+  <div class='main'>
     <h1>Guarding {{toll.recipient.destination}}</h1>
-    <p>Calculating stamp... <span id="stamp"></span></p>
+    <p>Calculating stamp... <span id='stamp'></span></p>
     <h2>Hashcash (V1)</h2>
     {{#with toll.challenge}}
     <p>bits: {{bits}}</p>
@@ -28,17 +28,17 @@
     <p>ext: {{ext}}</p>
     {{/with}}
 
-    <div id='toll' style="display: none;">
+    <div id='toll' style='display: none;'>
       {{json this}}
     </div>
   </div>
   <footer>
     <p>
-      Guarded by <a href="https://gitea.ascendise.ch/ascendise/tollkeeper">tollkeeper</a>
+      Guarded by <a href='https://gitea.ascendise.ch/ascendise/tollkeeper'>tollkeeper</a>
     </p>
-    <p><a href="https://localhost:8080/LICENSE?{{app_version}}">LICENSE</a></p>
+    <p><a href='{{asset LICENSE}}'>LICENSE</a></p>
   </footer>
-  <script src='http://localhost:8080/challenge.js?{{app_version}}'></script>
+  <script src='{{asset challenge.js}}'></script>
 </body>
 
 </html>

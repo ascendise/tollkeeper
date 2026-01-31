@@ -34,7 +34,10 @@ fn setup_with_ok_stub() -> ProxyServe {
         real_ip_header: None,
     };
     let template_store = InMemoryTemplateStore::new(HashMap::new());
-    let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
+    let template_renderer = HandlebarTemplateRenderer::new(
+        Box::new(template_store),
+        url::Url::parse("http://localhost/").unwrap(),
+    );
     ProxyServe::new(
         server_config,
         Box::new(stub_proxy_service),
@@ -67,7 +70,10 @@ fn setup_with_failing_stub(templates: Option<HashMap<String, String>>) -> ProxyS
     };
     let templates = templates.unwrap_or_default();
     let template_store = InMemoryTemplateStore::new(templates);
-    let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
+    let template_renderer = HandlebarTemplateRenderer::new(
+        Box::new(template_store),
+        url::Url::parse("http://localhost/").unwrap(),
+    );
     ProxyServe::new(
         server_config,
         Box::new(stub_proxy_service),
@@ -78,7 +84,10 @@ fn setup_with_failing_stub(templates: Option<HashMap<String, String>>) -> ProxyS
 fn setup_with_spy(config: config::Api) -> (ProxyServe, SpyProxyService) {
     let spy_service = SpyProxyService::default();
     let template_store = InMemoryTemplateStore::new(HashMap::new());
-    let template_renderer = HandlebarTemplateRenderer::new(Box::new(template_store));
+    let template_renderer = HandlebarTemplateRenderer::new(
+        Box::new(template_store),
+        url::Url::parse("http://localhost/").unwrap(),
+    );
     let proxy_serve = ProxyServe::new(
         config,
         Box::new(spy_service.clone()),
