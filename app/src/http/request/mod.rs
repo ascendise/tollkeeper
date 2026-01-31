@@ -4,6 +4,9 @@ use super::*;
 use crate::http;
 pub mod body_reader;
 
+#[cfg(test)]
+mod tests;
+
 pub struct Request {
     method: Method,
     request_target: String,
@@ -220,72 +223,32 @@ impl Headers {
         self.headers.get("accept")
     }
 
-    pub fn accept_charset(&self) -> Option<&str> {
-        self.headers.get("accept-charset")
+    /// Returns a list of encodings, sorted by highest qvalue weight
+    pub fn accept_encoding(&self) -> Option<Vec<&str>> {
+        let header = self.headers.get("accept-encoding")?;
+        let mut encodings: Vec<(&str, f32)> = header
+            .split(',')
+            .map(|v| v.trim())
+            .map(Self::parse_weighted_header)
+            .collect();
+        encodings.sort_by(|v1, v2| v2.1.total_cmp(&v1.1));
+        let encodings = encodings.iter().map(|v| v.0).collect();
+        Some(encodings)
     }
 
-    pub fn accept_encoding(&self) -> Option<&str> {
-        self.headers.get("accept-encoding")
+    fn parse_weighted_header(value: &str) -> (&str, f32) {
+        let (value, weight) = value.split_once(';').unwrap_or((value, "q=0.0"));
+        let weight = Self::parse_qvalue(weight);
+        (value, weight)
     }
 
-    pub fn accept_language(&self) -> Option<&str> {
-        self.headers.get("accept-language")
-    }
-
-    pub fn authorization(&self) -> Option<&str> {
-        self.headers.get("authorization")
-    }
-
-    pub fn expect(&self) -> Option<&str> {
-        self.headers.get("expect")
-    }
-
-    pub fn from(&self) -> Option<&str> {
-        self.headers.get("from")
+    fn parse_qvalue(value: &str) -> f32 {
+        let (_, weight) = value.split_once('=').unwrap();
+        weight.parse().unwrap()
     }
 
     pub fn host(&self) -> &str {
         self.headers.get("host").unwrap()
-    }
-
-    pub fn if_match(&self) -> Option<&str> {
-        self.headers.get("if-match")
-    }
-
-    pub fn if_modified_since(&self) -> Option<&str> {
-        self.headers.get("if-modified-since")
-    }
-
-    pub fn if_none_match(&self) -> Option<&str> {
-        self.headers.get("if-none-match")
-    }
-
-    pub fn if_range(&self) -> Option<&str> {
-        self.headers.get("if-range")
-    }
-
-    pub fn if_unmodified_since(&self) -> Option<&str> {
-        self.headers.get("if-unmodified-since")
-    }
-
-    pub fn max_forwards(&self) -> Option<&str> {
-        self.headers.get("max-forwards")
-    }
-
-    pub fn proxy_authorization(&self) -> Option<&str> {
-        self.headers.get("proxy-authorization")
-    }
-
-    pub fn range(&self) -> Option<&str> {
-        self.headers.get("range")
-    }
-
-    pub fn referrer(&self) -> Option<&str> {
-        self.headers.get("referrer")
-    }
-
-    pub fn te(&self) -> Option<&str> {
-        self.headers.get("te")
     }
 
     pub fn user_agent(&self) -> Option<&str> {

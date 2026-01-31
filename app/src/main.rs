@@ -8,7 +8,6 @@ use std::{
     thread,
 };
 use tollkeeper::Tollkeeper;
-use tracing::{event, span, Level};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
@@ -41,8 +40,8 @@ fn main() -> Result<(), io::Error> {
         let server_config = config.server();
         let proxy_port = server_config.proxy_port();
         s.spawn(move || {
-            let _span = span!(Level::INFO, "[Proxy]").entered();
-            event!(Level::INFO, "Startup on Port {proxy_port}");
+            let _span = tracing::info_span!("[Proxy]").entered();
+            tracing::info!("Startup on Port {proxy_port}");
             let (mut proxy_server, proxy_server_cancellation) =
                 create_proxy_server(proxy_port, proxy_config, proxy_tollkeeper, url_resolver)
                     .expect("Error during startup (proxy)");
@@ -54,8 +53,8 @@ fn main() -> Result<(), io::Error> {
         let api_config = config.api.clone();
         let api_port = server_config.api_port();
         s.spawn(move || {
-            let _span = span!(Level::INFO, "[API]").entered();
-            event!(Level::INFO, "Startup on Port {api_port}");
+            let _span = tracing::info_span!("[API]").entered();
+            tracing::info!("Startup on Port {api_port}");
             let (mut api_server, api_server_cancellation) =
                 create_api_server(api_port, api_config, api_tollkeeper)
                     .expect("Error during startup (api)");
@@ -87,7 +86,7 @@ fn read_config() -> config::Config {
         format!("app/config.{}.toml", env)
     };
     let config_path = std::env::current_dir().unwrap().join(config_path);
-    event!(Level::INFO, "Read config from {}", config_path.display());
+    tracing::info!("Read config from {}", config_path.display());
     let config = fs::read_to_string(config_path.clone())
         .unwrap_or_else(|_| panic!("Cannot find config file at {}", config_path.display()));
     config::Config::from_toml(&config).unwrap()
@@ -103,11 +102,7 @@ fn create_proxy_server(
 
     let proxy_service = ProxyServiceImpl::new(tollkeeper, url_resolver);
     let exe_root_dir = std::env::current_dir().unwrap().join("app/templates");
-    event!(
-        Level::INFO,
-        "Using templates located at: '{}'",
-        exe_root_dir.display()
-    );
+    tracing::info!("Using templates located at: '{}'", exe_root_dir.display());
     let template_store = FileTemplateStore::new(exe_root_dir);
     let template_renderer =
         HandlebarTemplateRenderer::new(Box::new(template_store), server_config.base_url.clone());
@@ -171,18 +166,28 @@ fn create_file_endpoint(file: PathBuf, path_prefix: &str) -> Endpoint {
     let mut api_path = PathBuf::from_str("/").unwrap();
     let api_file = file.strip_prefix(path_prefix).unwrap();
     api_path.push(api_file);
-    tracing::info!(
-        "Serving file {} from {}",
-        api_path.display(),
-        file.display()
-    );
     let mut file_serve = FileServe::new(api_path.clone(), Box::new(FileReaderImpl));
+    let can_be_compressed = can_be_compressed(&file);
+    file_serve.compress(can_be_compressed);
+    tracing::info!(
+        "Serving file {} from {}; Compress => {}",
+        api_path.display(),
+        file.display(),
+        can_be_compressed
+    );
     file_serve.set_fs_path(file);
     Endpoint::new(
         http::Method::Get,
         api_path.to_string_lossy(),
         Box::new(file_serve),
     )
+}
+
+fn can_be_compressed(file: &PathBuf) -> bool {
+    let ext = file.extension().map(|s| s.to_str().unwrap()).unwrap_or("");
+    let can_be_compressed = !matches!(ext, "woff2");
+    let file_size = fs::File::open(file).unwrap().metadata().unwrap().len();
+    can_be_compressed && file_size > 1024
 }
 
 struct StubDescription {

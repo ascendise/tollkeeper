@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 use std::{
     collections::VecDeque,
-    io::{self, BufReader, Read},
+    io::{self, BufRead, BufReader, Read},
     net::SocketAddr,
     path::PathBuf,
     str::FromStr,
@@ -25,6 +25,7 @@ use test_case::test_case;
 #[test_case("file.js", "text/javascript")]
 #[test_case("file.html", "text/html")]
 #[test_case("file.css", "text/css")]
+#[test_case("file.woff2", "font/woff2")]
 #[test_case("file.senta", "text/plain" ; "unknown file type")]
 pub fn file_serve_should_return_requested_file(file_name: &str, expected_content_type: &str) {
     // Arrange
@@ -35,8 +36,10 @@ pub fn file_serve_should_return_requested_file(file_name: &str, expected_content
     ]);
     let sut = FileServe::new(PathBuf::from(server_file.clone()), Box::new(file_reader));
     // Act
-    let headers =
-        request::Headers::new(Headers::new(vec![("Host".into(), "localhost".into())])).unwrap();
+    let mut headers = Headers::empty();
+    headers.insert("Host", "localhost");
+    headers.insert("Accept-Encoding", "identity"); //Get as plaintext
+    let headers = request::Headers::new(headers).unwrap();
     let request = Request::new(Method::Get, server_file, headers, Body::None).unwrap();
     let mut response = sut
         .serve_http(&addr(), request)
@@ -60,6 +63,112 @@ pub fn file_serve_should_return_requested_file(file_name: &str, expected_content
     body.read_to_string(&mut actual_body).unwrap();
     let expected_body = "d\r\nHello, World!\r\n0\r\n\r\n";
     assert_eq!(expected_body, actual_body);
+}
+
+#[test]
+pub fn file_serve_should_return_file_compressed_by_default() {
+    // Arrange
+    let content: VecDeque<u8> = String::from("Hello, World!").into_bytes().into();
+    let server_file = "/assets/file.txt".to_string();
+    let file_reader = FakeFileReader::new(indexmap::indexmap![
+        server_file.clone() => content.clone()
+    ]);
+    let sut = FileServe::new(PathBuf::from(server_file.clone()), Box::new(file_reader));
+    // Act
+    let mut headers = Headers::empty();
+    headers.insert("Host", "localhost");
+    let headers = request::Headers::new(headers).unwrap();
+    let request = Request::new(Method::Get, server_file, headers, Body::None).unwrap();
+    let mut response = sut
+        .serve_http(&addr(), request)
+        .expect("valid request failed");
+    // Assert
+    assert_eq!(StatusCode::OK, response.status_code());
+    let expected_headers = Headers::new(vec![
+        ("Transfer-Encoding".into(), "chunked".into()),
+        ("Content-Encoding".into(), "gzip".into()),
+        ("Content-Type".into(), "text/plain".into()),
+        ("Cache-Control".into(), "public, max-age=31536000".into()),
+    ]);
+    let expected_headers =
+        response::Headers::with_cors(expected_headers, Some(&[http::Method::Get]));
+    assert_eq!(&expected_headers, response.headers());
+    let body = match response.body() {
+        Body::Buffer(_) => panic!("Expected chunked response!"),
+        Body::Stream(b) => b,
+        Body::None => panic!("File was sent without body!"),
+    };
+    let actual_body = decompress(body);
+    let expected_body = "Hello, World!";
+    assert_eq!(expected_body, actual_body);
+}
+
+#[test]
+pub fn file_serve_should_not_compress_file_if_disabled() {
+    // Arrange
+    let content: VecDeque<u8> = String::from("Hello, World!").into_bytes().into();
+    let server_file = "/assets/file.txt".to_string();
+    let file_reader = FakeFileReader::new(indexmap::indexmap![
+        server_file.clone() => content.clone()
+    ]);
+    let mut sut = FileServe::new(PathBuf::from(server_file.clone()), Box::new(file_reader));
+    sut.compress(false);
+    // Act
+    let mut headers = Headers::empty();
+    headers.insert("Host", "localhost");
+    let headers = request::Headers::new(headers).unwrap();
+    let request = Request::new(Method::Get, server_file, headers, Body::None).unwrap();
+    let mut response = sut
+        .serve_http(&addr(), request)
+        .expect("valid request failed");
+    // Assert
+    assert_eq!(StatusCode::OK, response.status_code());
+    let expected_headers = Headers::new(vec![
+        ("Transfer-Encoding".into(), "chunked".into()),
+        ("Content-Type".into(), "text/plain".into()),
+        ("Cache-Control".into(), "public, max-age=31536000".into()),
+    ]);
+    let expected_headers =
+        response::Headers::with_cors(expected_headers, Some(&[http::Method::Get]));
+    assert_eq!(&expected_headers, response.headers());
+    let body = match response.body() {
+        Body::Buffer(_) => panic!("Expected chunked response!"),
+        Body::Stream(b) => b,
+        Body::None => panic!("File was sent without body!"),
+    };
+    let mut actual_body = String::new();
+    body.read_to_string(&mut actual_body).unwrap();
+    let expected_body = "d\r\nHello, World!\r\n0\r\n\r\n";
+    assert_eq!(expected_body, actual_body);
+}
+
+fn decompress(body: &mut http::StreamBody) -> String {
+    let mut chunks = Vec::new();
+    body.read_to_end(&mut chunks).unwrap();
+    let data = parse_chunks(chunks);
+    let mut decompressed = flate2::read::GzDecoder::new(data);
+    let mut text = String::new();
+    decompressed.read_to_string(&mut text).unwrap();
+    text
+}
+
+fn parse_chunks(chunks: Vec<u8>) -> VecDeque<u8> {
+    let mut data = Vec::new();
+    let chunks = VecDeque::from(chunks);
+    let mut chunks = BufReader::new(chunks);
+    loop {
+        let mut size = String::new();
+        chunks.read_line(&mut size).unwrap();
+        let size: usize = usize::from_str_radix(size.trim(), 16).unwrap();
+        if size == 0 {
+            break;
+        }
+        let mut buff = vec![0; size];
+        chunks.read_exact(&mut buff).unwrap();
+        chunks.consume(2);
+        data.append(&mut buff);
+    }
+    VecDeque::from(data)
 }
 
 #[test]

@@ -10,7 +10,7 @@ body {
   background-color: #858375;
   height: 100vh;
   width: 100%;
-  font-family: ComicShanns;
+  font-family: ComicShanns, "Comic Sans MS", "Comic Sans";
 }
 
 .main {

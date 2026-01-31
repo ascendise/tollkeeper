@@ -16,16 +16,25 @@ use crate::http::{
 
 pub struct FileServe {
     path: PathBuf,
+    content_type: String,
+    compress: bool,
     fs_path: PathBuf,
     file_reader: Box<dyn FileReader + Send + Sync>,
 }
 impl FileServe {
     pub fn new(path: PathBuf, file_reader: Box<dyn FileReader + Send + Sync>) -> Self {
+        let content_type = Self::get_content_type(&path).unwrap_or("text/plain".to_string());
         Self {
             path: path.clone(),
+            content_type,
+            compress: true,
             fs_path: path,
             file_reader,
         }
+    }
+
+    pub fn compress(&mut self, compress: bool) {
+        self.compress = compress;
     }
 
     /// Sets a different filesystem path (default is access path)
@@ -33,23 +42,43 @@ impl FileServe {
         self.fs_path = path;
     }
 
-    fn read_file_content(&self) -> Option<StreamBody> {
+    fn read_file_content(&self, encoding: Encoding) -> Option<StreamBody> {
         let file = self.file_reader.read(&self.fs_path).ok()?;
-        let stream = ChunkedFileStream::new(file);
+        let stream = if encoding == Encoding::Gzip {
+            let compressed = flate2::read::GzEncoder::new(file, flate2::Compression::fast());
+            ChunkedFileStream::new(Box::new(compressed))
+        } else {
+            ChunkedFileStream::new(file)
+        };
         let body = StreamBody::new(Box::new(stream));
         Some(body)
     }
 
-    fn get_content_type(&self, file: &Path) -> Option<String> {
+    fn get_content_type(file: &Path) -> Option<String> {
         let extension = file.extension()?.to_str()?;
         let mime = match extension {
             "html" => "text/html",
             "css" => "text/css",
             "js" => "text/javascript",
             "txt" => "text/plain",
+            "woff2" => "font/woff2",
             _ => return None,
         };
         Some(mime.to_string())
+    }
+
+    fn get_accepted_encoding(&self, request: &Request) -> Encoding {
+        if !self.compress {
+            return Encoding::None;
+        }
+        let accept_encoding = match request.headers().accept_encoding() {
+            Some(v) => v,
+            None => return Encoding::Gzip,
+        };
+        match *accept_encoding.first().unwrap_or(&"") {
+            "" | "gzip" => Encoding::Gzip,
+            _ => Encoding::None,
+        }
     }
 }
 impl HttpServe for FileServe {
@@ -62,23 +91,30 @@ impl HttpServe for FileServe {
         if request_path != &self.path {
             return Ok(Response::not_found());
         }
-        let content = match self.read_file_content() {
+        let encoding = self.get_accepted_encoding(&request);
+        let content = match self.read_file_content(encoding) {
             Some(c) => c,
             None => return Err(InternalServerError),
         };
-        let content_type = self
-            .get_content_type(&self.path)
-            .unwrap_or(String::from("text/plain"));
-        let headers = Headers::new(vec![
+        let mut headers = Headers::new(vec![
             ("Transfer-Encoding".into(), "chunked".into()),
-            ("Content-Type".into(), content_type),
+            ("Content-Type".into(), self.content_type.clone()),
             ("Cache-Control".into(), "public, max-age=31536000".into()), // Cache one year
         ]);
+        if encoding == Encoding::Gzip {
+            headers.insert("Content-Encoding", "gzip");
+        }
         let headers = response::Headers::with_cors(headers, Some(&[http::Method::Get]));
         let body = Body::Stream(content);
         let response = Response::new(StatusCode::OK, None, headers, body);
         Ok(response)
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum Encoding {
+    Gzip,
+    None,
 }
 
 pub trait FileReader {

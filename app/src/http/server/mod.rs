@@ -3,7 +3,6 @@ pub mod cancellation_token;
 mod tests;
 
 use cancellation_token::CancelReceiver;
-use tracing::{event, span, Level};
 
 use crate::http::Body;
 
@@ -48,13 +47,13 @@ impl Server {
                 };
                 let handler = &self.handler;
                 s.spawn(move || {
-                    let _span = span!(Level::INFO, "[HTTP]").entered();
+                    let _span = tracing::info_span!("[HTTP]").entered();
                     let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
                         handler.serve_tcp(stream);
                     })); // Keep server alive when a request crashes handler
                     match res {
-                        Ok(_) => event!(Level::INFO, "Request handled exceptionless!"),
-                        Err(e) => event!(Level::ERROR, panic = ?e, "Request failed"),
+                        Ok(_) => tracing::info!("Request handled exceptionless!"),
+                        Err(e) => tracing::error!(panic = ?e, "Request failed"),
                     }
                 });
             }
@@ -174,30 +173,24 @@ fn handle_incoming_request(
     let mut write_stream = stream.try_clone().unwrap();
     let reader = io::BufReader::new(stream);
     let request = Request::parse(reader)?;
-    event!(Level::INFO, "Incoming Request: \r\n{request}");
+    tracing::info!("Incoming Request: \r\n{request}");
     let mut response = match http_serve.serve_http(&write_stream.peer_addr().unwrap(), request) {
         Ok(res) => res,
         Err(_) => Response::internal_server_error(),
     };
     let response_raw = response.as_bytes();
-    event!(
-        Level::INFO,
+    tracing::info!(
         "Outgoing Response:  \r\n{response}",
         response = String::from_utf8_lossy(&response_raw),
     );
     write_stream.write_all(&response_raw).unwrap();
-    let _span = span!(Level::DEBUG, "Chunked Body");
+    let _span = tracing::debug_span!("Chunked Body");
     if let Body::Stream(body) = response.body() {
         let mut buf = Vec::new();
         while let Ok(size) = body.read_to_end(&mut buf) {
             if size == 0 {
                 break;
             }
-            event!(
-                Level::DEBUG,
-                "{chunked_body}",
-                chunked_body = String::from_utf8_lossy(&buf)
-            );
             write_stream.write_all(&buf).unwrap();
         }
     }

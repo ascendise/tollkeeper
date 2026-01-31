@@ -2,17 +2,21 @@
 <html>
 
 <head>
+  <link rel='preload' href='{{asset ComicShannsMonoNerdFont-Regular.woff2 const}}' as="font" crossorigin />
+  <link rel='preload' href='{{asset ComicShannsMonoNerdFont-Bold.woff2 const}}' as="font" crossorigin />
   <link rel='stylesheet' href='{{asset challenge.css}}' />
   <style>
     @font-face {
       font-family: ComicShanns;
-      src: url('{{asset ComicShannsMonoNerdFont-Regular.otf const}}')
+      src: url('{{asset ComicShannsMonoNerdFont-Regular.woff2 const}}');
+      font-display: swap;
     }
 
     @font-face {
       font-family: ComicShanns;
       font-weight: bold;
-      src: url('{{asset ComicShannsMonoNerdFont-Bold.otf const}}')
+      src: url('{{asset ComicShannsMonoNerdFont-Bold.woff2 const}}');
+      font-display: swap;
     }
   </style>
 </head>
