@@ -47,6 +47,7 @@ impl FileServe {
             "css" => "text/css",
             "js" => "text/javascript",
             "txt" => "text/plain",
+            "otf" => "font/otf",
             _ => return None,
         };
         Some(mime.to_string())

@@ -25,6 +25,7 @@ use test_case::test_case;
 #[test_case("file.js", "text/javascript")]
 #[test_case("file.html", "text/html")]
 #[test_case("file.css", "text/css")]
+#[test_case("file.otf", "font/otf")]
 #[test_case("file.senta", "text/plain" ; "unknown file type")]
 pub fn file_serve_should_return_requested_file(file_name: &str, expected_content_type: &str) {
     // Arrange
