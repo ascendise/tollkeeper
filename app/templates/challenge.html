@@ -24,14 +24,27 @@
 <body>
   <div class='main'>
     <h1>Guarding {{toll.recipient.destination}}</h1>
-    <p>Calculating stamp... <span id='stamp'></span></p>
+    <p>Calculating stamp... </p>
+    <p id='stamp'></p>
     <h2>Hashcash (V1)</h2>
     {{#with toll.challenge}}
-    <p>bits: {{bits}}</p>
-    <p>resource: {{resource}}</p>
-    <p>ext: {{ext}}</p>
+    <table>
+      <tbody>
+        <tr>
+          <td class='param'><b>bits: </b></td>
+          <td class='value'>{{bits}}</td>
+        </tr>
+        <tr>
+          <td class='param'><b>resource: </b></td>
+          <td class='value'>{{resource}}</td>
+        </tr>
+        <tr>
+          <td class='param'><b>ext: </b></td>
+          <td class='value'>{{ext}}</td>
+        </tr>
+      </tbody>
+    </table>
     {{/with}}
-
     <div id='toll' style='display: none;'>
       {{json this}}
     </div>
