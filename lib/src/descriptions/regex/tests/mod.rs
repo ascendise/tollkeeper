@@ -14,7 +14,7 @@ fn test_suspect() -> Suspect {
 pub fn matches_should_search_for_specified_key_in_suspect(key: &str, regex: &str) {
     //Arrange
     let suspect = test_suspect();
-    let sut = RegexDescription::new(key, regex).unwrap();
+    let sut = RegexDescription::new(key, regex, false).unwrap();
     //Act
     let is_match = sut.matches(&suspect);
     //Assert
@@ -25,7 +25,7 @@ pub fn matches_should_search_for_specified_key_in_suspect(key: &str, regex: &str
 pub fn matches_should_return_false_if_no_match() {
     //Arrange
     let suspect = test_suspect();
-    let sut = RegexDescription::new("user_agent", "NoThisDoesNotMatch").unwrap();
+    let sut = RegexDescription::new("user_agent", "NoThisDoesNotMatch", false).unwrap();
     //Act
     let is_match = sut.matches(&suspect);
     //Assert
@@ -37,10 +37,21 @@ pub fn matches_should_check_regex_with_negative_lookahead() {
     //Arrange
     let suspect = test_suspect();
     let ip_regex = r"^192\.1\.2\.3"; // Only matches one ip
-    let sut = RegexDescription::negative_lookahead("client_ip", ip_regex).unwrap(); //Now matches
-                                                                                    //all ips expect ours
-                                                                                    //Act
+    let sut = RegexDescription::new("client_ip", ip_regex, true).unwrap(); //Now matches
+                                                                           //all ips expect ours
+                                                                           //Act
     let is_match = sut.matches(&suspect);
     //Assert
     assert!(is_match);
+}
+
+#[test]
+pub fn matches_should_return_false_if_matches_on_negative_lookahead() {
+    //Arrange
+    let suspect = test_suspect();
+    let sut = RegexDescription::new("user_agent", "Netscape 9.1", true).unwrap();
+    //Act
+    let is_match = sut.matches(&suspect);
+    //Assert
+    assert!(!is_match);
 }

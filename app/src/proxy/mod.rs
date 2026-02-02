@@ -125,11 +125,7 @@ impl ProxyServiceImpl {
         let default_ua = String::from("");
         let user_agent = req.headers().user_agent().unwrap_or(&default_ua);
         let target = req.absolute_target();
-        let destination = tollkeeper::descriptions::Destination::new(
-            target.host_str().unwrap(),
-            target.port().unwrap_or(80),
-            target.path(),
-        );
+        let destination = url_to_destination(target);
         tollkeeper::descriptions::Suspect::new(
             client_addr.ip().to_string(),
             user_agent,
@@ -175,6 +171,20 @@ impl ProxyServiceImpl {
         let addr = format!("{host}:{port}");
         addr
     }
+}
+
+fn url_to_destination(url: &url::Url) -> tollkeeper::descriptions::Destination {
+    let query = if let Some(query) = url.query() {
+        format!("?{query}")
+    } else {
+        String::from("")
+    };
+    let path = format!("{}{}", url.path(), query);
+    tollkeeper::descriptions::Destination::new(
+        url.host().unwrap().to_string(),
+        url.port().unwrap_or(80),
+        path,
+    )
 }
 impl ProxyService for ProxyServiceImpl {
     fn proxy_request(
@@ -511,11 +521,7 @@ impl From<Recipient> for tollkeeper::descriptions::Suspect {
     fn from(recipient: Recipient) -> Self {
         let url = format!("http://{}", recipient.destination);
         let url = url::Url::parse(&url).unwrap();
-        let destination = tollkeeper::descriptions::Destination::new(
-            url.host().unwrap().to_string(),
-            url.port().unwrap_or(80),
-            url.path(),
-        );
+        let destination = self::url_to_destination(&url);
         Self::new(recipient.client_ip, recipient.user_agent, destination)
     }
 }
