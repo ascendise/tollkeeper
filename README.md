@@ -19,7 +19,7 @@ the challenge as json, allowing you to solve the challenge as part of your workf
 ## How to install (docker)
 
 You can either build the docker image yourself using the `Dockerfile` in this repo
-or pull a release from <https://docker.nexus.ascendise.ch/>
+or pull a release from <https://docker.ascendise.ch/>
 
 To deploy the image, you can use the following `compose.yml` as base.
 
