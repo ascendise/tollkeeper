@@ -3,8 +3,9 @@
 Tollkeeper allows you to block, or at least rate limit, lazy crawlers and other
 bots from accessing your services without affecting benign users.
 
-It achieves this goal by inspecting incoming requests and returning a Proof-Of-Work-challenge
-to be solved before allowing access to the service (e.g. a website).
+It achieves this goal by inspecting incoming requests and returning a
+[Proof-Of-Work-challenge](http://www.hashcash.org/) to be solved before
+allowing access to the service (e.g. a website).
 
 Lazy crawlers will likely not execute javascript or run custom code to solve the
 challenge and therefore get locked out.
