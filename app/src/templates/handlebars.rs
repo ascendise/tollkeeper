@@ -92,7 +92,6 @@ impl HelperDef for AssetHelper {
                 "asset", 0,
             ))?;
         let mut path = path.relative_path().unwrap().to_string();
-        tracing::debug!(path);
         let is_const = h
             .param(1)
             .map(|v| !v.value().to_string().is_empty())

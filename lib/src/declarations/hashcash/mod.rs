@@ -31,13 +31,13 @@ impl Declaration for HashcashDeclaration {
             |decl: &HashcashDeclaration, p: Payment| decl.invalid_payment_error(suspect.clone(), p);
         let stamp = payment.value();
         if self.double_spent_db.is_spent(stamp) {
-            tracing::info!("Stamp is already spent!");
+            tracing::warn!("Stamp is already spent!");
             return error(self, payment);
         }
         let stamp = match Stamp::from_str(stamp) {
             Ok(s) => s,
             Err(_) => {
-                tracing::info!("Stamp not parseable!");
+                tracing::warn!("Stamp not parseable!");
                 return error(self, payment);
             }
         };
@@ -52,12 +52,12 @@ impl Declaration for HashcashDeclaration {
             match self.try_create_visa(&payment) {
                 Ok(v) => Ok(v),
                 Err(_) => {
-                    tracing::info!("Stamp is already spent!");
+                    tracing::warn!("Stamp is already spent!");
                     error(self, payment)
                 }
             }
         } else {
-            tracing::info!("Stamp invalid! (No UTC?)");
+            tracing::warn!("Stamp invalid! (No UTC?)");
             error(self, payment)
         }
     }

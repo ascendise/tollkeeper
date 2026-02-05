@@ -41,12 +41,11 @@ impl Server {
                 };
                 let handler = &self.handler;
                 s.spawn(move || {
-                    let _span = tracing::info_span!("[HTTP]").entered();
                     let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
                         handler.serve_tcp(stream);
                     })); // Keep server alive when a request crashes handler
                     match res {
-                        Ok(_) => tracing::info!("Request handled exceptionless!"),
+                        Ok(_) => tracing::debug!("Request handled exceptionless!"),
                         Err(e) => tracing::error!(panic = ?e, "Request failed"),
                     }
                 });
@@ -150,16 +149,13 @@ fn handle_incoming_request(
     let mut write_stream = stream.try_clone().unwrap();
     let reader = io::BufReader::new(stream);
     let request = Request::parse(reader)?;
-    tracing::info!("Incoming Request: \r\n{request}");
+    tracing::debug!("Incoming Request:\r\n{request}");
     let mut response = match http_serve.serve_http(&write_stream.peer_addr().unwrap(), request) {
         Ok(res) => res,
         Err(_) => Response::internal_server_error(),
     };
+    tracing::debug!("Outgoing Response:\r\n{response}",);
     let response_raw = response.as_bytes();
-    tracing::info!(
-        "Outgoing Response:  \r\n{response}",
-        response = String::from_utf8_lossy(&response_raw),
-    );
     write_stream.write_all(&response_raw).unwrap();
     if let Body::Stream(body) = response.body() {
         let mut body = body;

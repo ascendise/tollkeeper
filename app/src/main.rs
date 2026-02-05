@@ -38,7 +38,7 @@ fn main() -> Result<(), io::Error> {
         let server_config = config.server();
         let proxy_port = server_config.proxy_port();
         s.spawn(move || {
-            let _span = tracing::info_span!("[Proxy]").entered();
+            let _span = tracing::debug_span!("[Proxy]").entered();
             tracing::info!("Startup on Port {proxy_port}");
             let (mut proxy_server, proxy_server_cancellation) =
                 create_proxy_server(proxy_port, proxy_config, proxy_tollkeeper, url_resolver)
@@ -49,7 +49,7 @@ fn main() -> Result<(), io::Error> {
         let api_config = config.api.clone();
         let api_port = server_config.api_port();
         s.spawn(move || {
-            let _span = tracing::info_span!("[API]").entered();
+            let _span = tracing::debug_span!("[API]").entered();
             tracing::info!("Startup on Port {api_port}");
             let (mut api_server, api_server_cancellation) =
                 create_api_server(api_port, api_config, api_tollkeeper)

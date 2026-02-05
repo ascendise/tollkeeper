@@ -56,29 +56,40 @@ impl Tollkeeper {
             .find(|g| g.destination().includes(&access_destination))
         {
             Some(g) => Ok(g),
-            None => Err(AccessError::DestinationNotFound(Box::new(
-                access_destination,
-            ))),
+            None => {
+                tracing::warn!(
+                    "No matching gate found for request to {}!",
+                    suspect.destination()
+                );
+                Err(AccessError::DestinationNotFound(Box::new(
+                    access_destination,
+                )))
+            }
         }
     }
 
-    /// Checks if [Suspect] [matches description](Description::matches) and has to [pay a toll](Toll)
-    /// before proceeding with it's action.
-    ///
-    /// Returns [Option::None] and calls ```on_access``` if [Suspect] is permitted, or [Toll]
-    /// to be paid before being able to try again.
     pub fn check_access(
         &self,
         suspect: &Suspect,
         visa: Option<Signed<Visa>>,
     ) -> Result<(), AccessError> {
-        let _span = tracing::info_span!("[Tollkeeper(access_control)]").entered();
+        let _span = tracing::debug_span!("Access Control").entered();
+        tracing::debug!(
+            "Checking access for suspect {} to {}",
+            suspect.client_ip(),
+            suspect.destination()
+        );
         let gate = self.find_matching_gate(suspect)?;
         let visa = self.validate_signature(visa.as_ref());
         let visa = self.validate_expiry_date(visa);
         let result = gate.pass(suspect, visa);
         match result {
             Some(toll) => {
+                tracing::info!(
+                    "Suspect {} got challenged trying to access {}",
+                    suspect.client_ip(),
+                    suspect.destination()
+                );
                 let secret_key = self.secret_key_provider.read_secret_key();
                 let toll = Signed::sign(toll, secret_key);
                 Err(AccessError::AccessDeniedError(Box::new(toll)))
@@ -90,7 +101,13 @@ impl Tollkeeper {
     fn validate_signature<'a>(&self, visa: Option<&'a Signed<Visa>>) -> Option<&'a Visa> {
         let secret_key = self.secret_key_provider.read_secret_key();
         match visa {
-            Some(v) => v.verify(secret_key).ok(),
+            Some(v) => {
+                let res = v.verify(secret_key);
+                if res.is_err() {
+                    tracing::warn!("Visa has invalid signature!");
+                }
+                res.ok()
+            }
             None => None,
         }
     }
@@ -101,6 +118,7 @@ impl Tollkeeper {
                 if &self.date_provider.now() < v.expires() {
                     Some(v)
                 } else {
+                    tracing::warn!("Visa is expired!");
                     None
                 }
             }
@@ -108,25 +126,31 @@ impl Tollkeeper {
         }
     }
 
-    /// Pay the [Toll] for a [Gate] [Order]. Changing priorities in orders may require you to get a
-    /// new [Visa], if the new [Order] is higher ordered than the [Order] the [Visa] was bought for
-    ///
-    /// Returns new [Toll] if [Payment] is invalid
-    /// Returns a [PaymentDeniedError] if there was a problem processing the [Payment]
-    /// Returns a [PaymentDeniedError::GatewayError] if gate/order is unknown/removed
     pub fn pay_toll(
         &self,
         suspect: &Suspect,
         payment: SignedPayment,
     ) -> Result<Signed<Visa>, PaymentDeniedError> {
-        let _span = tracing::info_span!("[Tollkeeper(payment)]").entered();
+        let _span = tracing::debug_span!("Payment").entered();
         let secret_key = self.secret_key_provider.read_secret_key();
-        let payment = payment.verify(secret_key)?;
+        let payment = payment.verify(secret_key);
+        if payment.is_err() {
+            tracing::warn!(
+                "Suspect {} sent payment with invalid/forged signature!",
+                suspect.client_ip()
+            );
+        }
+        let payment = payment?;
         let toll = payment.toll();
         let order_id = toll.order_id();
         let gate = Self::find_gate_by_id(&self.gates, order_id)?;
         let order = Self::find_order_by_id(&gate.orders, order_id)?;
         if suspect != toll.recipient() {
+            tracing::warn!(
+                "Suspect {} tried to pay toll for {}!",
+                suspect.client_ip(),
+                toll.recipient().client_ip()
+            );
             let new_toll = order
                 .toll_declaration
                 .declare(suspect.clone(), OrderIdentifier::new(&gate.id, &order.id));
@@ -134,11 +158,16 @@ impl Tollkeeper {
             let error =
                 MismatchedSuspectError::new(Box::new(toll.recipient().clone()), Box::new(new_toll));
             let error = PaymentDeniedError::MismatchedSuspect(error);
-            Err(error)
-        } else {
-            match order.toll_declaration.pay(payment.clone(), suspect) {
-                Ok(visa) => Ok(Signed::sign(visa, secret_key)),
-                Err(err) => Err(PaymentDeniedError::InvalidPayment(err.into(secret_key))),
+            return Err(error);
+        };
+        match order.toll_declaration.pay(payment.clone(), suspect) {
+            Ok(visa) => {
+                tracing::debug!("Suspect {} solved challenge", suspect.client_ip());
+                Ok(Signed::sign(visa, secret_key))
+            }
+            Err(err) => {
+                tracing::warn!("Suspect {} failed challenge!", suspect.client_ip());
+                Err(PaymentDeniedError::InvalidPayment(err.into(secret_key)))
             }
         }
     }

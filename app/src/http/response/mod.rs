@@ -52,17 +52,7 @@ impl Response {
 
     /// Turns [Response] into an HTTP representation
     pub fn as_bytes(&mut self) -> Vec<u8> {
-        let http_version = self.http_version();
-        let status_code: isize = self.status_code as isize;
-        let reason_phrase = match &self.reason_phrase {
-            Some(v) => v,
-            None => "",
-        };
-        let headers = self.headers();
-        let http_message = format!(
-            "{} {} {}\r\n{}\r\n",
-            http_version, status_code, reason_phrase, headers
-        );
+        let http_message = self.to_string();
         let mut raw_response = Vec::from(http_message.as_bytes());
         if let Body::Buffer(buf) = self.body() {
             raw_response.extend(buf.data());
@@ -112,6 +102,22 @@ impl Response {
             Some("Payment Required".into()),
             headers,
             body,
+        )
+    }
+}
+impl Display for Response {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let http_version = self.http_version();
+        let status_code: isize = self.status_code as isize;
+        let reason_phrase = match &self.reason_phrase {
+            Some(v) => v,
+            None => "",
+        };
+        let headers = self.headers();
+        write!(
+            f,
+            "{} {} {}\r\n{}\r\n",
+            http_version, status_code, reason_phrase, headers
         )
     }
 }
