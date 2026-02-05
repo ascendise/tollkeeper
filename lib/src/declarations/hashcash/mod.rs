@@ -72,6 +72,12 @@ impl HashcashDeclaration {
         date_provider: Box<dyn DateTimeProvider + Send + Sync>,
         double_spent_db: Box<dyn DoubleSpentDatabase + Send + Sync>,
     ) -> Self {
+        if difficulty == 0 || difficulty > 160 {
+            panic!("hashcash difficulty must be in range 1-160!");
+        }
+        if expiry.num_seconds() <= 0 {
+            panic!("expiry must be a positive value above 0!")
+        }
         Self {
             difficulty,
             expiry,

@@ -51,6 +51,37 @@ fn setup_with_init_db(stamps: RingSet<String>) -> HashcashDeclaration {
     )
 }
 
+#[test_case(0)]
+#[test_case(161)]
+#[should_panic]
+pub fn new_should_panic_when_trying_to_set_difficulty_out_of_range(invalid_difficulty: u8) {
+    // Arrange
+    let expiry = chrono::Duration::days(1);
+    let date_time_provider = Box::new(FakeDateTimeProvider(chrono::Utc::now()));
+    let double_spent_db = Box::new(DoubleSpentDatabaseImpl::new(None));
+    // Act
+    let _ = HashcashDeclaration::new(
+        invalid_difficulty,
+        expiry,
+        date_time_provider,
+        double_spent_db,
+    );
+    // Assert
+}
+
+#[test_case(0)]
+#[test_case(-1)]
+#[should_panic]
+pub fn new_should_panic_when_trying_to_set_negative_expiry(invalid_time: i64) {
+    // Arrange
+    let expiry = chrono::Duration::days(invalid_time);
+    let date_time_provider = Box::new(FakeDateTimeProvider(chrono::Utc::now()));
+    let double_spent_db = Box::new(DoubleSpentDatabaseImpl::new(None));
+    // Act
+    let _ = HashcashDeclaration::new(8, expiry, date_time_provider, double_spent_db);
+    // Assert
+}
+
 #[test]
 pub fn declare_should_return_new_toll_for_suspect() {
     // Arrange
