@@ -5,9 +5,11 @@ pub fn create_cancellation_token() -> (CancelSender, CancelReceiver) {
     (CancelSender(sender), CancelReceiver(receiver))
 }
 
+#[allow(dead_code)]
 /// Signals to the thread that it needs to shut down
 pub struct CancelSender(mpsc::Sender<bool>);
 impl CancelSender {
+    #[allow(dead_code)]
     pub fn send_shutdown(&self) -> Result<(), mpsc::SendError<bool>> {
         self.0.send(true)
     }

@@ -2,6 +2,7 @@ use crate::http::Headers;
 use pretty_assertions::assert_eq;
 use test_case::test_case;
 
+#[test]
 pub fn to_string_should_return_all_headers() {
     // Arrange
     let sut = Headers::new(vec![

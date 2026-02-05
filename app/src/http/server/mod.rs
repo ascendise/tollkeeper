@@ -25,12 +25,6 @@ pub struct Server {
     handler: Box<dyn TcpServe + Send + Sync>,
 }
 impl Server {
-    /// Creates a new HTTP [Server] with multiple [endpoints](Endpoint)
-    pub fn create_http_endpoints(listener: net::TcpListener, endpoints: Vec<Endpoint>) -> Self {
-        let handler = HttpEndpointsServe::new(endpoints, None);
-        Self::new(listener, Box::new(handler))
-    }
-
     /// Create low level TCP [Server]
     pub fn new(listener: net::TcpListener, handler: Box<dyn TcpServe + Send + Sync>) -> Self {
         Self { listener, handler }
@@ -38,7 +32,7 @@ impl Server {
 
     /// Blocks execution and starts listening for connections.
     /// Connections get handled in independent threads
-    pub fn start_listening(&mut self, cancel_receiver: CancelReceiver) -> Result<(), StartupError> {
+    pub fn start_listening(&mut self, cancel_receiver: CancelReceiver) {
         thread::scope(|s| {
             while !cancel_receiver.is_shutting_down() {
                 let stream = match self.listener.accept() {
@@ -58,23 +52,6 @@ impl Server {
                 });
             }
         });
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct StartupError {
-    msg: String,
-}
-impl Error for StartupError {}
-impl Display for StartupError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to start up server: '{}'", self.msg)
-    }
-}
-impl StartupError {
-    pub fn new(msg: String) -> Self {
-        Self { msg }
     }
 }
 

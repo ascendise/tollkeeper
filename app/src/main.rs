@@ -18,11 +18,9 @@ use crate::{
 mod config;
 mod data_formats;
 mod files;
-#[allow(dead_code)]
 mod http;
 mod payment;
 mod proxy;
-#[allow(dead_code)]
 mod templates;
 
 fn main() -> Result<(), io::Error> {
@@ -45,9 +43,7 @@ fn main() -> Result<(), io::Error> {
             let (mut proxy_server, proxy_server_cancellation) =
                 create_proxy_server(proxy_port, proxy_config, proxy_tollkeeper, url_resolver)
                     .expect("Error during startup (proxy)");
-            proxy_server
-                .start_listening(proxy_server_cancellation)
-                .expect("Error during listening (proxy)");
+            proxy_server.start_listening(proxy_server_cancellation);
         });
         let api_tollkeeper = tollkeeper.clone();
         let api_config = config.api.clone();
@@ -58,9 +54,7 @@ fn main() -> Result<(), io::Error> {
             let (mut api_server, api_server_cancellation) =
                 create_api_server(api_port, api_config, api_tollkeeper)
                     .expect("Error during startup (api)");
-            api_server
-                .start_listening(api_server_cancellation)
-                .expect("Error during listening (proxy)");
+            api_server.start_listening(api_server_cancellation);
         });
     });
     Ok(())

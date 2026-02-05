@@ -59,20 +59,6 @@ impl Headers {
         }
     }
 
-    /// Returns all headers with the given key.
-    ///
-    /// As most headers are unique, this only applies to exceptions like `Set-Cookie`
-    pub fn get_all(&self, key: &str) -> Option<Vec<&str>> {
-        let key = key.to_ascii_lowercase();
-        match self.headers.get(&key) {
-            Some(v) => {
-                let values = v.iter().map(|v| v.value.as_ref()).collect();
-                Some(values)
-            }
-            None => None,
-        }
-    }
-
     pub fn insert(&mut self, key: impl Into<String>, value: impl Into<String>) {
         let original_key = key.into();
         let key = &original_key.to_ascii_lowercase();
@@ -134,14 +120,6 @@ impl Body {
     pub fn from_string(data: String) -> Self {
         let data = data.into_bytes().into();
         Self::Buffer(BufferBody::new(data))
-    }
-
-    pub fn has_body(&self) -> bool {
-        match self {
-            Body::Buffer(_) => true,
-            Body::Stream(_) => true,
-            Body::None => false,
-        }
     }
 }
 
@@ -227,14 +205,6 @@ impl Chunk {
 
     pub fn is_eof(&self) -> bool {
         self.size == 0
-    }
-
-    pub fn content(&self) -> &[u8] {
-        &self.content
-    }
-
-    pub fn size(&self) -> usize {
-        self.size
     }
 
     pub fn into_bytes(mut self) -> Vec<u8> {

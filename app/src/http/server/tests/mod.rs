@@ -49,13 +49,6 @@ impl HttpServe for ChunkedHandler {
     }
 }
 
-struct FailingHandler;
-impl HttpServe for FailingHandler {
-    fn serve_http(&self, _: &net::SocketAddr, _: Request) -> Result<Response, InternalServerError> {
-        Err(InternalServerError::new())
-    }
-}
-
 struct PanicHandler;
 impl HttpServe for PanicHandler {
     fn serve_http(&self, _: &net::SocketAddr, _: Request) -> Result<Response, InternalServerError> {

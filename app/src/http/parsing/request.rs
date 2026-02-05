@@ -40,7 +40,6 @@ impl<T: Read + 'static> Parse<T> for Request {
 struct RequestLine {
     method: Method,
     request_target: String,
-    http_version: String,
 }
 impl RequestLine {
     fn new(
@@ -54,10 +53,10 @@ impl RequestLine {
         let request_line = Self {
             method,
             request_target: Self::check_field_format(request_target)?,
-            http_version: Self::check_field_format(http_version)?,
         };
         Ok(request_line)
     }
+
     fn check_field_format(str: String) -> Result<String, ParseError> {
         let bytes = str.as_bytes();
         if bytes.is_empty() {

@@ -191,7 +191,7 @@ pub fn file_serve_should_return_404_if_file_does_not_exist() {
     let expected_headers = Headers::empty();
     let expected_headers = response::Headers::new(expected_headers);
     assert_eq!(&expected_headers, response.headers());
-    assert!(!response.body().has_body());
+    matches!(response.body(), Body::None);
 }
 
 fn addr() -> SocketAddr {

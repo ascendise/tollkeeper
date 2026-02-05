@@ -12,7 +12,8 @@ use crate::http::{self, request, Body, Headers, Request};
 use crate::proxy::tests::{ProxyRequestCall, SpyProxyService};
 use crate::proxy::{Challenge, OrderId, ProxyServe};
 use crate::proxy::{PaymentRequiredError, Recipient, Toll};
-use crate::templates::{handlebars::HandlebarTemplateRenderer, InMemoryTemplateStore};
+use crate::templates::handlebars::HandlebarTemplateRenderer;
+use crate::templates::InMemoryTemplateStore;
 use test_case::test_case;
 
 use super::StubProxyService;

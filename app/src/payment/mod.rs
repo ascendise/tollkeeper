@@ -41,7 +41,7 @@ impl HttpServe for PayTollServe {
         client_addr: &std::net::SocketAddr,
         mut request: http::Request,
     ) -> Result<http::Response, http::server::InternalServerError> {
-        let payment: Payment = match request.read_json_deserialized() {
+        let payment: Payment = match request.read_json() {
             Ok(v) => v,
             Err(e) => return Self::create_parsing_error_response(&e),
         };

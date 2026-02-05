@@ -57,7 +57,7 @@ pub fn read_json_from_body_should_return_error_if_missing_content_type_header() 
     headers.insert("Content-Length", raw_json.len().to_string());
     let mut request = setup_with_headers(raw_json, http::Headers::empty());
     // Act
-    let result = request.read_json();
+    let result: Result<serde_json::Value, ReadJsonError> = request.read_json();
     // Assert
     assert_eq!(result, Err(ReadJsonError::MismatchedContentType("".into())));
 }
@@ -74,7 +74,7 @@ pub fn read_json_from_body_should_return_error_if_mismatched_content_type_header
     headers.insert("Content-Length", raw_json.len().to_string());
     let mut request = setup_with_headers(raw_json, headers);
     // Act
-    let result = request.read_json();
+    let result: Result<serde_json::Value, ReadJsonError> = request.read_json();
     // Assert
     assert_eq!(
         result,
@@ -97,7 +97,7 @@ pub fn read_json_from_body_should_return_error_if_not_able_to_parse_body() {
     headers.insert("Content-Length", raw_json.len().to_string());
     let mut request = setup_with_headers(raw_json, headers);
     // Act
-    let result = request.read_json();
+    let result: Result<serde_json::Value, ReadJsonError> = request.read_json();
     // Assert
     assert_eq!(result, Err(ReadJsonError::NonJsonData));
 }
@@ -116,7 +116,7 @@ pub fn read_json_from_body_should_read_only_defined_content_length() {
     headers.insert("Content-Length", content_length.to_string());
     let mut request = setup_with_headers(raw_json, headers);
     // Act
-    let result = request.read_json();
+    let result: Result<serde_json::Value, ReadJsonError> = request.read_json();
     // Assert
     assert_eq!(result, Err(ReadJsonError::NonJsonData));
 }
@@ -133,7 +133,7 @@ pub fn read_json_from_body_should_treat_no_content_length_as_no_body() {
     //// No Content Length
     let mut request = setup_with_headers(raw_json, headers);
     // Act
-    let result = request.read_json();
+    let result: Result<serde_json::Value, ReadJsonError> = request.read_json();
     // Assert
     assert_eq!(result, Err(ReadJsonError::NonJsonData));
 }
@@ -143,7 +143,7 @@ pub fn read_json_from_body_should_treat_empty_body_as_non_json_data() {
     // Arrange
     let mut request = setup_no_body();
     // Act
-    let result = request.read_json();
+    let result: Result<serde_json::Value, ReadJsonError> = request.read_json();
     // Assert
     assert_eq!(result, Err(ReadJsonError::NonJsonData));
 }
@@ -162,7 +162,7 @@ pub fn read_json_from_body_should_return_io_error_when_missing_data() {
     headers.insert("Content-Length", content_length.to_string());
     let mut request = setup_with_headers(raw_json, headers);
     // Act
-    let result = request.read_json();
+    let result: Result<serde_json::Value, ReadJsonError> = request.read_json();
     // Assert
     assert_eq!(result, Err(ReadJsonError::IoError));
 }

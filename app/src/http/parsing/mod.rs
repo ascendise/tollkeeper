@@ -11,7 +11,6 @@ pub enum ParseError {
     RequestLine,
     StatusLine,
     Header,
-    Body,
 }
 impl error::Error for ParseError {}
 impl fmt::Display for ParseError {
@@ -20,7 +19,6 @@ impl fmt::Display for ParseError {
             ParseError::RequestLine => write!(f, "Invalid request line"),
             ParseError::StatusLine => write!(f, "Invalid status line"),
             ParseError::Header => write!(f, "Invalid header line"),
-            ParseError::Body => write!(f, "Failed to read body"),
         }
     }
 }

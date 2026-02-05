@@ -32,10 +32,12 @@ impl Response {
         "HTTP/1.1"
     }
 
+    #[allow(dead_code)]
     pub fn status_code(&self) -> StatusCode {
         self.status_code
     }
 
+    #[allow(dead_code)]
     pub fn reason_phrase(&self) -> Option<&str> {
         self.reason_phrase.as_deref()
     }
@@ -307,12 +309,16 @@ impl Headers {
     pub fn content_length(&self) -> Option<usize> {
         self.0.get("Content-Length").map(|v| v.parse().unwrap())
     }
+
+    #[allow(dead_code)]
     pub fn content_type(&self) -> Option<&str> {
         self.0.get("Content-Type")
     }
     pub fn transfer_encoding(&self) -> Option<&str> {
         self.0.get("Transfer-Encoding")
     }
+
+    #[allow(dead_code)]
     pub fn extension(&self, key: &str) -> Option<&str> {
         self.0.get(key)
     }

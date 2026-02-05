@@ -55,7 +55,7 @@ pub fn server_should_handle_request() {
     let expected_response = "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nHello!\r\n";
     assert_eq!(expected_response, response);
     sender.send_shutdown().unwrap();
-    server_thread.join().unwrap().unwrap();
+    server_thread.join().unwrap();
 }
 
 #[test]
@@ -83,7 +83,7 @@ pub fn server_should_return_chunked_response() {
         format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{chunked_body}");
     assert_eq!(expected_response, response);
     sender.send_shutdown().unwrap();
-    server_thread.join().unwrap().unwrap();
+    server_thread.join().unwrap();
 }
 
 #[test]

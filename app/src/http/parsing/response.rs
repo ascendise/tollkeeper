@@ -48,12 +48,6 @@ impl StatusLine {
             reason_phrase,
         }
     }
-    pub fn status_code(&self) -> StatusCode {
-        self.status_code
-    }
-    pub fn http_version(&self) -> &str {
-        "HTTP/1.1"
-    }
 }
 impl<T: io::Read> Parse<&mut io::BufReader<T>> for StatusLine {
     type Err = ParseError;

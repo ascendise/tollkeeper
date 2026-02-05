@@ -5,17 +5,13 @@ use crate::http;
 mod tests;
 
 pub trait ReadJson {
-    fn read_json_deserialized<T>(&mut self) -> Result<T, ReadJsonError>
+    fn read_json<T>(&mut self) -> Result<T, ReadJsonError>
     where
         T: for<'de> serde::Deserialize<'de>;
-
-    fn read_json(&mut self) -> Result<serde_json::Value, ReadJsonError> {
-        self.read_json_deserialized()
-    }
 }
 
 impl ReadJson for http::Request {
-    fn read_json_deserialized<T>(&mut self) -> Result<T, ReadJsonError>
+    fn read_json<T>(&mut self) -> Result<T, ReadJsonError>
     where
         T: for<'de> serde::Deserialize<'de>,
     {
