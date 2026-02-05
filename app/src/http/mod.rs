@@ -170,6 +170,7 @@ pub struct StreamBody {
     current_chunk: Option<BufReader<VecDeque<u8>>>,
     bytes_read: usize,
     next_chunk: usize,
+    is_eof: bool,
 }
 impl StreamBody {
     pub fn new(stream: Box<dyn ChunkedStream>) -> Self {
@@ -178,16 +179,21 @@ impl StreamBody {
             current_chunk: None,
             bytes_read: 0,
             next_chunk: 0,
+            is_eof: false,
         }
     }
 }
 impl Read for StreamBody {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.is_eof {
+            return Ok(0);
+        }
         if self.current_chunk.is_none() {
             let chunk = match self.stream.next_chunk() {
                 Some(c) => c,
                 None => return Ok(0),
             };
+            self.is_eof = chunk.is_eof();
             let chunk = chunk.into_bytes();
             let chunk_len = chunk.len();
             self.current_chunk = Some(BufReader::new(chunk.into()));

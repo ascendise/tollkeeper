@@ -12,13 +12,13 @@ use super::{
     response::Response,
     Parse,
 };
+use std::net;
 use std::{
     error::Error,
     fmt::Display,
     io::{self, Write},
     panic, thread,
 };
-use std::{io::Read, net};
 
 pub struct Server {
     listener: net::TcpListener,
@@ -184,15 +184,9 @@ fn handle_incoming_request(
         response = String::from_utf8_lossy(&response_raw),
     );
     write_stream.write_all(&response_raw).unwrap();
-    let _span = tracing::debug_span!("Chunked Body");
     if let Body::Stream(body) = response.body() {
-        let mut buf = Vec::new();
-        while let Ok(size) = body.read_to_end(&mut buf) {
-            if size == 0 {
-                break;
-            }
-            write_stream.write_all(&buf).unwrap();
-        }
+        let mut body = body;
+        io::copy(&mut body, &mut write_stream).unwrap();
     }
     Ok(())
 }

@@ -75,9 +75,10 @@ impl FileServe {
             Some(v) => v,
             None => return Encoding::Gzip,
         };
-        match *accept_encoding.first().unwrap_or(&"") {
-            "" | "gzip" => Encoding::Gzip,
-            _ => Encoding::None,
+        if accept_encoding.contains(&"gzip") {
+            Encoding::Gzip
+        } else {
+            Encoding::None
         }
     }
 }

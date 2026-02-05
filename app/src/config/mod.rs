@@ -217,6 +217,7 @@ impl Order {
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
 enum Description {
     Stub(StubDescription),
+    Regex(RegexDescription),
 }
 
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -225,13 +226,34 @@ struct StubDescription {
 }
 impl Description {
     fn to_entity(&self) -> Option<Box<dyn tollkeeper::Description + Send + Sync>> {
-        let description = match self {
-            Description::Stub(cfg) => crate::StubDescription {
-                is_match: cfg.is_match,
-            },
+        let description: Box<dyn tollkeeper::Description + Send + Sync> = match self {
+            Description::Stub(cfg) => {
+                let description = crate::StubDescription {
+                    is_match: cfg.is_match,
+                };
+                Box::new(description)
+            }
+            Description::Regex(cfg) => {
+                let key = cfg.key.clone();
+                let regex = &cfg.regex;
+                let negative_lookahead = cfg.negate.unwrap_or(false);
+                let description = tollkeeper::descriptions::regex::RegexDescription::new(
+                    key,
+                    regex,
+                    negative_lookahead,
+                );
+                Box::new(description.unwrap())
+            }
         };
-        Some(Box::new(description))
+        Some(description)
     }
+}
+
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
+struct RegexDescription {
+    key: String,
+    regex: String,
+    negate: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -256,7 +278,6 @@ struct HashcashDeclaration {
 impl HashcashDeclaration {
     fn to_entity(&self) -> tollkeeper::declarations::hashcash::HashcashDeclaration {
         let date_provider = tollkeeper::util::DateTimeProviderImpl;
-        //let double_spent_db = &self.double_spent_db.clone().unwrap_or_default();
         let double_spent_db = self.double_spent_db.to_entity();
         tollkeeper::declarations::hashcash::HashcashDeclaration::new(
             self.difficulty,

@@ -7,7 +7,30 @@ env:
   DOCKER_REPO: dev.docker.ascendise.ch/ascendise/tollkeeper
 
 jobs:
+  assert-cargo-version:
+    env: 
+      - APP_VERSION: 0.0.0
+    runs-on: ubuntu-latest
+    container: 
+      image: docker.ascendise.ch/ascendise/cargo-runner:1.1.0-rust1.92
+      credentials:
+        username: ${{ secrets.DOCKER_USER }}
+        password: ${{ secrets.DOCKER_PASS }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v3
+      - name: Assert app/Cargo.toml version matches current tag
+        run: |
+          app_version=$(cargo metadata --format-version=1 --no-deps --manifest-path='./app/Cargo.toml' | jq -r '.packages[0].version')
+          echo "app/Cargo.toml Version: $app_version"
+          echo "Git tag: ${{gitea.ref_name}}"
+          if [ $app_version != ${{gitea.ref_name}} ]; then
+            echo "Tags do not match! Change version in app/Cargo.toml and/or retag to release!" 1>&2
+            exit 1
+          fi  
+          echo "All good!"
   docker-push:
+    needs: [assert-cargo-version]
     env:
       VERSION_TAG: ${{env.DOCKER_REPO}}:${{gitea.ref_name}}
       LATEST_TAG: ${{env.DOCKER_REPO}}:latest
