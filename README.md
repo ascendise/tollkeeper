@@ -28,13 +28,13 @@ services:
   tollkeeper:
     environment:
       RUST_LOG: info # See https://docs.rs/log/latest/log/enum.Level.html
-      container_name: tollkeeper
-      image: docker.ascendise.ch/ascendise/tollkeeper:latest  # NOTE: latest is unstable
-      ports:
-        - 8000:8000 # Proxy Socket
-        - 8080:8080 # API Socket (Payment API, static assets)
-      volumes:
-        - ./config.toml:/usr/local/bin/app/config.toml # tollkeeper configuration
+    container_name: tollkeeper
+    image: docker.ascendise.ch/ascendise/tollkeeper:latest  # NOTE: latest is unstable
+    ports:
+      - 8000:8000 # Proxy Socket
+      - 8080:8080 # API Socket (Payment API, static assets)
+    volumes:
+      - ./config.toml:/usr/local/bin/app/config.toml # tollkeeper configuration
 ```
 
 Next thing to do is to set up your network to route requests for services
