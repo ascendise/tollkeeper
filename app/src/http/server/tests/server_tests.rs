@@ -59,6 +59,54 @@ pub fn server_should_handle_request() {
 }
 
 #[test]
+pub fn server_should_return_414_for_too_long_uri() {
+    // Arrange
+    let handler = Box::new(HelloHandler {
+        body: b"Hello!\r\n".into(),
+    });
+    let (mut sut, addr) = setup(handler);
+    let (sender, receiver) = cancellation_token::create_cancellation_token();
+    // Act
+    let server_thread = thread::spawn(move || sut.start_listening(receiver));
+    let too_long_uri: String = vec!['a'; Request::MAX_REQUEST_LINE_SIZE + 1]
+        .iter()
+        .collect();
+    let request = format!(
+        "POST {too_long_uri} HTTP/1.1\r\nHost: localhost\r\nContent-Length: 13\r\n\r\nHey Server!\r\n"
+    );
+    let (response, _) = send_request(addr, request.as_bytes());
+    // Assert
+    let expected_response = "HTTP/1.1 414 URI Too Long\r\n\r\n";
+    assert_eq!(expected_response, response);
+    sender.send_shutdown().unwrap();
+    server_thread.join().unwrap();
+}
+
+#[test]
+pub fn server_should_return_413_for_too_big_of_a_body() {
+    // Arrange
+    let handler = Box::new(HelloHandler {
+        body: b"Hello!\r\n".into(),
+    });
+    let (mut sut, addr) = setup(handler);
+    let (sender, receiver) = cancellation_token::create_cancellation_token();
+    // Act
+    let server_thread = thread::spawn(move || sut.start_listening(receiver));
+    let very_big_body: String = vec!['a'; Request::MAX_BODY_SIZE + 1].iter().collect();
+    let request = format!(
+        "POST /hello HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n{}",
+        very_big_body.len(),
+        very_big_body
+    );
+    let (response, _) = send_request(addr, request.as_bytes());
+    // Assert
+    let expected_response = "HTTP/1.1 413 Content Too Large\r\n\r\n";
+    assert_eq!(expected_response, response);
+    sender.send_shutdown().unwrap();
+    server_thread.join().unwrap();
+}
+
+#[test]
 pub fn server_should_return_chunked_response() {
     // Arrange
     let chunked_body = "6\r\nHello!\r\n5\r\nChunk\r\n0\r\n\r\n";

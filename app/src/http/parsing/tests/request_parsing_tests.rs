@@ -123,7 +123,7 @@ pub fn parse_should_read_http_request_with_body() {
 #[test_case(String::from("GET HTTP/1.1\r\n") ; "Missing request target")]
 #[test_case(String::from("GET /\r\n") ; "Missing HTTP version")]
 #[test_case(String::from("GET / HTTP/3.1\r\n") ; "wrong HTTP version")]
-pub fn parse_should_reject_status_line_with_invalid_format(request_line: String) {
+pub fn parse_should_reject_request_line_with_invalid_format(request_line: String) {
     // Arrange
     let raw_request = request_line + "Host:localhost\r\n\r\n";
     let raw_request: VecDeque<u8> = raw_request.into_bytes().into();
@@ -141,6 +141,24 @@ pub fn parse_should_reject_status_line_with_invalid_format(request_line: String)
     };
     let expected = ParseError::RequestLine;
     assert_eq!(expected, error);
+}
+
+#[test_case("{} / HTTP/1.1\r\n" ; "method too long")]
+#[test_case("GET {} HTTP/1.1\r\n" ; "url too long")]
+#[test_case("GET / {}\r\n" ; "version too long")]
+pub fn parse_should_reject_too_long_status_line(request_line: &str) {
+    // Arrange
+    let max_size_data: String = vec!['a'; Request::MAX_REQUEST_LINE_SIZE].iter().collect();
+    let request_line = request_line.replace("{}", &max_size_data);
+    let raw_request = request_line + "Host:localhost\r\n\r\n";
+    let raw_request: VecDeque<u8> = raw_request.into_bytes().into();
+    // Act
+    let result = Request::parse(raw_request);
+    // Assert
+    assert!(
+        matches!(result, Err(ParseError::RequestLine)),
+        "too long request line got accepted!"
+    );
 }
 
 #[test_case(String::from("X-Hello:Do you know where my mommy is?\r\n") ; "no Host header")]
@@ -199,4 +217,20 @@ pub fn parse_should_reject_message_with_mismatched_host_and_request_target() {
     };
     // Assert
     assert_eq!(ParseError::Header, err);
+}
+
+#[test]
+pub fn parse_should_reject_requests_with_oversized_content_length() {
+    // Arrange
+    let oversized_content_length = Request::MAX_BODY_SIZE + 1;
+    let body: String = vec!['a'; oversized_content_length].iter().collect();
+    let raw_request = format!("GET / HTTP/1.1\r\nHost:localhost\r\nContent-Length:{oversized_content_length}\r\n\r\n{body}");
+    let raw_request: VecDeque<u8> = raw_request.into_bytes().into();
+    // Act
+    let request = Request::parse(raw_request);
+    // Assert
+    assert!(
+        matches!(request, Err(ParseError::Body)),
+        "Oversized body was accepted!"
+    );
 }

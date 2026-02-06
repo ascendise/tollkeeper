@@ -3,7 +3,7 @@ use crate::http::{self, Body, Parse};
 use std::io::{self};
 use std::io::{BufRead, BufReader};
 
-use super::{util, ParseError};
+use super::ParseError;
 
 impl<T: io::Read + 'static> Parse<T> for Response {
     type Err = ParseError;
@@ -53,20 +53,24 @@ impl<T: io::Read> Parse<&mut io::BufReader<T>> for StatusLine {
     type Err = ParseError;
 
     fn parse(stream: &mut BufReader<T>) -> Result<Self, Self::Err> {
-        let _ = util::get_string_until(stream, b' ', ParseError::StatusLine)?; //HTTP Version ->
-                                                                               //TODO: Err if HTTP version is not HTTP/1.1
-        let status_code = util::get_string_until(stream, b' ', ParseError::StatusLine)?;
-        let status_code = StatusCode::from(&status_code).ok_or(ParseError::StatusLine)?;
-        let reason_phrase = util::get_string_until(stream, b'\r', ParseError::StatusLine)?;
-        stream.consume(1);
-        if !reason_phrase.len() > 0 && !reason_phrase.contains(char::is_whitespace) {
-            let status_line =
-                StatusLine::new(status_code, Option::Some(reason_phrase.trim().into()));
-            Ok(status_line)
+        let mut status_line = Vec::new();
+        stream
+            .read_until(b'\r', &mut status_line)
+            .or(Err(ParseError::StatusLine))?;
+        status_line.pop(); // Remove trailing CR
+        let status_line = String::from_utf8(status_line).or(Err(ParseError::StatusLine))?;
+        let status_line: Vec<&str> = status_line.splitn(3, ' ').collect();
+        let status_code = status_line.get(1).ok_or(ParseError::StatusLine)?;
+        let status_code = StatusCode::from(status_code).ok_or(ParseError::StatusLine)?;
+        let reason_phrase = status_line.get(2).unwrap_or(&"");
+        stream.consume(1); //Consume trailing LF
+        let status_line = if reason_phrase.is_empty() || reason_phrase.contains(char::is_whitespace)
+        {
+            StatusLine::new(status_code, Option::None)
         } else {
-            let status_line = StatusLine::new(status_code, Option::None);
-            Ok(status_line)
-        }
+            StatusLine::new(status_code, Option::Some(reason_phrase.trim().into()))
+        };
+        Ok(status_line)
     }
 }
 

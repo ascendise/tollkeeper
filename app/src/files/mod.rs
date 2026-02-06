@@ -133,8 +133,6 @@ struct ChunkedFileStream {
     is_eof: bool,
 }
 impl ChunkedFileStream {
-    const MAX_CHUNK_SIZE: usize = 1024 * 1024; //1MB
-
     pub fn new(file: Box<dyn Read>) -> Self {
         ChunkedFileStream {
             file,
@@ -147,13 +145,12 @@ impl http::ChunkedStream for ChunkedFileStream {
         if self.is_eof {
             return None;
         }
-        let mut chunk_buf = vec![0u8; Self::MAX_CHUNK_SIZE];
-        let size = self.file.read(chunk_buf.as_mut()).ok()?;
+        let mut chunk_buf = Vec::with_capacity(Chunk::MAX_CHUNK_SIZE);
+        let size = self.file.read_to_end(chunk_buf.as_mut()).ok()?;
         if size == 0 {
             self.is_eof = true;
             return Some(Chunk::eof());
         }
-        chunk_buf.resize(size, 0);
         let chunk = Chunk::new(size, chunk_buf);
         Some(chunk)
     }

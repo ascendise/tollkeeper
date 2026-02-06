@@ -138,8 +138,17 @@ impl<T: HttpServe> TcpServe for T {
     fn serve_tcp(&self, stream: net::TcpStream) {
         match handle_incoming_request(self, stream.try_clone().unwrap()) {
             Ok(_) => (),
-            Err(_) => send_response(&stream, Response::bad_request()),
-        }
+            Err(e) => match e {
+                parsing::ParseError::RequestLine => {
+                    send_response(&stream, Response::uri_too_long())
+                }
+                parsing::ParseError::Body => send_response(&stream, Response::content_too_large()),
+                _ => send_response(&stream, Response::bad_request()),
+            },
+        };
+        stream
+            .shutdown(net::Shutdown::Both)
+            .expect("Failed to gracefully close connection");
     }
 }
 fn handle_incoming_request(

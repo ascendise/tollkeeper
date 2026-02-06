@@ -104,6 +104,24 @@ impl Response {
             body,
         )
     }
+
+    pub fn uri_too_long() -> Response {
+        Self::new(
+            StatusCode::URITooLong,
+            Some("URI Too Long".into()),
+            Headers::empty(),
+            Body::None,
+        )
+    }
+
+    pub fn content_too_large() -> Response {
+        Self::new(
+            StatusCode::ContentTooLarge,
+            Some("Content Too Large".into()),
+            Headers::empty(),
+            Body::None,
+        )
+    }
 }
 impl Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

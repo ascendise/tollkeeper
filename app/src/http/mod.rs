@@ -20,6 +20,9 @@ pub struct Headers {
     headers: IndexMap<String, Vec<Header>>,
 }
 impl Headers {
+    pub const MAX_HEADER_SIZE: usize = 8192;
+    pub const MAX_HEADER_NUMBER: usize = 128;
+
     pub fn new(headers: Vec<(String, String)>) -> Self {
         let headers = Self::map_headers_case_insensitive(headers);
         Self { headers }
@@ -169,7 +172,16 @@ impl Read for StreamBody {
         if self.current_chunk.is_none() {
             let chunk = match self.stream.next_chunk() {
                 Some(c) => c,
-                None => return Ok(0),
+                None => {
+                    if self.is_eof {
+                        return Ok(0);
+                    } else {
+                        return Err(io::Error::new(
+                            io::ErrorKind::QuotaExceeded,
+                            "chunk too large",
+                        ));
+                    }
+                }
             };
             self.is_eof = chunk.is_eof();
             let chunk = chunk.into_bytes();
@@ -192,6 +204,8 @@ pub struct Chunk {
     content: Vec<u8>,
 }
 impl Chunk {
+    pub const MAX_CHUNK_SIZE: usize = 1024 * 1024;
+
     pub fn new(size: usize, content: Vec<u8>) -> Self {
         Self { size, content }
     }
@@ -229,6 +243,9 @@ impl ChunkedTcpStream {
 
     pub fn read_chunk(&mut self) -> Option<Chunk> {
         let chunk_size = self.read_chunk_size()?;
+        if chunk_size > Chunk::MAX_CHUNK_SIZE {
+            return None;
+        }
         if chunk_size == 0 {
             self.stream.consume(2); //Empty Content
             Some(Chunk::eof())
@@ -248,11 +265,10 @@ impl ChunkedTcpStream {
         }
         let chunk_size = chunk_size.trim();
         if chunk_size.is_empty() {
-            None
-        } else {
-            let chunk_size = usize::from_str_radix(chunk_size, 16).unwrap();
-            Some(chunk_size)
+            return None;
         }
+        let chunk_size = usize::from_str_radix(chunk_size, 16).unwrap();
+        Some(chunk_size)
     }
 
     fn read_chunk_content(&mut self, chunk_size: usize) -> Option<Vec<u8>> {
