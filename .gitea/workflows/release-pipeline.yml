@@ -8,8 +8,6 @@ env:
 
 jobs:
   assert-cargo-version:
-    env: 
-      - APP_VERSION: 0.0.0
     runs-on: ubuntu-latest
     container: 
       image: docker.ascendise.ch/ascendise/cargo-runner:1.1.0-rust1.92
@@ -33,7 +31,7 @@ jobs:
     needs: [assert-cargo-version]
     env:
       VERSION_TAG: ${{env.DOCKER_REPO}}:${{gitea.ref_name}}
-      LATEST_TAG: ${{env.DOCKER_REPO}}:latest
+      STABLE_TAG: ${{env.DOCKER_REPO}}:stable
     runs-on: ubuntu-latest
     steps:
       - name: Login to Docker Registry
@@ -41,8 +39,13 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v3
       - name: Build docker image
-        run: docker build . -t $VERSION_TAG -t $LATEST_TAG
+        run: docker build . -t $VERSION_TAG -t $STABLE_TAG
       - name: Push docker image
         run: docker push $VERSION_TAG 
-      - name: Push latest tag
-        run: docker push $LATEST_TAG
+      - name: Push stable tag
+        run: |
+          if [[ ${{gitea.ref_name}} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            docker push $STABLE_TAG
+          else
+            echo "Not a full release. Not pushing stable tag"
+          fi
