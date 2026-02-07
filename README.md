@@ -19,7 +19,7 @@ the challenge as json, allowing you to solve the challenge as part of your workf
 ## How to install (docker)
 
 You can either build the docker image yourself using the `Dockerfile` in this repo
-or pull a release from <https://docker.ascendise.ch/>
+or pull a release from <https://docker.ascendise.ch/ascendise/tollkeeper>
 
 To deploy the image, you can use the following `compose.yml` as base.
 
@@ -29,7 +29,7 @@ services:
     environment:
       RUST_LOG: info # See https://docs.rs/log/latest/log/enum.Level.html
     container_name: tollkeeper
-    image: docker.ascendise.ch/ascendise/tollkeeper:latest  # NOTE: latest is unstable
+    image: docker.ascendise.ch/ascendise/tollkeeper:stable
     ports:
       - 8000:8000 # Proxy Socket
       - 8080:8080 # API Socket (Payment API, static assets)
