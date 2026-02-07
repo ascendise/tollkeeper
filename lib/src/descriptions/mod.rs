@@ -52,6 +52,10 @@ impl From<&Suspect> for HashMap<String, String> {
         map.insert("user_agent".into(), val.user_agent.clone());
         map.insert("client_ip".into(), val.client_ip.clone());
         map.insert("destination".into(), val.destination.to_string());
+        let path = val.destination.path();
+        let (path, query) = path.split_once('?').unwrap_or((path, ""));
+        map.insert("destination.path".into(), path.into());
+        map.insert("destination.query".into(), query.into());
         map
     }
 }

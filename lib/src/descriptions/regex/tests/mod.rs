@@ -4,13 +4,15 @@ use super::RegexDescription;
 use crate::descriptions::*;
 
 fn test_suspect() -> Suspect {
-    let destination = Destination::new("https://example.com", 1443, "/api");
+    let destination = Destination::new("https://example.com", 1443, "/api?hello=world");
     Suspect::new("1.2.3.4", "Netscape 9.1", destination)
 }
 
 #[test_case("client_ip", r"^1\.2\.3\.4$" ; "check client_ip")]
 #[test_case("user_agent", r"^Netscape 9.1$" ; "check user_agent")]
-#[test_case("destination", r"^https://example.com:1443/api$" ; "check destination")]
+#[test_case("destination", r"^https://example.com:1443/api\?hello=world$" ; "check destination")]
+#[test_case("destination.path", r"^/api$" ; "check destination.path")]
+#[test_case("destination.query", r"^hello=world$" ; "check destination.query")]
 pub fn matches_should_search_for_specified_key_in_suspect(key: &str, regex: &str) {
     //Arrange
     let suspect = test_suspect();
