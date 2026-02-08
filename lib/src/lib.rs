@@ -162,7 +162,7 @@ impl Tollkeeper {
         };
         match order.toll_declaration.pay(payment.clone(), suspect) {
             Ok(visa) => {
-                tracing::debug!("Suspect {} solved challenge", suspect.client_ip());
+                tracing::info!("Suspect {} solved challenge", suspect.client_ip());
                 Ok(Signed::sign(visa, secret_key))
             }
             Err(err) => {
