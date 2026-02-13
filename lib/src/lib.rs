@@ -320,6 +320,13 @@ impl Order {
         let matches_description = self.is_match(suspect);
         let require_toll = (matches_description && self.access_policy == AccessPolicy::Blacklist)
             || (!matches_description && self.access_policy == AccessPolicy::Whitelist);
+        if !require_toll && self.access_policy == AccessPolicy::Whitelist {
+            tracing::info!(
+                "Suspect {} accesses {} resource via Whitelist",
+                suspect.client_ip(),
+                suspect.destination()
+            );
+        }
         let toll = if require_toll && !self.has_valid_visa(suspect, visa) {
             Option::Some(self.toll_declaration.declare(
                 suspect.clone(),
