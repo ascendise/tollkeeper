@@ -16,7 +16,7 @@ pub struct Request {
 }
 impl Request {
     pub const MAX_REQUEST_LINE_SIZE: usize = 4096;
-    pub const MAX_BODY_SIZE: usize = 1024 * 1024;
+    pub const MAX_BODY_SIZE: usize = 10 * 1024 * 1024; //10MB
 
     pub fn new(
         method: Method,
