@@ -4,7 +4,7 @@ use crate::http::server::{
 };
 use pretty_assertions::assert_eq;
 use std::{
-    io::{Read, Write},
+    io::{ErrorKind, Read, Write},
     net::{self},
     thread,
 };
@@ -22,9 +22,13 @@ fn setup(handler: Box<dyn TcpServe + Send + Sync + 'static>) -> (Server, net::So
 
 fn send_request(addr: net::SocketAddr, request: &[u8]) -> (String, net::SocketAddr) {
     let mut connection = net::TcpStream::connect(addr).expect("Failed to connect to test socket");
-    connection
-        .write_all(request)
-        .expect("Failed to send test request");
+    if let Err(e) = connection.write_all(request) {
+        if e.kind() != ErrorKind::BrokenPipe {
+            panic!("{e}"); // Broken Pipes may be caused by test case and are ok
+                           // just means the server already detected an error and sent
+                           // a response before the client was finished writing its request
+        }
+    }
     let mut response = String::new();
     connection
         .read_to_string(&mut response)
